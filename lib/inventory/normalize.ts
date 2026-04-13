@@ -9,7 +9,13 @@ const INGREDIENT_ALIASES: Record<string, string> = {
   chilies: "chili",
 };
 
+const SINGULAR_EXCEPTIONS = new Set(["series", "species"]);
+
 function singularizeWord(word: string) {
+  if (SINGULAR_EXCEPTIONS.has(word)) {
+    return word;
+  }
+
   if (word.endsWith("ies") && word.length > 3) {
     return `${word.slice(0, -3)}y`;
   }

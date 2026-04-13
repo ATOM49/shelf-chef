@@ -32,7 +32,7 @@ export function parsePreferences(preferences: string): ParsedPreferences {
   if (text.includes("italian")) preferredCuisines.add("italian");
 
   const avoidMatch = text.match(/avoid ([a-z\s,]+)/i)?.[1];
-  const useSoonMatch = text.match(/use ([a-z\s,]+?)(?: soon| this week|$)/i)?.[1];
+  const useSoonMatch = text.match(/use ([a-z\s,]+)(?: soon| this week|$)/i)?.[1];
 
   return {
     preferredTags: [...preferredTags],

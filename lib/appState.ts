@@ -1,4 +1,4 @@
-import { createDefaultSingleDoorFridge, resizeShelf } from "@/lib/fridge/layout";
+import { createCells, createDefaultSingleDoorFridge, resizeShelf } from "@/lib/fridge/layout";
 import type { FridgeLayout } from "@/lib/fridge/types";
 import { applyMealConsumption } from "@/lib/inventory/consumption";
 import { normalizeIngredientName } from "@/lib/inventory/normalize";
@@ -93,7 +93,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
               rows: 1,
               cols: 3,
               height: 120,
-              cells: Array.from({ length: 3 }, (_, col) => ({ id: `cell-0-${col}`, row: 0, col })),
+              cells: createCells(1, 3),
             },
           ],
         },
