@@ -5,6 +5,7 @@ import { normalizeIngredientName } from "@/lib/inventory/normalize";
 import type { InventoryCategory, InventoryItem, InventoryUnit } from "@/lib/inventory/types";
 import { generateWeeklyDinnerPlan } from "@/lib/planner/generatePlan";
 import type { PlannedMeal, PlannerState } from "@/lib/planner/types";
+import { validateRecipeAgainstInventory } from "@/lib/planner/validation";
 import { recipes } from "@/data/recipes";
 
 export type AppState = {
@@ -228,15 +229,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         return state;
       }
 
+      const nextInventory = applyMealConsumption(state.inventory, meal);
+
       return {
         ...state,
-        inventory: applyMealConsumption(state.inventory, meal),
+        inventory: nextInventory,
         planner: {
           ...state.planner,
           weeklyPlan: state.planner.weeklyPlan.map((plannedMeal) =>
             plannedMeal.id === action.mealId
               ? { ...plannedMeal, status: "completed" }
-              : plannedMeal,
+              : {
+                  ...plannedMeal,
+                  validation: validateRecipeAgainstInventory(plannedMeal.recipe, nextInventory),
+                },
           ),
         },
       };

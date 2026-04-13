@@ -64,7 +64,14 @@ function migrateLegacyLayout(stored: unknown): AppState | undefined {
       type: "single-door",
       width: typeof stored.width === "number" ? stored.width : baseState.fridge.width,
       height: typeof stored.height === "number" ? stored.height : baseState.fridge.height,
-      shelves: shelves.map(({ legacyItems: _legacyItems, ...shelf }) => shelf),
+      shelves: shelves.map((shelf) => ({
+        id: shelf.id,
+        name: shelf.name,
+        rows: shelf.rows,
+        cols: shelf.cols,
+        height: shelf.height,
+        cells: shelf.cells,
+      })),
     },
     inventory,
   };
