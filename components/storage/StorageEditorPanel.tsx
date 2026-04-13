@@ -3,13 +3,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -94,23 +93,18 @@ export function StorageEditorPanel({
       ) : null}
 
       {selectedShelf ? (
-        <Popover
+        <Dialog
           open={isShelfPopupOpen}
           onOpenChange={(open) => {
             if (!open) onClearSelection();
           }}
         >
-          <PopoverTrigger
-            aria-hidden
-            className="pointer-events-none fixed top-1/2 left-1/2 size-px -translate-x-1/2 -translate-y-1/2 opacity-0"
-          />
-          <PopoverContent
-            sideOffset={0}
-            className="w-[min(44rem,calc(100vw-2rem))] max-h-[min(90svh,800px)] overflow-y-auto p-4"
+          <DialogContent
+            className="w-full max-w-[min(44rem,calc(100vw-2rem))] max-h-[min(90svh,800px)] overflow-y-auto"
           >
-            <PopoverDescription className="mb-3 text-xs">
+            <DialogDescription className="text-xs">
               Edit shelf grid and dimensions without changing inventory behavior.
-            </PopoverDescription>
+            </DialogDescription>
             <ShelfEditor
               key={selectedShelf.id}
               shelf={selectedShelf}
@@ -130,34 +124,29 @@ export function StorageEditorPanel({
                 onClearSelection();
               }}
             />
-          </PopoverContent>
-        </Popover>
+          </DialogContent>
+        </Dialog>
       ) : null}
 
       {selectedShelf && selectedCell ? (
-        <Popover
+        <Dialog
           open={isCellPopupOpen}
           onOpenChange={(open) => {
             if (!open) onClearSelection();
           }}
         >
-          <PopoverTrigger
-            aria-hidden
-            className="pointer-events-none fixed top-1/2 left-1/2 size-px -translate-x-1/2 -translate-y-1/2 opacity-0"
-          />
-          <PopoverContent
-            sideOffset={0}
-            className="w-[min(52rem,calc(100vw-2rem))] max-h-[min(90svh,900px)] overflow-y-auto p-4"
+          <DialogContent
+            className="w-full max-w-[min(52rem,calc(100vw-2rem))] max-h-[min(90svh,900px)] overflow-y-auto"
           >
-            <PopoverHeader className="mb-3 pr-10">
-              <PopoverTitle>
+            <DialogHeader className="pr-10">
+              <DialogTitle>
                 {selectedShelf.name} | {selectedCell.cellId}
-              </PopoverTitle>
-              <PopoverDescription>
+              </DialogTitle>
+              <DialogDescription>
                 Add, edit, or remove inventory items mapped to this{" "}
                 {storage.storageType === "pantry" ? "pantry" : "fridge"} cell.
-              </PopoverDescription>
-            </PopoverHeader>
+              </DialogDescription>
+            </DialogHeader>
             <CellInventoryEditor
               shelfName={selectedShelf.name}
               cellId={selectedCell.cellId}
@@ -174,8 +163,8 @@ export function StorageEditorPanel({
               shelfId={selectedShelf.id}
               onClose={onClearSelection}
             />
-          </PopoverContent>
-        </Popover>
+          </DialogContent>
+        </Dialog>
       ) : null}
     </>
   );
