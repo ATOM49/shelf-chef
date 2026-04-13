@@ -8,6 +8,9 @@ export const unitMeta: Record<InventoryUnit, { group: UnitGroup; factor: number 
   kg: { group: "weight", factor: 1000 },
   ml: { group: "volume", factor: 1 },
   l: { group: "volume", factor: 1000 },
+  tbsp: { group: "volume", factor: 15 },
+  tsp: { group: "volume", factor: 5 },
+  cup: { group: "volume", factor: 240 },
 };
 
 export function isSupportedUnit(value: string): value is InventoryUnit {

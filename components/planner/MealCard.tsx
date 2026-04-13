@@ -19,7 +19,9 @@ export function MealCard({ meal, isSelected, onSelect, onComplete }: MealCardPro
     >
       <div className="flex items-start justify-between gap-3">
         <button type="button" className="flex-1 text-left" onClick={onSelect}>
-          <div className="text-xs uppercase tracking-wide text-zinc-400">{meal.day}</div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase tracking-wide text-zinc-400">{meal.mealType}</span>
+          </div>
           <div className="text-sm font-semibold text-zinc-800">{meal.recipe.title}</div>
           <div className="mt-2">
             <MealValidationSummary validation={meal.validation} />

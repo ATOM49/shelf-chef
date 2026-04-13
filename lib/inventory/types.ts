@@ -1,4 +1,4 @@
-export const INVENTORY_UNITS = ["count", "g", "kg", "ml", "l"] as const;
+export const INVENTORY_UNITS = ["count", "g", "kg", "ml", "l", "tbsp", "tsp", "cup"] as const;
 export type InventoryUnit = (typeof INVENTORY_UNITS)[number];
 
 export const INVENTORY_CATEGORIES = [

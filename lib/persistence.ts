@@ -2,6 +2,8 @@ import { createDefaultAppState, createInventoryItem, type AppState } from "@/lib
 import { generateId } from "@/lib/id";
 import { isSupportedUnit } from "@/lib/inventory/units";
 import type { InventoryCategory } from "@/lib/inventory/types";
+import type { Recipe } from "@/lib/planner/types";
+import { recipes as systemRecipes } from "@/data/recipes";
 
 const APP_STORAGE_KEY = "food-planner-app-state-v2";
 const LEGACY_STORAGE_KEY = "food-planner-fridge-layout";
@@ -83,7 +85,32 @@ function reviveAppState(stored: unknown): AppState | undefined {
     return undefined;
   }
 
-  return stored as AppState;
+  const defaults = createDefaultAppState();
+  const storedPlanner = stored.planner as Record<string, unknown>;
+
+  // Merge saved state with defaults so new fields are always present
+  const planner = {
+    ...defaults.planner,
+    preferences: typeof storedPlanner.preferences === "string" ? storedPlanner.preferences : "",
+    weeklyPlan: Array.isArray(storedPlanner.weeklyPlan) ? storedPlanner.weeklyPlan : [],
+    preferredDishes: Array.isArray(storedPlanner.preferredDishes) ? storedPlanner.preferredDishes : [],
+    groceryCart: Array.isArray(storedPlanner.groceryCart) ? storedPlanner.groceryCart : [],
+    selectedMealId:
+      typeof storedPlanner.selectedMealId === "string" ? storedPlanner.selectedMealId : undefined,
+  };
+
+  // Merge system recipes with any user-saved recipes persisted in storage
+  const storedRecipes = Array.isArray(stored.recipes) ? (stored.recipes as Recipe[]) : [];
+  const mergedRecipes: Recipe[] = [
+    ...storedRecipes.filter((r) => !systemRecipes.some((s) => s.id === r.id)),
+    ...systemRecipes,
+  ];
+
+  return {
+    ...(stored as AppState),
+    recipes: mergedRecipes,
+    planner,
+  };
 }
 
 export function loadAppState(): AppState {

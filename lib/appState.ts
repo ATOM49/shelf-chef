@@ -1,17 +1,26 @@
 import { createCells, createDefaultSingleDoorFridge, resizeShelf } from "@/lib/fridge/layout";
 import type { FridgeLayout } from "@/lib/fridge/types";
+import { buildGroceryCartFromMeals } from "@/lib/grocery";
 import { generateId } from "@/lib/id";
 import { applyMealConsumption } from "@/lib/inventory/consumption";
 import { normalizeIngredientName } from "@/lib/inventory/normalize";
 import type { InventoryCategory, InventoryItem, InventoryUnit } from "@/lib/inventory/types";
-import { generateWeeklyDinnerPlan } from "@/lib/planner/generatePlan";
-import type { PlannedMeal, PlannerState } from "@/lib/planner/types";
-import { validateRecipeAgainstInventory } from "@/lib/planner/validation";
-import { recipes } from "@/data/recipes";
+import { generateWeeklyPlan } from "@/lib/planner/generatePlan";
+import type {
+  GroceryCartItem,
+  PlannedMeal,
+  PlannerState,
+  PreferredDishRequest,
+  Recipe,
+} from "@/lib/planner/types";
+import { revalidatePlannedMeals, validateRecipeAgainstInventory } from "@/lib/planner/validation";
+import { resolveRecipeByDishName } from "@/lib/recipes/resolve";
+import { recipes as systemRecipes } from "@/data/recipes";
 
 export type AppState = {
   fridge: FridgeLayout;
   inventory: InventoryItem[];
+  recipes: Recipe[];
   planner: PlannerState;
 };
 
@@ -36,9 +45,14 @@ export type AppAction =
   | { type: "UPDATE_INVENTORY_ITEM"; itemId: string; patch: Partial<InventoryDraft> }
   | { type: "REMOVE_INVENTORY_ITEM"; itemId: string }
   | { type: "SET_PREFERENCES"; preferences: string }
+  | { type: "ADD_PREFERRED_DISH"; name: string; mealType?: PreferredDishRequest["mealType"] }
+  | { type: "REMOVE_PREFERRED_DISH"; dishId: string }
+  | { type: "ADD_CUSTOM_RECIPE"; recipe: Recipe }
   | { type: "GENERATE_WEEKLY_PLAN" }
+  | { type: "REPLACE_PLANNED_MEAL"; mealId: string; recipeName: string }
   | { type: "SELECT_MEAL"; mealId?: string }
-  | { type: "COMPLETE_MEAL"; mealId: string };
+  | { type: "COMPLETE_MEAL"; mealId: string }
+  | { type: "TOGGLE_GROCERY_ITEM"; itemId: string };
 
 export function createInventoryItem(item: InventoryDraft): InventoryItem {
   return {
@@ -66,9 +80,12 @@ export function createDefaultAppState(): AppState {
   return {
     fridge: createDefaultSingleDoorFridge(),
     inventory: [],
+    recipes: [...systemRecipes],
     planner: {
       preferences: "",
+      preferredDishes: [],
       weeklyPlan: [],
+      groceryCart: [],
       selectedMealId: undefined,
     },
   };
@@ -197,19 +214,78 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    case "ADD_PREFERRED_DISH": {
+      const resolved = resolveRecipeByDishName(action.name, state.recipes);
+      const dish: PreferredDishRequest = {
+        id: generateId(),
+        name: action.name.trim(),
+        mealType: action.mealType,
+        status: resolved ? "resolved" : "failed",
+        resolvedRecipeId: resolved?.id,
+      };
+      return {
+        ...state,
+        planner: {
+          ...state.planner,
+          preferredDishes: [...state.planner.preferredDishes, dish],
+        },
+      };
+    }
+
+    case "REMOVE_PREFERRED_DISH": {
+      return {
+        ...state,
+        planner: {
+          ...state.planner,
+          preferredDishes: state.planner.preferredDishes.filter((d) => d.id !== action.dishId),
+        },
+      };
+    }
+
+    case "ADD_CUSTOM_RECIPE": {
+      return {
+        ...state,
+        recipes: [...state.recipes, action.recipe],
+      };
+    }
+
     case "GENERATE_WEEKLY_PLAN": {
-      const weeklyPlan = generateWeeklyDinnerPlan({
+      const { meals, groceryCart } = generateWeeklyPlan({
         inventory: state.inventory,
         preferences: state.planner.preferences,
-        recipes,
+        recipes: state.recipes,
+        preferredDishes: state.planner.preferredDishes,
       });
 
       return {
         ...state,
         planner: {
           ...state.planner,
-          weeklyPlan,
-          selectedMealId: selectFirstPlannedMeal(weeklyPlan),
+          weeklyPlan: meals,
+          groceryCart,
+          selectedMealId: selectFirstPlannedMeal(meals),
+        },
+      };
+    }
+
+    case "REPLACE_PLANNED_MEAL": {
+      const resolved = resolveRecipeByDishName(action.recipeName, state.recipes);
+      if (!resolved) return state;
+
+      const validation = validateRecipeAgainstInventory(resolved, state.inventory);
+      const nextPlan = state.planner.weeklyPlan.map((meal) =>
+        meal.id === action.mealId
+          ? { ...meal, recipe: resolved, validation }
+          : meal,
+      );
+      const groceryCart = buildGroceryCartFromMeals(nextPlan, state.inventory);
+
+      return {
+        ...state,
+        planner: {
+          ...state.planner,
+          weeklyPlan: nextPlan,
+          groceryCart,
         },
       };
     }
@@ -231,19 +307,34 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       }
 
       const nextInventory = applyMealConsumption(state.inventory, meal);
+      const nextPlan = revalidatePlannedMeals(
+        state.planner.weeklyPlan.map((plannedMeal) =>
+          plannedMeal.id === action.mealId
+            ? { ...plannedMeal, status: "completed" as const }
+            : plannedMeal,
+        ),
+        nextInventory,
+      );
+      const groceryCart = buildGroceryCartFromMeals(nextPlan, nextInventory);
 
       return {
         ...state,
         inventory: nextInventory,
         planner: {
           ...state.planner,
-          weeklyPlan: state.planner.weeklyPlan.map((plannedMeal) =>
-            plannedMeal.id === action.mealId
-              ? { ...plannedMeal, status: "completed" }
-              : {
-                  ...plannedMeal,
-                  validation: validateRecipeAgainstInventory(plannedMeal.recipe, nextInventory),
-                },
+          weeklyPlan: nextPlan,
+          groceryCart,
+        },
+      };
+    }
+
+    case "TOGGLE_GROCERY_ITEM": {
+      return {
+        ...state,
+        planner: {
+          ...state.planner,
+          groceryCart: state.planner.groceryCart.map((item) =>
+            item.id === action.itemId ? { ...item, checked: !item.checked } : item,
           ),
         },
       };

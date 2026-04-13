@@ -1,5 +1,7 @@
 import type { InventoryUnit } from "@/lib/inventory/types";
 
+export type RecipeSource = "system" | "user-requested" | "user-saved";
+
 export type RecipeIngredient = {
   name: string;
   normalizedName: string;
@@ -17,6 +19,7 @@ export type Recipe = {
   ingredients: RecipeIngredient[];
   instructions?: string[];
   referenceUrl?: string;
+  source: RecipeSource;
 };
 
 export type IngredientMatch = {
@@ -47,8 +50,30 @@ export type PlannedMeal = {
   validation: MealValidation;
 };
 
+export type PreferredDishRequest = {
+  id: string;
+  name: string;
+  mealType?: Recipe["mealType"];
+  status: "pending" | "resolved" | "failed";
+  resolvedRecipeId?: string;
+};
+
+export type GroceryCartItem = {
+  id: string;
+  normalizedName: string;
+  displayName: string;
+  neededQuantity: number;
+  unit: InventoryUnit;
+  reason: "missing" | "low";
+  recipeIds: string[];
+  recipeTitles: string[];
+  checked: boolean;
+};
+
 export type PlannerState = {
   preferences: string;
+  preferredDishes: PreferredDishRequest[];
   weeklyPlan: PlannedMeal[];
+  groceryCart: GroceryCartItem[];
   selectedMealId?: string;
 };

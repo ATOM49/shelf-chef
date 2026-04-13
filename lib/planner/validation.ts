@@ -80,3 +80,17 @@ export function validateRecipeAgainstInventory(recipe: Recipe, inventory: Invent
     lowItems,
   };
 }
+
+/**
+ * Re-validate all non-completed planned meals against the supplied inventory.
+ * Returns a new array with updated validation objects; completed meals are unchanged.
+ */
+export function revalidatePlannedMeals(
+  meals: import("@/lib/planner/types").PlannedMeal[],
+  inventory: InventoryItem[],
+): import("@/lib/planner/types").PlannedMeal[] {
+  return meals.map((meal) => {
+    if (meal.status === "completed") return meal;
+    return { ...meal, validation: validateRecipeAgainstInventory(meal.recipe, inventory) };
+  });
+}

@@ -1,7 +1,13 @@
+import { buildGroceryCartFromMeals } from "@/lib/grocery";
 import type { InventoryItem } from "@/lib/inventory/types";
 import { generateId } from "@/lib/id";
 import { parsePreferences } from "@/lib/planner/preferences";
-import type { PlannedMeal, Recipe } from "@/lib/planner/types";
+import type {
+  GroceryCartItem,
+  PlannedMeal,
+  PreferredDishRequest,
+  Recipe,
+} from "@/lib/planner/types";
 import { validateRecipeAgainstInventory } from "@/lib/planner/validation";
 
 const WEEK_DAYS = [
@@ -14,10 +20,19 @@ const WEEK_DAYS = [
   "Sunday",
 ] as const;
 
+type MealType = Recipe["mealType"];
+const MEAL_TYPES: MealType[] = ["breakfast", "lunch", "dinner"];
+
 type PlannerInput = {
   inventory: InventoryItem[];
   preferences: string;
   recipes: Recipe[];
+  preferredDishes?: PreferredDishRequest[];
+};
+
+type PlannerOutput = {
+  meals: PlannedMeal[];
+  groceryCart: GroceryCartItem[];
 };
 
 function isExpiringSoon(expiresAt?: string) {
@@ -28,10 +43,15 @@ function isExpiringSoon(expiresAt?: string) {
   return diffDays >= 0 && diffDays <= 3;
 }
 
-function scoreRecipe(recipe: Recipe, inventory: InventoryItem[], preferences: string) {
+function scoreRecipe(
+  recipe: Recipe,
+  inventory: InventoryItem[],
+  preferences: string,
+  isPinned: boolean,
+) {
   const parsed = parsePreferences(preferences);
   const validation = validateRecipeAgainstInventory(recipe, inventory);
-  let score = 0;
+  let score = isPinned ? 1000 : 0;
 
   for (const match of validation.matches) {
     if (match.status === "enough") score += 3;
@@ -54,56 +74,130 @@ function scoreRecipe(recipe: Recipe, inventory: InventoryItem[], preferences: st
   }
 
   for (const excludedIngredient of parsed.excludedIngredients) {
-    if (recipe.ingredients.some((ingredient) => ingredient.normalizedName === excludedIngredient)) {
+    if (recipe.ingredients.some((i) => i.normalizedName === excludedIngredient)) {
       score -= 4;
     }
   }
 
   for (const boostedIngredient of parsed.boostedIngredients) {
-    if (recipe.ingredients.some((ingredient) => ingredient.normalizedName === boostedIngredient)) {
+    if (recipe.ingredients.some((i) => i.normalizedName === boostedIngredient)) {
       score += 2;
     }
   }
 
   const expiringSoonUsed = recipe.ingredients.some((ingredient) =>
     inventory.some(
-      (item) => item.normalizedName === ingredient.normalizedName && isExpiringSoon(item.expiresAt),
+      (item) =>
+        item.normalizedName === ingredient.normalizedName && isExpiringSoon(item.expiresAt),
     ),
   );
-
-  if (expiringSoonUsed) {
-    score += 1;
-  }
+  if (expiringSoonUsed) score += 1;
 
   return { validation, score };
 }
 
-export function generateWeeklyDinnerPlan({ inventory, preferences, recipes }: PlannerInput): PlannedMeal[] {
-  const dinnerRecipes = recipes.filter((recipe) => recipe.mealType === "dinner");
-  const scoredRecipes = dinnerRecipes
-    .map((recipe) => {
-      const { validation, score } = scoreRecipe(recipe, inventory, preferences);
-      return { recipe, validation, score };
-    })
-    .sort(
-      (left, right) =>
-        right.score - left.score || left.recipe.title.localeCompare(right.recipe.title, "en-US"),
-    );
+/** Build a set of pinned recipe IDs from resolved preferred dishes, per meal type. */
+function buildPinnedMap(
+  preferredDishes: PreferredDishRequest[],
+  recipes: Recipe[],
+): Map<MealType, Recipe[]> {
+  const map = new Map<MealType, Recipe[]>();
+  for (const dish of preferredDishes) {
+    if (dish.status !== "resolved" || !dish.resolvedRecipeId) continue;
+    const recipe = recipes.find((r) => r.id === dish.resolvedRecipeId);
+    if (!recipe) continue;
+    const mt = dish.mealType ?? recipe.mealType;
+    const existing = map.get(mt) ?? [];
+    if (!existing.some((r) => r.id === recipe.id)) {
+      map.set(mt, [...existing, recipe]);
+    }
+  }
+  return map;
+}
 
-  if (scoredRecipes.length === 0) {
-    return [];
+export function generateWeeklyPlan({
+  inventory,
+  preferences,
+  recipes,
+  preferredDishes = [],
+}: PlannerInput): PlannerOutput {
+  const pinnedMap = buildPinnedMap(preferredDishes, recipes);
+
+  const meals: PlannedMeal[] = [];
+  // Track recipes used per meal-type to encourage diversity across days
+  const usedIds = new Map<MealType, Set<string>>();
+
+  for (const mealType of MEAL_TYPES) {
+    usedIds.set(mealType, new Set());
+
+    const pinnedRecipes = pinnedMap.get(mealType) ?? [];
+    const pinnedIds = new Set(pinnedRecipes.map((r) => r.id));
+
+    const candidateRecipes = recipes.filter((r) => r.mealType === mealType);
+    if (candidateRecipes.length === 0) continue;
+
+    // Score all candidates, pinned ones get the 1000-point boost
+    const scored = candidateRecipes
+      .map((recipe) => {
+        const { validation, score } = scoreRecipe(
+          recipe,
+          inventory,
+          preferences,
+          pinnedIds.has(recipe.id),
+        );
+        return { recipe, validation, score };
+      })
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          a.recipe.title.localeCompare(b.recipe.title, "en-US"),
+      );
+
+    // For each day, pick the best recipe not yet used for this meal type
+    let fallbackIndex = 0;
+    for (const day of WEEK_DAYS) {
+      const used = usedIds.get(mealType)!;
+      const pick =
+        scored.find((s) => !used.has(s.recipe.id)) ?? scored[fallbackIndex % scored.length];
+      fallbackIndex++;
+
+      used.add(pick.recipe.id);
+      meals.push({
+        id: generateId(),
+        day,
+        mealType,
+        recipe: pick.recipe,
+        status: "planned",
+        validation: pick.validation,
+      });
+    }
   }
 
-  return WEEK_DAYS.map((day, index) => {
-    const selected = scoredRecipes[index % scoredRecipes.length];
+  // Sort meals: Monday→Sunday, within each day: breakfast, lunch, dinner
+  const dayOrder = Object.fromEntries(WEEK_DAYS.map((d, i) => [d, i]));
+  const mealTypeOrder: Record<MealType, number> = {
+    breakfast: 0,
+    lunch: 1,
+    dinner: 2,
+    snack: 3,
+  };
+  meals.sort(
+    (a, b) =>
+      dayOrder[a.day] - dayOrder[b.day] ||
+      mealTypeOrder[a.mealType] - mealTypeOrder[b.mealType],
+  );
 
-    return {
-      id: generateId(),
-      day,
-      mealType: "dinner",
-      recipe: selected.recipe,
-      status: "planned",
-      validation: selected.validation,
-    };
-  });
+  const groceryCart = buildGroceryCartFromMeals(meals, inventory);
+
+  return { meals, groceryCart };
 }
+
+// Legacy export kept for any existing call sites — delegates to new function
+export function generateWeeklyDinnerPlan(params: {
+  inventory: InventoryItem[];
+  preferences: string;
+  recipes: Recipe[];
+}): PlannedMeal[] {
+  return generateWeeklyPlan(params).meals.filter((m) => m.mealType === "dinner");
+}
+
