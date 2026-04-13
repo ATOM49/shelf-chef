@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import type { MealValidation } from "@/lib/planner/types";
 
 export function getValidationTone(validation: MealValidation) {
@@ -28,12 +29,14 @@ export function MealValidationSummary({ validation }: { validation: MealValidati
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
-      <span className={`rounded-full border px-2 py-1 font-medium ${tone.classes}`}>{tone.label}</span>
+      <Badge variant="outline" className={tone.classes}>
+        {tone.label}
+      </Badge>
       {validation.lowItems.length > 0 ? (
-        <span className="text-zinc-500">Low: {validation.lowItems.join(", ")}</span>
+        <span className="text-muted-foreground">Low: {validation.lowItems.join(", ")}</span>
       ) : null}
       {validation.missingItems.length > 0 ? (
-        <span className="text-zinc-500">Missing: {validation.missingItems.join(", ")}</span>
+        <span className="text-muted-foreground">Missing: {validation.missingItems.join(", ")}</span>
       ) : null}
     </div>
   );

@@ -1,3 +1,5 @@
+export type StorageType = "fridge" | "pantry";
+
 export type ShelfCell = {
   id: string;
   row: number;
@@ -13,11 +15,13 @@ export type Shelf = {
   cells: ShelfCell[];
 };
 
-export type FridgeLayout = {
+export type StorageLayout = {
   id: string;
   name: string;
-  type: "single-door";
+  storageType: StorageType;
   width: number;
   height: number;
   shelves: Shelf[];
 };
+
+export type FridgeLayout = StorageLayout & { storageType: "fridge" };

@@ -20,6 +20,7 @@ export type InventoryItem = {
   quantity: number;
   unit: InventoryUnit;
   category: InventoryCategory;
+  storageId: string;
   shelfId: string;
   cellId: string;
   expiresAt?: string;

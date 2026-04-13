@@ -19,15 +19,15 @@ export function GroceryCartPanel({ items, onToggle }: Props) {
   const lowStock = items.filter((i) => i.reason === "low");
 
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+    <section className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-4">
       <div>
-        <h3 className="text-sm font-semibold text-zinc-800">Grocery cart</h3>
-        <p className="text-xs text-zinc-500">Items needed to cook your planned meals.</p>
+        <h3 className="text-sm font-semibold text-foreground">Grocery cart</h3>
+        <p className="text-xs text-muted-foreground">Items needed to cook your planned meals.</p>
       </div>
 
       {required.length > 0 && (
         <div className="flex flex-col gap-1">
-          <div className="text-xs font-semibold uppercase tracking-wide text-red-600">Missing</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-destructive">Missing</div>
           {required.map((item) => (
             <GroceryRow key={item.id} item={item} onToggle={onToggle} />
           ))}
@@ -36,7 +36,7 @@ export function GroceryCartPanel({ items, onToggle }: Props) {
 
       {lowStock.length > 0 && (
         <div className="flex flex-col gap-1">
-          <div className="text-xs font-semibold uppercase tracking-wide text-amber-600">
+          <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
             Low stock top-ups
           </div>
           {lowStock.map((item) => (
@@ -51,7 +51,7 @@ export function GroceryCartPanel({ items, onToggle }: Props) {
 function GroceryRow({ item, onToggle }: { item: GroceryCartItem; onToggle: (id: string) => void }) {
   return (
     <label
-      className={`flex cursor-pointer items-start gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 transition-opacity ${
+      className={`flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 transition-opacity ${
         item.checked ? "opacity-50 line-through" : ""
       }`}
     >
@@ -62,14 +62,14 @@ function GroceryRow({ item, onToggle }: { item: GroceryCartItem; onToggle: (id: 
         onChange={() => onToggle(item.id)}
       />
       <div className="flex flex-col">
-        <span className="text-sm font-medium text-zinc-800">
+        <span className="text-sm font-medium text-foreground">
           {item.displayName}{" "}
-          <span className="font-normal text-zinc-500">
+          <span className="font-normal text-muted-foreground">
             — {formatQuantity(item.neededQuantity, item.unit)}
           </span>
         </span>
         {item.recipeTitles.length > 0 && (
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-muted-foreground">
             For: {item.recipeTitles.join(", ")}
           </span>
         )}

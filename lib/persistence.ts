@@ -1,7 +1,8 @@
 import { createDefaultAppState, createInventoryItem, type AppState } from "@/lib/appState";
 import { generateId } from "@/lib/id";
 import { isSupportedUnit } from "@/lib/inventory/units";
-import type { InventoryCategory } from "@/lib/inventory/types";
+import type { InventoryCategory, InventoryItem } from "@/lib/inventory/types";
+import type { StorageLayout } from "@/lib/fridge/types";
 import type { Recipe } from "@/lib/planner/types";
 import { recipes as systemRecipes } from "@/data/recipes";
 
@@ -45,6 +46,8 @@ function migrateLegacyLayout(stored: unknown): AppState | undefined {
       legacyItems: Array.isArray(shelf.items) ? shelf.items.filter(isObject) : [],
     }));
 
+  const fridgeId = typeof stored.id === "string" ? stored.id : baseState.fridge.id;
+
   const inventory = shelves.flatMap((shelf) =>
     shelf.legacyItems.map((item) =>
       createInventoryItem({
@@ -52,6 +55,7 @@ function migrateLegacyLayout(stored: unknown): AppState | undefined {
         quantity: typeof item.quantity === "number" ? item.quantity : 1,
         unit: toSupportedUnit(item.unit),
         category: FALLBACK_CATEGORY,
+        storageId: fridgeId,
         shelfId: shelf.id,
         cellId: typeof item.cellId === "string" ? item.cellId : shelf.cells[0]?.id ?? "cell-0-0",
         expiresAt: typeof item.expiresAt === "string" ? item.expiresAt : undefined,
@@ -62,9 +66,9 @@ function migrateLegacyLayout(stored: unknown): AppState | undefined {
   return {
     ...baseState,
     fridge: {
-      id: typeof stored.id === "string" ? stored.id : baseState.fridge.id,
+      id: fridgeId,
       name: typeof stored.name === "string" ? stored.name : baseState.fridge.name,
-      type: "single-door",
+      storageType: "fridge" as const,
       width: typeof stored.width === "number" ? stored.width : baseState.fridge.width,
       height: typeof stored.height === "number" ? stored.height : baseState.fridge.height,
       shelves: shelves.map((shelf) => ({
@@ -99,6 +103,37 @@ function reviveAppState(stored: unknown): AppState | undefined {
       typeof storedPlanner.selectedMealId === "string" ? storedPlanner.selectedMealId : undefined,
   };
 
+  // Normalize fridge: ensure storageType is set (old persisted data had `type: "single-door"`)
+  const fridge = {
+    ...defaults.fridge,
+    ...(stored.fridge as StorageLayout),
+    storageType: "fridge" as const,
+  };
+
+  // Load pantry from stored state or use default
+  const pantry: StorageLayout = isObject(stored.pantry)
+    ? {
+        ...defaults.pantry,
+        ...(stored.pantry as StorageLayout),
+        storageType: "pantry",
+      }
+    : defaults.pantry;
+
+  // Backfill storageId on items persisted before pantry was introduced
+  const fridgeShelfIds = new Set(fridge.shelves.map((s) => s.id));
+  const inventory = (stored.inventory as unknown[]).filter(isObject).map((raw) => {
+    const item = raw as Record<string, unknown>;
+    return {
+      ...(item as InventoryItem),
+      storageId:
+        typeof item.storageId === "string"
+          ? item.storageId
+          : fridgeShelfIds.has(item.shelfId as string)
+            ? fridge.id
+            : pantry.id,
+    };
+  });
+
   // Merge system recipes with any user-saved recipes persisted in storage
   const storedRecipes = Array.isArray(stored.recipes) ? (stored.recipes as Recipe[]) : [];
   const mergedRecipes: Recipe[] = [
@@ -108,6 +143,9 @@ function reviveAppState(stored: unknown): AppState | undefined {
 
   return {
     ...(stored as AppState),
+    fridge,
+    pantry,
+    inventory,
     recipes: mergedRecipes,
     planner,
   };
