@@ -1,4 +1,5 @@
 import { createDefaultAppState, createInventoryItem, type AppState } from "@/lib/appState";
+import { generateId } from "@/lib/id";
 import { isSupportedUnit } from "@/lib/inventory/units";
 import type { InventoryCategory } from "@/lib/inventory/types";
 
@@ -25,7 +26,7 @@ function migrateLegacyLayout(stored: unknown): AppState | undefined {
   const shelves = stored.shelves
     .filter(isObject)
     .map((shelf) => ({
-      id: typeof shelf.id === "string" ? shelf.id : crypto.randomUUID(),
+      id: typeof shelf.id === "string" ? shelf.id : generateId(),
       name: typeof shelf.name === "string" ? shelf.name : "Shelf",
       rows: typeof shelf.rows === "number" ? shelf.rows : 1,
       cols: typeof shelf.cols === "number" ? shelf.cols : 1,
@@ -34,7 +35,7 @@ function migrateLegacyLayout(stored: unknown): AppState | undefined {
         ? shelf.cells
             .filter(isObject)
             .map((cell) => ({
-              id: typeof cell.id === "string" ? cell.id : crypto.randomUUID(),
+              id: typeof cell.id === "string" ? cell.id : generateId(),
               row: typeof cell.row === "number" ? cell.row : 0,
               col: typeof cell.col === "number" ? cell.col : 0,
             }))

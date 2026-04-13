@@ -1,4 +1,5 @@
 import type { InventoryItem } from "@/lib/inventory/types";
+import { generateId } from "@/lib/id";
 import { parsePreferences } from "@/lib/planner/preferences";
 import type { PlannedMeal, Recipe } from "@/lib/planner/types";
 import { validateRecipeAgainstInventory } from "@/lib/planner/validation";
@@ -94,7 +95,7 @@ export function generateWeeklyDinnerPlan({ inventory, preferences, recipes }: Pl
     const selected = scoredRecipes[index % scoredRecipes.length];
 
     return {
-      id: crypto.randomUUID(),
+      id: generateId(),
       day,
       mealType: "dinner",
       recipe: selected.recipe,

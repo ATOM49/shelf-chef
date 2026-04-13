@@ -1,4 +1,5 @@
 import type { FridgeLayout, Shelf, ShelfCell } from "@/lib/fridge/types";
+import { generateId } from "@/lib/id";
 
 export const createCells = (rows: number, cols: number): ShelfCell[] => {
   const cells: ShelfCell[] = [];
@@ -22,7 +23,7 @@ export const createShelf = (
   cols: number,
   height = 120,
 ): Shelf => ({
-  id: crypto.randomUUID(),
+  id: generateId(),
   name,
   rows,
   cols,
@@ -31,7 +32,7 @@ export const createShelf = (
 });
 
 export const createDefaultSingleDoorFridge = (): FridgeLayout => ({
-  id: crypto.randomUUID(),
+  id: generateId(),
   name: "My Fridge",
   type: "single-door",
   width: 360,

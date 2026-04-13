@@ -1,5 +1,6 @@
 import { createCells, createDefaultSingleDoorFridge, resizeShelf } from "@/lib/fridge/layout";
 import type { FridgeLayout } from "@/lib/fridge/types";
+import { generateId } from "@/lib/id";
 import { applyMealConsumption } from "@/lib/inventory/consumption";
 import { normalizeIngredientName } from "@/lib/inventory/normalize";
 import type { InventoryCategory, InventoryItem, InventoryUnit } from "@/lib/inventory/types";
@@ -41,7 +42,7 @@ export type AppAction =
 
 export function createInventoryItem(item: InventoryDraft): InventoryItem {
   return {
-    id: crypto.randomUUID(),
+    id: generateId(),
     ...item,
     name: item.name.trim(),
     normalizedName: normalizeIngredientName(item.name),
@@ -88,7 +89,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           shelves: [
             ...state.fridge.shelves,
             {
-              id: crypto.randomUUID(),
+              id: generateId(),
               name: `Shelf ${shelfNumber}`,
               rows: 1,
               cols: 3,
