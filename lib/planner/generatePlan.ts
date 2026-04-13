@@ -85,7 +85,10 @@ export function generateWeeklyDinnerPlan({ inventory, preferences, recipes }: Pl
       const { validation, score } = scoreRecipe(recipe, inventory, preferences);
       return { recipe, validation, score };
     })
-    .sort((left, right) => right.score - left.score || left.recipe.title.localeCompare(right.recipe.title));
+    .sort(
+      (left, right) =>
+        right.score - left.score || left.recipe.title.localeCompare(right.recipe.title, "en-US"),
+    );
 
   if (scoredRecipes.length === 0) {
     return [];

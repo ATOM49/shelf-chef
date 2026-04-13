@@ -39,7 +39,7 @@ export function MealCard({ meal, isSelected, onSelect, onComplete }: MealCardPro
           <a
             href={meal.recipe.referenceUrl}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="text-blue-600 hover:text-blue-700"
           >
             Open recipe
