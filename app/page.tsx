@@ -1,5 +1,5 @@
-import { FridgeInventoryPage } from "./fridge/components/FridgeInventoryPage";
+import { FoodPlannerApp } from "@/components/app/FoodPlannerApp";
 
 export default function Home() {
-  return <FridgeInventoryPage />;
+  return <FoodPlannerApp />;
 }
