@@ -9,10 +9,9 @@ type FridgeShelfProps = {
   inventory: InventoryItem[];
   isSelected: boolean;
   onSelect: () => void;
-  onSelectCell: (cellId: string) => void;
 };
 
-export function FridgeShelf({ shelf, inventory, isSelected, onSelect, onSelectCell }: FridgeShelfProps) {
+export function FridgeShelf({ shelf, inventory, isSelected, onSelect }: FridgeShelfProps) {
   return (
     <StorageShelf
       shelf={shelf}
@@ -22,7 +21,6 @@ export function FridgeShelf({ shelf, inventory, isSelected, onSelect, onSelectCe
       isDragging={false}
       isDropTarget={false}
       onSelect={onSelect}
-      onSelectCell={onSelectCell}
       onDragStart={() => {}}
       onDragEnd={() => {}}
       onDragOver={() => {}}

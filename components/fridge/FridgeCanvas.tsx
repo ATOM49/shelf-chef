@@ -9,7 +9,6 @@ type FridgeCanvasProps = {
   inventory: InventoryItem[];
   selectedShelfId?: string;
   onSelectShelf: (shelfId: string) => void;
-  onSelectCell: (shelfId: string, cellId: string) => void;
   onReorderShelves?: (activeShelfId: string, overShelfId: string) => void;
 };
 

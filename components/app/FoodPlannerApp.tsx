@@ -12,21 +12,20 @@ import { StorageCanvas } from "@/components/storage/StorageCanvas";
 import { StorageEditorPanel } from "@/components/storage/StorageEditorPanel";
 import { GroceryCartPanel } from "@/components/planner/GroceryCartPanel";
 import { PlannerSidebar } from "@/components/planner/PlannerSidebar";
+import { InventoryListPanel } from "@/components/inventory/InventoryListPanel";
 import { appReducer } from "@/lib/appState";
 import type { StorageType } from "@/lib/fridge/types";
 import { loadAppState, saveAppState } from "@/lib/persistence";
 import { PRESET_METADATA, type PresetId } from "@/lib/inventory/presets";
 
-type DesktopTab = "planner" | "cart";
-type MobileTab = "storage" | "planner" | "cart";
+type DesktopTab = "planner" | "inventory" | "cart";
+type MobileTab = "storage" | "planner" | "inventory" | "cart";
 
 export function FoodPlannerApp() {
   const [state, dispatch] = useReducer(appReducer, undefined, loadAppState);
   const [storageTab, setStorageTab] = useState<StorageType>("fridge");
   const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
-  const [selectedCell, setSelectedCell] = useState<{ shelfId: string; cellId: string } | undefined>();
   const [selectedPantryShelfId, setSelectedPantryShelfId] = useState<string | undefined>();
-  const [selectedPantryCell, setSelectedPantryCell] = useState<{ shelfId: string; cellId: string } | undefined>();
   const [desktopTab, setDesktopTab] = useState<DesktopTab>("planner");
   const [mobileTab, setMobileTab] = useState<MobileTab>("storage");
 
@@ -36,40 +35,22 @@ export function FoodPlannerApp() {
 
   const handleSelectShelf = useCallback((shelfId: string) => {
     setSelectedShelfId(shelfId);
-    setSelectedCell(undefined);
-    setStorageTab("fridge");
-    setMobileTab("storage");
-  }, []);
-
-  const handleSelectCell = useCallback((shelfId: string, cellId: string) => {
-    setSelectedShelfId(shelfId);
-    setSelectedCell({ shelfId, cellId });
     setStorageTab("fridge");
     setMobileTab("storage");
   }, []);
 
   const handleClearSelection = useCallback(() => {
     setSelectedShelfId(undefined);
-    setSelectedCell(undefined);
   }, []);
 
   const handleSelectPantryShelf = useCallback((shelfId: string) => {
     setSelectedPantryShelfId(shelfId);
-    setSelectedPantryCell(undefined);
-    setStorageTab("pantry");
-    setMobileTab("storage");
-  }, []);
-
-  const handleSelectPantryCell = useCallback((shelfId: string, cellId: string) => {
-    setSelectedPantryShelfId(shelfId);
-    setSelectedPantryCell({ shelfId, cellId });
     setStorageTab("pantry");
     setMobileTab("storage");
   }, []);
 
   const handleClearPantrySelection = useCallback(() => {
     setSelectedPantryShelfId(undefined);
-    setSelectedPantryCell(undefined);
   }, []);
 
   const handleReorderFridgeShelves = useCallback((activeShelfId: string, overShelfId: string) => {
@@ -116,6 +97,7 @@ export function FoodPlannerApp() {
         </header>
 
         <div className="mt-3 flex min-h-0 flex-1 gap-3">
+          {/* Storage canvas — view-only for items; shelf drag/reorder and shelf editor still active */}
           <div className="hidden min-h-0 w-96 shrink-0 flex-col rounded-xl border bg-card p-3 md:flex">
             <Tabs
               value={storageTab}
@@ -132,7 +114,6 @@ export function FoodPlannerApp() {
                   inventory={state.inventory.filter((item) => item.storageId === state.fridge.id)}
                   selectedShelfId={selectedShelfId}
                   onSelectShelf={handleSelectShelf}
-                  onSelectCell={handleSelectCell}
                   onReorderShelves={handleReorderFridgeShelves}
                 />
               </TabsContent>
@@ -142,14 +123,13 @@ export function FoodPlannerApp() {
                   inventory={state.inventory.filter((item) => item.storageId === state.pantry.id)}
                   selectedShelfId={selectedPantryShelfId}
                   onSelectShelf={handleSelectPantryShelf}
-                  onSelectCell={handleSelectPantryCell}
                   onReorderShelves={handleReorderPantryShelves}
                 />
               </TabsContent>
             </Tabs>
             <div className="mt-3 flex items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
-                Drag shelf handles to reorder, or select a shelf/cell to edit.
+                Drag handles to reorder shelves. Click a shelf to edit its layout.
               </p>
               <div className="flex shrink-0 gap-2">
                 <SeedInventoryMenu onSeed={(preset) => {
@@ -171,12 +151,21 @@ export function FoodPlannerApp() {
           <div className="min-h-0 min-w-0 flex-1 rounded-xl border bg-card p-3 md:p-4">
             <div className="hidden h-full md:block">
               <Tabs value={desktopTab} onValueChange={(value) => setDesktopTab(value as DesktopTab)} className="h-full">
-                <TabsList className="grid w-full max-w-sm grid-cols-2">
+                <TabsList className="grid w-full max-w-lg grid-cols-3">
                   <TabsTrigger value="planner">Planner</TabsTrigger>
+                  <TabsTrigger value="inventory">Inventory</TabsTrigger>
                   <TabsTrigger value="cart">Shopping Cart</TabsTrigger>
                 </TabsList>
                 <TabsContent value="planner" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
                   <PlannerSidebar state={state} dispatch={dispatch} />
+                </TabsContent>
+                <TabsContent value="inventory" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
+                  <InventoryListPanel
+                    inventory={state.inventory}
+                    fridge={state.fridge}
+                    pantry={state.pantry}
+                    dispatch={dispatch}
+                  />
                 </TabsContent>
                 <TabsContent value="cart" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
                   {state.planner.groceryCart.length > 0 ? (
@@ -195,9 +184,10 @@ export function FoodPlannerApp() {
 
             <div className="h-full md:hidden">
               <Tabs value={mobileTab} onValueChange={(value) => setMobileTab(value as MobileTab)} className="h-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="storage">Storage</TabsTrigger>
                   <TabsTrigger value="planner">Planner</TabsTrigger>
+                  <TabsTrigger value="inventory">Inventory</TabsTrigger>
                   <TabsTrigger value="cart">Cart</TabsTrigger>
                 </TabsList>
                 <TabsContent value="storage" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
@@ -217,7 +207,6 @@ export function FoodPlannerApp() {
                         inventory={state.inventory.filter((item) => item.storageId === state.fridge.id)}
                         selectedShelfId={selectedShelfId}
                         onSelectShelf={handleSelectShelf}
-                        onSelectCell={handleSelectCell}
                         onReorderShelves={handleReorderFridgeShelves}
                       />
                     ) : (
@@ -226,7 +215,6 @@ export function FoodPlannerApp() {
                         inventory={state.inventory.filter((item) => item.storageId === state.pantry.id)}
                         selectedShelfId={selectedPantryShelfId}
                         onSelectShelf={handleSelectPantryShelf}
-                        onSelectCell={handleSelectPantryCell}
                         onReorderShelves={handleReorderPantryShelves}
                       />
                     )}
@@ -249,6 +237,14 @@ export function FoodPlannerApp() {
                 <TabsContent value="planner" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
                   <PlannerSidebar state={state} dispatch={dispatch} />
                 </TabsContent>
+                <TabsContent value="inventory" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
+                  <InventoryListPanel
+                    inventory={state.inventory}
+                    fridge={state.fridge}
+                    pantry={state.pantry}
+                    dispatch={dispatch}
+                  />
+                </TabsContent>
                 <TabsContent value="cart" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
                   {state.planner.groceryCart.length > 0 ? (
                     <GroceryCartPanel
@@ -268,18 +264,14 @@ export function FoodPlannerApp() {
 
         <StorageEditorPanel
           storage={state.fridge}
-          inventory={state.inventory}
           selectedShelfId={selectedShelfId}
-          selectedCell={selectedCell}
           dispatch={dispatch}
           onClearSelection={handleClearSelection}
           showInlinePanel={false}
         />
         <StorageEditorPanel
           storage={state.pantry}
-          inventory={state.inventory}
           selectedShelfId={selectedPantryShelfId}
-          selectedCell={selectedPantryCell}
           dispatch={dispatch}
           onClearSelection={handleClearPantrySelection}
           showInlinePanel={false}

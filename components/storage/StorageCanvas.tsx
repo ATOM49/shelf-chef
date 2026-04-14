@@ -10,7 +10,6 @@ type StorageCanvasProps = {
   inventory: InventoryItem[];
   selectedShelfId?: string;
   onSelectShelf: (shelfId: string) => void;
-  onSelectCell: (shelfId: string, cellId: string) => void;
   onReorderShelves: (activeShelfId: string, overShelfId: string) => void;
 };
 
@@ -76,7 +75,6 @@ export function StorageCanvas(props: StorageCanvasProps) {
       isDragging={draggedShelfId === shelf.id}
       isDropTarget={dropTargetShelfId === shelf.id && draggedShelfId !== shelf.id}
       onSelect={() => props.onSelectShelf(shelf.id)}
-      onSelectCell={(cellId) => props.onSelectCell(shelf.id, cellId)}
       onDragStart={(event) => handleShelfDragStart(event, shelf.id)}
       onDragEnd={clearDragState}
       onDragOver={(event) => handleShelfDragOver(event, shelf.id)}

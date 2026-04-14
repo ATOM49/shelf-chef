@@ -22,7 +22,7 @@ const SHELF_STYLES: Record<
     dropTarget: "border-blue-300 bg-blue-50/80 ring-2 ring-blue-100",
     dragging: "opacity-60",
     handle: "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600",
-    cell: "border-zinc-300 bg-zinc-50 hover:border-zinc-400 hover:bg-zinc-100",
+    cell: "border-zinc-300 bg-zinc-50",
   },
   pantry: {
     base: "border-stone-200 bg-stone-50 hover:border-stone-300",
@@ -30,7 +30,7 @@ const SHELF_STYLES: Record<
     dropTarget: "border-slate-300 bg-slate-50/80 ring-2 ring-slate-100",
     dragging: "opacity-60",
     handle: "text-stone-400 hover:bg-stone-100 hover:text-stone-600",
-    cell: "border-stone-300 bg-white hover:border-stone-400 hover:bg-stone-50",
+    cell: "border-stone-300 bg-white",
   },
 };
 
@@ -42,7 +42,6 @@ type StorageShelfProps = {
   isDragging: boolean;
   isDropTarget: boolean;
   onSelect: () => void;
-  onSelectCell: (cellId: string) => void;
   onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
   onDragEnd: () => void;
   onDragOver: (event: DragEvent<HTMLDivElement>) => void;
@@ -58,7 +57,6 @@ export function StorageShelf({
   isDragging,
   isDropTarget,
   onSelect,
-  onSelectCell,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -113,14 +111,9 @@ export function StorageShelf({
           const cellItems = inventory.filter((item) => item.cellId === cell.id);
 
           return (
-            <button
+            <div
               key={cell.id}
-              type="button"
-              className={`rounded-lg border border-dashed p-2 text-left transition-colors ${styles.cell}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelectCell(cell.id);
-              }}
+              className={`rounded-lg border border-dashed p-2 ${styles.cell}`}
             >
               {cellItems.length === 0 ? (
                 <span className="text-xs text-zinc-400">Empty</span>
@@ -131,7 +124,7 @@ export function StorageShelf({
                   ))}
                 </div>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
