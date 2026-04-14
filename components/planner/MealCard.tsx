@@ -4,6 +4,7 @@ import { MealValidationSummary } from "@/components/planner/MealValidationSummar
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { PlannedMeal } from "@/lib/planner/types";
+import { GripVertical } from "lucide-react";
 import type { ButtonHTMLAttributes } from "react";
 
 type MealCardProps = {
@@ -62,7 +63,7 @@ export function MealCard({
               onClick={(event) => event.stopPropagation()}
               {...dragHandleProps}
             >
-              ⋮⋮
+              <GripVertical className="size-3.5" aria-hidden />
             </button>
             <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
               <input

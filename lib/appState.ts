@@ -374,6 +374,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case "SET_MEAL_COOKED": {
       if (!action.cooked) {
+        // Un-cooking is intentionally unsupported because completing a meal mutates inventory.
         return state;
       }
 

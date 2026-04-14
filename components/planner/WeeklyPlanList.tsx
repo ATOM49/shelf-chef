@@ -49,6 +49,10 @@ function toSlotId(day: string, mealType: string) {
   return `${day}::${mealType}`;
 }
 
+function isPlannerMealType(value: unknown): value is PlannerMealType {
+  return value === "breakfast" || value === "lunch" || value === "dinner";
+}
+
 function slotForMeal(meals: PlannedMeal[]) {
   return new Map(meals.map((meal) => [toSlotId(meal.day, meal.mealType), meal]));
 }
@@ -106,9 +110,9 @@ export function WeeklyPlanList({
     if (
       activeData?.type !== "meal" ||
       typeof activeData.mealId !== "string" ||
-      activeData.mealType !== "breakfast" && activeData.mealType !== "lunch" && activeData.mealType !== "dinner" ||
+      !isPlannerMealType(activeData.mealType) ||
       overData?.type !== "slot" ||
-      (overData.mealType !== "breakfast" && overData.mealType !== "lunch" && overData.mealType !== "dinner") ||
+      !isPlannerMealType(overData.mealType) ||
       typeof overData.day !== "string" ||
       activeData.mealType !== overData.mealType
     ) {
