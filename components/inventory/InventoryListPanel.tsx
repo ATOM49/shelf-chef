@@ -178,6 +178,7 @@ export function InventoryListPanel({
           <button
             key={tab}
             type="button"
+            aria-label={tab === "all" ? "Show all items" : tab === "fridge" ? "Show fridge items" : "Show pantry items"}
             onClick={() => setFilterTab(tab)}
             className={[
               "rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors",
@@ -373,7 +374,7 @@ function ItemForm({
         </div>
         <div className="grid gap-1">
           <Label className="text-xs">Shelf</Label>
-          <Select value={form.shelfKey} onValueChange={(v) => onChange({ shelfKey: v || undefined })}>
+          <Select value={form.shelfKey} onValueChange={(v) => v && onChange({ shelfKey: v })}>
             <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
