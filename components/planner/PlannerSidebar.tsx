@@ -101,7 +101,9 @@ export function PlannerSidebar({
                 meals={state.planner.weeklyPlan}
                 selectedMealId={state.planner.selectedMealId}
                 onSelectMeal={(mealId) => dispatch({ type: "SELECT_MEAL", mealId })}
-                onCompleteMeal={(mealId) => dispatch({ type: "COMPLETE_MEAL", mealId })}
+                onSetMealCooked={(mealId, cooked) => dispatch({ type: "SET_MEAL_COOKED", mealId, cooked })}
+                onMoveMealSlot={(mealId, day, mealType) =>
+                  dispatch({ type: "MOVE_PLANNED_MEAL_SLOT", mealId, day, mealType })}
                 onDeselectMeal={() => dispatch({ type: "SELECT_MEAL", mealId: undefined })}
               />
             </section>

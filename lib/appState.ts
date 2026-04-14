@@ -55,7 +55,8 @@ export type AppAction =
   | { type: "GENERATE_WEEKLY_PLAN" }
   | { type: "REPLACE_PLANNED_MEAL"; mealId: string; recipeName: string }
   | { type: "SELECT_MEAL"; mealId?: string }
-  | { type: "COMPLETE_MEAL"; mealId: string }
+  | { type: "SET_MEAL_COOKED"; mealId: string; cooked: boolean }
+  | { type: "MOVE_PLANNED_MEAL_SLOT"; mealId: string; day: string; mealType: PlannedMeal["mealType"] }
   | { type: "TOGGLE_GROCERY_ITEM"; itemId: string }
   | { type: "SEED_INVENTORY"; preset: PresetId };
 
@@ -371,7 +372,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
-    case "COMPLETE_MEAL": {
+    case "SET_MEAL_COOKED": {
+      if (!action.cooked) {
+        return state;
+      }
+
       const meal = state.planner.weeklyPlan.find((plannedMeal) => plannedMeal.id === action.mealId);
       if (!meal || meal.status === "completed" || !meal.validation.canCook) {
         return state;
@@ -395,6 +400,38 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           ...state.planner,
           weeklyPlan: nextPlan,
           groceryCart,
+        },
+      };
+    }
+
+    case "MOVE_PLANNED_MEAL_SLOT": {
+      const activeMeal = state.planner.weeklyPlan.find((plannedMeal) => plannedMeal.id === action.mealId);
+      if (!activeMeal || activeMeal.mealType !== action.mealType || activeMeal.day === action.day) {
+        return state;
+      }
+
+      const targetMeal = state.planner.weeklyPlan.find(
+        (plannedMeal) =>
+          plannedMeal.id !== action.mealId &&
+          plannedMeal.day === action.day &&
+          plannedMeal.mealType === action.mealType,
+      );
+
+      const nextPlan = state.planner.weeklyPlan.map((plannedMeal) => {
+        if (plannedMeal.id === action.mealId) {
+          return { ...plannedMeal, day: action.day };
+        }
+        if (targetMeal && plannedMeal.id === targetMeal.id) {
+          return { ...plannedMeal, day: activeMeal.day };
+        }
+        return plannedMeal;
+      });
+
+      return {
+        ...state,
+        planner: {
+          ...state.planner,
+          weeklyPlan: nextPlan,
         },
       };
     }
