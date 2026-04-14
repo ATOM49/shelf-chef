@@ -23,6 +23,9 @@ function DrawerClose({ ...props }: DrawerPrimitive.Close.Props) {
   return <DrawerPrimitive.Close data-slot="drawer-close" {...props} />
 }
 
+// @base-ui/react sets data-open on the popup/backdrop when open, and data-closed when closing.
+// These Tailwind variants (data-open:, data-closed:) map directly to those attributes.
+
 function DrawerOverlay({
   className,
   ...props
