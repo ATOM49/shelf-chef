@@ -113,8 +113,7 @@ export function WeeklyPlanList({
       !isPlannerMealType(activeData.mealType) ||
       overData?.type !== "slot" ||
       !isPlannerMealType(overData.mealType) ||
-      typeof overData.day !== "string" ||
-      activeData.mealType !== overData.mealType
+      typeof overData.day !== "string"
     ) {
       return;
     }
@@ -134,7 +133,7 @@ export function WeeklyPlanList({
     <>
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="rounded-xl border bg-muted/20 p-3">
-          <div className="mb-2 text-xs text-muted-foreground">Drag meals across days within the same row</div>
+          <div className="mb-2 text-xs text-muted-foreground">Drag meals to any slot</div>
           <div className="overflow-x-auto pb-1">
             <div className="flex min-w-max snap-x snap-mandatory divide-x divide-border/50 overflow-hidden rounded-lg border bg-card">
               {WEEK_DAYS.map((day) => {

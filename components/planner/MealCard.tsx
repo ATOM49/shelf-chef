@@ -1,7 +1,6 @@
 "use client";
 
 import { MealValidationSummary } from "@/components/planner/MealValidationSummary";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { PlannedMeal } from "@/lib/planner/types";
 import { GripVertical } from "lucide-react";
@@ -31,30 +30,12 @@ export function MealCard({
     <Card className={`${isSelected ? "ring-2 ring-ring" : ""} ${isDragging ? "opacity-60" : ""}`} size="sm">
       <CardContent className="space-y-2">
         <button type="button" className="w-full text-left" onClick={onSelect}>
-          <div className="flex items-center justify-between gap-2">
-            <Badge variant="outline" className="capitalize">
-              {meal.mealType}
-            </Badge>
-            <Badge variant={meal.status === "completed" ? "default" : "secondary"}>{meal.status}</Badge>
-          </div>
-          <div className="mt-2 text-sm font-semibold text-foreground">{meal.recipe.title}</div>
+          <div className="text-sm font-semibold text-foreground">{meal.recipe.title}</div>
         </button>
 
         <MealValidationSummary validation={meal.validation} />
 
-        <div className="flex items-center justify-between gap-3 text-xs">
-          {meal.recipe.referenceUrl ? (
-            <a
-              href={meal.recipe.referenceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              Open recipe
-            </a>
-          ) : (
-            <span className="text-muted-foreground">No recipe link</span>
-          )}
+        <div className="flex items-center justify-end gap-3 text-xs">
           <div className="flex items-center gap-2">
             <button
               type="button"
