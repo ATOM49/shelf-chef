@@ -12,7 +12,9 @@ import { StorageCanvas } from "@/components/storage/StorageCanvas";
 import { StorageEditorPanel } from "@/components/storage/StorageEditorPanel";
 import { GroceryCartPanel } from "@/components/planner/GroceryCartPanel";
 import { PlannerSidebar } from "@/components/planner/PlannerSidebar";
+import { StockingDialog } from "@/components/stocking/StockingDialog";
 import { appReducer } from "@/lib/appState";
+import type { StockingItemDraft } from "@/lib/appState";
 import type { StorageType } from "@/lib/fridge/types";
 import { loadAppState, saveAppState } from "@/lib/persistence";
 import { PRESET_METADATA, type PresetId } from "@/lib/inventory/presets";
@@ -23,6 +25,7 @@ type MobileTab = "storage" | "planner" | "cart";
 export function FoodPlannerApp() {
   const [state, dispatch] = useReducer(appReducer, undefined, loadAppState);
   const [storageTab, setStorageTab] = useState<StorageType>("fridge");
+  const [stockingOpen, setStockingOpen] = useState(false);
   const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
   const [selectedCell, setSelectedCell] = useState<{ shelfId: string; cellId: string } | undefined>();
   const [selectedPantryShelfId, setSelectedPantryShelfId] = useState<string | undefined>();
@@ -88,6 +91,10 @@ export function FoodPlannerApp() {
       activeShelfId,
       overShelfId,
     });
+  }, []);
+
+  const handleCommitStock = useCallback((items: StockingItemDraft[]) => {
+    dispatch({ type: "STOCK_ITEMS", items });
   }, []);
 
   const handleReset = () => {
@@ -165,6 +172,17 @@ export function FoodPlannerApp() {
                   + Add Shelf
                 </Button>
               </div>
+            </div>
+            <div className="mt-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() => setStockingOpen(true)}
+              >
+                🧺 Stock up
+              </Button>
             </div>
           </div>
 
@@ -244,6 +262,14 @@ export function FoodPlannerApp() {
                         + Add Shelf
                       </Button>
                     </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setStockingOpen(true)}
+                    >
+                      🧺 Stock up
+                    </Button>
                   </div>
                 </TabsContent>
                 <TabsContent value="planner" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
@@ -283,6 +309,11 @@ export function FoodPlannerApp() {
           dispatch={dispatch}
           onClearSelection={handleClearPantrySelection}
           showInlinePanel={false}
+        />
+        <StockingDialog
+          open={stockingOpen}
+          onOpenChange={setStockingOpen}
+          onCommit={handleCommitStock}
         />
       </div>
     </div>

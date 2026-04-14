@@ -1,5 +1,5 @@
-import { createCells, createDefaultPantry, createDefaultSingleDoorFridge, resizeShelf } from "@/lib/fridge/layout";
-import type { FridgeLayout, StorageLayout, StorageType } from "@/lib/fridge/types";
+import { createCells, createDefaultPantry, createDefaultSingleDoorFridge, createShelf, resizeShelf } from "@/lib/fridge/layout";
+import type { FridgeLayout, Shelf, StorageLayout, StorageType } from "@/lib/fridge/types";
 import { buildGroceryCartFromMeals } from "@/lib/grocery";
 import { generateId } from "@/lib/id";
 import { applyMealConsumption } from "@/lib/inventory/consumption";
@@ -36,6 +36,17 @@ export type InventoryDraft = {
   expiresAt?: string;
 };
 
+export type StockingItemDraft = {
+  name: string;
+  quantity: number;
+  unit: InventoryUnit;
+  category: InventoryCategory;
+  storageType: StorageType;
+  /** Shelf to find or create by name */
+  shelfName: string;
+  expiresAt?: string;
+};
+
 export type AppAction =
   | { type: "ADD_SHELF"; target?: StorageType }
   | { type: "REORDER_SHELVES"; target: StorageType; activeShelfId: string; overShelfId: string }
@@ -58,7 +69,8 @@ export type AppAction =
   | { type: "SET_MEAL_COOKED"; mealId: string; cooked: boolean }
   | { type: "MOVE_PLANNED_MEAL_SLOT"; mealId: string; day: string; mealType: PlannedMeal["mealType"] }
   | { type: "TOGGLE_GROCERY_ITEM"; itemId: string }
-  | { type: "SEED_INVENTORY"; preset: PresetId };
+  | { type: "SEED_INVENTORY"; preset: PresetId }
+  | { type: "STOCK_ITEMS"; items: StockingItemDraft[] };
 
 export function createInventoryItem(item: InventoryDraft): InventoryItem {
   return {
@@ -449,7 +461,87 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    case "STOCK_ITEMS": {
+      return applyStockItems(state, action.items);
+    }
+
     default:
       return state;
   }
+}
+
+/**
+ * Finds or creates a shelf by name within a storage layout, returning both the
+ * (possibly updated) layout and the resolved shelf.
+ */
+function findOrCreateShelf(
+  storage: StorageLayout,
+  shelfName: string,
+): { storage: StorageLayout; shelf: Shelf } {
+  const existing = storage.shelves.find(
+    (s) => s.name.toLowerCase() === shelfName.toLowerCase(),
+  );
+  if (existing) {
+    return { storage, shelf: existing };
+  }
+  const newShelf = createShelf(shelfName, 1, 3, 120);
+  return {
+    storage: { ...storage, shelves: [...storage.shelves, newShelf] },
+    shelf: newShelf,
+  };
+}
+
+/**
+ * Applies a batch of StockingItemDrafts to the state, creating shelves as
+ * needed and assigning items to cells via round-robin.
+ */
+function applyStockItems(state: AppState, items: StockingItemDraft[]): AppState {
+  let nextFridge = state.fridge;
+  let nextPantry = state.pantry;
+  const newInventoryItems: InventoryItem[] = [];
+
+  // Group items by storageType + shelfName so we can batch shelf lookups
+  const groups = new Map<string, { storageType: StorageType; shelfName: string; items: StockingItemDraft[] }>();
+  for (const item of items) {
+    const key = `${item.storageType}:${item.shelfName.toLowerCase()}`;
+    if (!groups.has(key)) {
+      groups.set(key, { storageType: item.storageType, shelfName: item.shelfName, items: [] });
+    }
+    groups.get(key)!.items.push(item);
+  }
+
+  for (const group of groups.values()) {
+    const storage = group.storageType === "fridge" ? nextFridge : nextPantry;
+    const { storage: updatedStorage, shelf } = findOrCreateShelf(storage, group.shelfName);
+
+    if (group.storageType === "fridge") {
+      nextFridge = updatedStorage as FridgeLayout;
+    } else {
+      nextPantry = updatedStorage;
+    }
+
+    const cells = shelf.cells.length > 0 ? shelf.cells : [{ id: "cell-0-0", row: 0, col: 0 }];
+    group.items.forEach((item, index) => {
+      const cellId = cells[index % cells.length].id;
+      newInventoryItems.push(
+        createInventoryItem({
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          category: item.category,
+          storageId: updatedStorage.id,
+          shelfId: shelf.id,
+          cellId,
+          expiresAt: item.expiresAt,
+        }),
+      );
+    });
+  }
+
+  return {
+    ...state,
+    fridge: nextFridge,
+    pantry: nextPantry,
+    inventory: [...state.inventory, ...newInventoryItems],
+  };
 }
