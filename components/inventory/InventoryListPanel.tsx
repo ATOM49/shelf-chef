@@ -23,33 +23,32 @@ import {
 } from "@/lib/inventory/types";
 
 type ShelfOption = {
-  key: string; // `${storageId}|${shelfId}`
-  label: string; // "Fridge › Top Shelf"
   storageId: string;
-  storageType: string;
   shelfId: string;
   firstCellId: string;
+  label: string;
 };
 
 function buildShelfOptions(fridge: FridgeLayout, pantry: StorageLayout): ShelfOption[] {
   return [
     ...fridge.shelves.map((shelf) => ({
-      key: `${fridge.id}|${shelf.id}`,
-      label: `${fridge.name} › ${shelf.name}`,
       storageId: fridge.id,
-      storageType: "fridge",
       shelfId: shelf.id,
       firstCellId: shelf.cells[0]?.id ?? "cell-0-0",
+      label: `${fridge.name} › ${shelf.name}`,
     })),
     ...pantry.shelves.map((shelf) => ({
-      key: `${pantry.id}|${shelf.id}`,
-      label: `${pantry.name} › ${shelf.name}`,
       storageId: pantry.id,
-      storageType: "pantry",
       shelfId: shelf.id,
       firstCellId: shelf.cells[0]?.id ?? "cell-0-0",
+      label: `${pantry.name} › ${shelf.name}`,
     })),
   ];
+}
+
+function pickRandomShelf(options: ShelfOption[]): ShelfOption | undefined {
+  if (options.length === 0) return undefined;
+  return options[Math.floor(Math.random() * options.length)];
 }
 
 type ItemFormState = {
@@ -57,20 +56,16 @@ type ItemFormState = {
   quantity: string;
   unit: InventoryUnit;
   category: InventoryCategory;
-  shelfKey: string;
   expiresAt: string;
 };
 
-function emptyForm(defaultShelfKey: string): ItemFormState {
-  return {
-    name: "",
-    quantity: "1",
-    unit: "count",
-    category: "other",
-    shelfKey: defaultShelfKey,
-    expiresAt: "",
-  };
-}
+const EMPTY_FORM: ItemFormState = {
+  name: "",
+  quantity: "1",
+  unit: "count",
+  category: "other",
+  expiresAt: "",
+};
 
 type InventoryListPanelProps = {
   inventory: InventoryItem[];
@@ -88,12 +83,12 @@ export function InventoryListPanel({
   dispatch,
 }: InventoryListPanelProps) {
   const shelfOptions = buildShelfOptions(fridge, pantry);
-  const defaultShelfKey = shelfOptions[0]?.key ?? "";
 
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
-  const [addForm, setAddForm] = useState<ItemFormState>(() => emptyForm(defaultShelfKey));
-  const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<ItemFormState>(() => emptyForm(defaultShelfKey));
+  const [addForm, setAddForm] = useState<ItemFormState>(EMPTY_FORM);
+  // editingItem holds the full InventoryItem so we can preserve its shelf location on save
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [editForm, setEditForm] = useState<ItemFormState>(EMPTY_FORM);
 
   const filteredInventory = inventory.filter((item) => {
     if (filterTab === "fridge") return item.storageId === fridge.id;
@@ -101,12 +96,10 @@ export function InventoryListPanel({
     return true;
   });
 
-  const resolveShelfOption = (key: string) => shelfOptions.find((opt) => opt.key === key);
-
   const handleAdd = () => {
     if (!addForm.name.trim()) return;
-    const opt = resolveShelfOption(addForm.shelfKey);
-    if (!opt) return;
+    const shelf = pickRandomShelf(shelfOptions);
+    if (!shelf) return;
 
     dispatch({
       type: "ADD_INVENTORY_ITEM",
@@ -115,59 +108,54 @@ export function InventoryListPanel({
         quantity: Math.max(0, Number(addForm.quantity) || 0),
         unit: addForm.unit,
         category: addForm.category,
-        storageId: opt.storageId,
-        shelfId: opt.shelfId,
-        cellId: opt.firstCellId,
+        storageId: shelf.storageId,
+        shelfId: shelf.shelfId,
+        cellId: shelf.firstCellId,
         expiresAt: addForm.expiresAt || undefined,
       },
     });
-    setAddForm(emptyForm(addForm.shelfKey));
+    setAddForm(EMPTY_FORM);
   };
 
   const handleEditStart = (item: InventoryItem) => {
-    const opt = shelfOptions.find(
-      (o) => o.storageId === item.storageId && o.shelfId === item.shelfId,
-    );
-    setEditingItemId(item.id);
+    setEditingItem(item);
     setEditForm({
       name: item.name,
       quantity: item.quantity.toString(),
       unit: item.unit,
       category: item.category,
-      shelfKey: opt?.key ?? defaultShelfKey,
       expiresAt: item.expiresAt ?? "",
     });
   };
 
   const handleEditSave = () => {
-    if (!editingItemId || !editForm.name.trim()) return;
-    const opt = resolveShelfOption(editForm.shelfKey);
-    if (!opt) return;
+    if (!editingItem || !editForm.name.trim()) return;
 
     dispatch({
       type: "UPDATE_INVENTORY_ITEM",
-      itemId: editingItemId,
+      itemId: editingItem.id,
       patch: {
         name: editForm.name.trim(),
         quantity: Math.max(0, Number(editForm.quantity) || 0),
         unit: editForm.unit,
         category: editForm.category,
-        storageId: opt.storageId,
-        shelfId: opt.shelfId,
-        cellId: opt.firstCellId,
+        // preserve the item's existing shelf/cell assignment
+        storageId: editingItem.storageId,
+        shelfId: editingItem.shelfId,
+        cellId: editingItem.cellId,
         expiresAt: editForm.expiresAt || undefined,
       },
     });
-    setEditingItemId(null);
+    setEditingItem(null);
   };
 
   const handleEditCancel = () => {
-    setEditingItemId(null);
+    setEditingItem(null);
   };
 
   const handleDelete = (itemId: string) => {
     dispatch({ type: "REMOVE_INVENTORY_ITEM", itemId });
-    if (editingItemId === itemId) setEditingItemId(null);
+    if (editingItem?.id === itemId) setEditingItem(null);
   };
 
   return (
@@ -200,7 +188,6 @@ export function InventoryListPanel({
         </p>
         <ItemForm
           form={addForm}
-          shelfOptions={shelfOptions}
           onChange={(patch) => setAddForm((f) => ({ ...f, ...patch }))}
           onSubmit={handleAdd}
           submitLabel="+ Add"
@@ -218,11 +205,10 @@ export function InventoryListPanel({
       {filteredInventory.length > 0 && (
         <div className="flex flex-col gap-2">
           {filteredInventory.map((item) =>
-            editingItemId === item.id ? (
+            editingItem?.id === item.id ? (
               <div key={item.id} className="rounded-xl border bg-card p-3">
                 <ItemForm
                   form={editForm}
-                  shelfOptions={shelfOptions}
                   onChange={(patch) => setEditForm((f) => ({ ...f, ...patch }))}
                   onSubmit={handleEditSave}
                   onCancel={handleEditCancel}
@@ -299,14 +285,12 @@ function InventoryRow({
 
 function ItemForm({
   form,
-  shelfOptions,
   onChange,
   onSubmit,
   onCancel,
   submitLabel,
 }: {
   form: ItemFormState;
-  shelfOptions: ShelfOption[];
   onChange: (patch: Partial<ItemFormState>) => void;
   onSubmit: () => void;
   onCancel?: () => void;
@@ -314,6 +298,7 @@ function ItemForm({
 }) {
   return (
     <div className="grid gap-2">
+      {/* Row 1: Name | Qty | Unit */}
       <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
         <div className="grid gap-1">
           <Label className="text-xs">Name *</Label>
@@ -353,7 +338,8 @@ function ItemForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+      {/* Row 2: Category | Expires — stacked on mobile, side-by-side on sm+ */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="grid gap-1">
           <Label className="text-xs">Category</Label>
           <Select
@@ -373,24 +359,10 @@ function ItemForm({
           </Select>
         </div>
         <div className="grid gap-1">
-          <Label className="text-xs">Shelf</Label>
-          <Select value={form.shelfKey} onValueChange={(v) => v && onChange({ shelfKey: v })}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {shelfOptions.map((opt) => (
-                <SelectItem key={opt.key} value={opt.key}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid gap-1 col-span-2 sm:col-span-1">
           <Label className="text-xs">Expires</Label>
           <Input
             type="date"
+            className="w-full"
             value={form.expiresAt}
             onChange={(e) => onChange({ expiresAt: e.target.value })}
           />
