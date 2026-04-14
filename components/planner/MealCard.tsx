@@ -2,20 +2,33 @@
 
 import { MealValidationSummary } from "@/components/planner/MealValidationSummary";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { PlannedMeal } from "@/lib/planner/types";
+import { GripVertical } from "lucide-react";
+import type { ButtonHTMLAttributes } from "react";
 
 type MealCardProps = {
   meal: PlannedMeal;
   isSelected: boolean;
+  isDragging?: boolean;
   onSelect: () => void;
-  onComplete: () => void;
+  onSetCooked: (cooked: boolean) => void;
+  dragHandleProps?: ButtonHTMLAttributes<HTMLButtonElement>;
 };
 
-export function MealCard({ meal, isSelected, onSelect, onComplete }: MealCardProps) {
+export function MealCard({
+  meal,
+  isSelected,
+  isDragging = false,
+  onSelect,
+  onSetCooked,
+  dragHandleProps,
+}: MealCardProps) {
+  const isCooked = meal.status === "completed";
+  const isCheckboxDisabled = isCooked || !meal.validation.canCook;
+
   return (
-    <Card className={isSelected ? "ring-2 ring-ring" : ""} size="sm">
+    <Card className={`${isSelected ? "ring-2 ring-ring" : ""} ${isDragging ? "opacity-60" : ""}`} size="sm">
       <CardContent className="space-y-2">
         <button type="button" className="w-full text-left" onClick={onSelect}>
           <div className="flex items-center justify-between gap-2">
@@ -42,14 +55,26 @@ export function MealCard({ meal, isSelected, onSelect, onComplete }: MealCardPro
           ) : (
             <span className="text-muted-foreground">No recipe link</span>
           )}
-          <Button
-            type="button"
-            size="sm"
-            onClick={onComplete}
-            disabled={meal.status === "completed" || !meal.validation.canCook}
-          >
-            Mark cooked
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label={`Drag ${meal.recipe.title}`}
+              className="cursor-grab rounded border bg-background px-2 py-1 leading-none text-muted-foreground transition-colors hover:bg-muted active:cursor-grabbing"
+              onClick={(event) => event.stopPropagation()}
+              {...dragHandleProps}
+            >
+              <GripVertical className="size-3.5" aria-hidden />
+            </button>
+            <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+              <input
+                type="checkbox"
+                checked={isCooked}
+                disabled={isCheckboxDisabled}
+                onChange={(event) => onSetCooked(event.currentTarget.checked)}
+              />
+              Cooked
+            </label>
+          </div>
         </div>
       </CardContent>
     </Card>
