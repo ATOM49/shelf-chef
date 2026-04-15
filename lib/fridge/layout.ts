@@ -31,32 +31,22 @@ export const createShelf = (
   cells: createCells(rows, cols),
 });
 
-export const createDefaultSingleDoorFridge = (): FridgeLayout => ({
+export const createEmptyFridge = (): FridgeLayout => ({
   id: generateId(),
   name: "My Fridge",
   storageType: "fridge",
   width: 360,
   height: 720,
-  shelves: [
-    createShelf("Top Shelf", 1, 3, 100),
-    createShelf("Upper Middle Shelf", 1, 4, 120),
-    createShelf("Lower Middle Shelf", 1, 3, 120),
-    createShelf("Bottom Shelf", 1, 2, 140),
-  ],
+  shelves: [],
 });
 
-export const createDefaultPantry = (): StorageLayout => ({
+export const createEmptyPantry = (): StorageLayout => ({
   id: generateId(),
   name: "My Pantry",
   storageType: "pantry",
   width: 360,
   height: 600,
-  shelves: [
-    createShelf("Dry Goods", 1, 3, 120),
-    createShelf("Canned Goods", 1, 4, 110),
-    createShelf("Condiments", 1, 3, 100),
-    createShelf("Baking & Spices", 1, 3, 100),
-  ],
+  shelves: [],
 });
 
 export const resizeShelf = (shelf: Shelf, rows: number, cols: number): Shelf => ({

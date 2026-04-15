@@ -186,3 +186,16 @@ export function saveAppState(state: AppState) {
     // ignore storage failures
   }
 }
+
+export function clearAppState() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    localStorage.removeItem(APP_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  } catch {
+    // ignore storage failures
+  }
+}

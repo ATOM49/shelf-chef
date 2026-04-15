@@ -85,17 +85,52 @@ export function StorageCanvas(props: StorageCanvasProps) {
     />
   ));
 
+  const hasInventory = props.inventory.length > 0;
+  const content = hasInventory ? (
+    shelfNodes
+  ) : (
+    <StorageEmptyState
+      storageType={props.layout.storageType}
+      shelfCount={props.layout.shelves.length}
+    />
+  );
+
   if (props.layout.storageType === "pantry") {
-    return <PantryCanvas layout={props.layout} shelfNodes={shelfNodes} />;
+    return <PantryCanvas layout={props.layout} shelfNodes={content} />;
   }
-  return <FridgeCanvasInner layout={props.layout} shelfNodes={shelfNodes} />;
+  return <FridgeCanvasInner layout={props.layout} shelfNodes={content} />;
+}
+
+function StorageEmptyState({
+  storageType,
+  shelfCount,
+}: {
+  storageType: StorageLayout["storageType"];
+  shelfCount: number;
+}) {
+  const isFridge = storageType === "fridge";
+  const title = isFridge ? "Fridge is empty" : "Pantry is empty";
+  const description = isFridge
+    ? "Stock cold items and AI will create the right fridge shelves as it organizes them for review."
+    : "Stock dry goods, spices, and pantry staples and AI will create pantry shelves as needed.";
+  const shelfMessage = shelfCount > 0
+    ? "Start stocking items to organize them into these shelves."
+    : "No shelves yet. They will be created as you stock items.";
+
+  return (
+    <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 px-4 py-8 text-center">
+      <p className="text-sm font-semibold text-foreground">{title}</p>
+      <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+      <p className="mt-3 text-xs text-muted-foreground">{shelfMessage}</p>
+    </div>
+  );
 }
 
 function FridgeCanvasInner({ layout, shelfNodes }: StorageCanvasFrameProps) {
   return (
     <div className="flex justify-center">
       <div
-        className="relative w-[360px] rounded-[32px] border-4 border-zinc-300 bg-zinc-50 p-4 shadow-xl"
+        className="relative w-90 rounded-[32px] border-4 border-zinc-300 bg-zinc-50 p-4 shadow-xl"
         style={{ minHeight: layout.height }}
       >
         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1">
@@ -119,7 +154,7 @@ function PantryCanvas({ layout, shelfNodes }: StorageCanvasFrameProps) {
   return (
     <div className="flex justify-center">
       <div
-        className="relative w-[360px] overflow-hidden rounded-2xl border-2 border-stone-300 bg-white shadow-md"
+        className="relative w-90 overflow-hidden rounded-2xl border-2 border-stone-300 bg-white shadow-md"
         style={{ minHeight: layout.height }}
       >
         {/* Top accent bar */}

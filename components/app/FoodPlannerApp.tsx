@@ -1,13 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { StorageCanvas } from "@/components/storage/StorageCanvas";
 import { StorageEditorPanel } from "@/components/storage/StorageEditorPanel";
 import { GroceryCartPanel } from "@/components/planner/GroceryCartPanel";
@@ -16,14 +11,15 @@ import { StockingDialog } from "@/components/stocking/StockingDialog";
 import { appReducer } from "@/lib/appState";
 import type { StockingItemDraft } from "@/lib/appState";
 import type { StorageType } from "@/lib/fridge/types";
-import { loadAppState, saveAppState } from "@/lib/persistence";
-import { PRESET_METADATA, type PresetId } from "@/lib/inventory/presets";
+import { clearAppState, loadAppState, saveAppState } from "@/lib/persistence";
 
 type DesktopTab = "planner" | "cart";
 type MobileTab = "storage" | "planner" | "cart";
 
 export function FoodPlannerApp() {
   const [state, dispatch] = useReducer(appReducer, undefined, loadAppState);
+  const latestStateRef = useRef(state);
+  const resetPendingRef = useRef(false);
   const [storageTab, setStorageTab] = useState<StorageType>("fridge");
   const [stockingOpen, setStockingOpen] = useState(false);
   const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
@@ -32,10 +28,38 @@ export function FoodPlannerApp() {
   const [selectedPantryCell, setSelectedPantryCell] = useState<{ shelfId: string; cellId: string } | undefined>();
   const [desktopTab, setDesktopTab] = useState<DesktopTab>("planner");
   const [mobileTab, setMobileTab] = useState<MobileTab>("storage");
+  const fridgeInventory = state.inventory.filter((item) => item.storageId === state.fridge.id);
+  const pantryInventory = state.inventory.filter((item) => item.storageId === state.pantry.id);
+
+  useLayoutEffect(() => {
+    latestStateRef.current = state;
+    saveAppState(state);
+    resetPendingRef.current = false;
+  }, [state]);
 
   useEffect(() => {
-    saveAppState(state);
-  }, [state]);
+    const flushState = () => {
+      if (resetPendingRef.current) {
+        return;
+      }
+
+      saveAppState(latestStateRef.current);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushState();
+      }
+    };
+
+    window.addEventListener("pagehide", flushState);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pagehide", flushState);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   const handleSelectShelf = useCallback((shelfId: string) => {
     setSelectedShelfId(shelfId);
@@ -99,6 +123,8 @@ export function FoodPlannerApp() {
 
   const handleReset = () => {
     if (window.confirm("Reset the fridge, inventory, and weekly plan to defaults?")) {
+      resetPendingRef.current = true;
+      clearAppState();
       dispatch({ type: "RESET_APP" });
       handleClearSelection();
       handleClearPantrySelection();
@@ -124,6 +150,24 @@ export function FoodPlannerApp() {
 
         <div className="mt-3 flex min-h-0 flex-1 gap-3">
           <div className="hidden min-h-0 w-96 shrink-0 flex-col rounded-xl border bg-card p-3 md:flex">
+            <div className="mb-3 flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="flex-1"
+                onClick={() => setStockingOpen(true)}
+              >
+                Stock items
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => dispatch({ type: "ADD_SHELF", target: storageTab })}
+              >
+                + Add Shelf
+              </Button>
+            </div>
             <Tabs
               value={storageTab}
               onValueChange={(v) => setStorageTab(v as StorageType)}
@@ -136,7 +180,7 @@ export function FoodPlannerApp() {
               <TabsContent value="fridge" className="mt-2 min-h-0 flex-1 overflow-y-auto">
                 <StorageCanvas
                   layout={state.fridge}
-                  inventory={state.inventory.filter((item) => item.storageId === state.fridge.id)}
+                  inventory={fridgeInventory}
                   selectedShelfId={selectedShelfId}
                   onSelectShelf={handleSelectShelf}
                   onSelectCell={handleSelectCell}
@@ -146,7 +190,7 @@ export function FoodPlannerApp() {
               <TabsContent value="pantry" className="mt-2 min-h-0 flex-1 overflow-y-auto">
                 <StorageCanvas
                   layout={state.pantry}
-                  inventory={state.inventory.filter((item) => item.storageId === state.pantry.id)}
+                  inventory={pantryInventory}
                   selectedShelfId={selectedPantryShelfId}
                   onSelectShelf={handleSelectPantryShelf}
                   onSelectCell={handleSelectPantryCell}
@@ -156,33 +200,9 @@ export function FoodPlannerApp() {
             </Tabs>
             <div className="mt-3 flex items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
-                Drag shelf handles to reorder, or select a shelf/cell to edit.
+                Drag shelf handles to reorder, or select a shelf or cell to edit.
               </p>
-              <div className="flex shrink-0 gap-2">
-                <SeedInventoryMenu onSeed={(preset) => {
-                  if (window.confirm(`Replace all inventory with the "${PRESET_METADATA[preset].label}" preset?`)) {
-                    dispatch({ type: "SEED_INVENTORY", preset });
-                  }
-                }} />
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => dispatch({ type: "ADD_SHELF", target: storageTab })}
-                >
-                  + Add Shelf
-                </Button>
-              </div>
-            </div>
-            <div className="mt-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="w-full"
-                onClick={() => setStockingOpen(true)}
-              >
-                🧺 Stock up
-              </Button>
+              <p className="text-xs text-muted-foreground">Use Stock items to let AI create shelves as needed.</p>
             </div>
           </div>
 
@@ -220,6 +240,22 @@ export function FoodPlannerApp() {
                 </TabsList>
                 <TabsContent value="storage" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
                   <div className="flex flex-col gap-3">
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        className="flex-1"
+                        onClick={() => setStockingOpen(true)}
+                      >
+                        Stock items
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => dispatch({ type: "ADD_SHELF", target: storageTab })}
+                      >
+                        + Add Shelf
+                      </Button>
+                    </div>
                     <Tabs
                       value={storageTab}
                       onValueChange={(v) => setStorageTab(v as StorageType)}
@@ -232,7 +268,7 @@ export function FoodPlannerApp() {
                     {storageTab === "fridge" ? (
                       <StorageCanvas
                         layout={state.fridge}
-                        inventory={state.inventory.filter((item) => item.storageId === state.fridge.id)}
+                        inventory={fridgeInventory}
                         selectedShelfId={selectedShelfId}
                         onSelectShelf={handleSelectShelf}
                         onSelectCell={handleSelectCell}
@@ -241,35 +277,16 @@ export function FoodPlannerApp() {
                     ) : (
                       <StorageCanvas
                         layout={state.pantry}
-                        inventory={state.inventory.filter((item) => item.storageId === state.pantry.id)}
+                        inventory={pantryInventory}
                         selectedShelfId={selectedPantryShelfId}
                         onSelectShelf={handleSelectPantryShelf}
                         onSelectCell={handleSelectPantryCell}
                         onReorderShelves={handleReorderPantryShelves}
                       />
                     )}
-                    <div className="flex gap-2">
-                      <SeedInventoryMenu onSeed={(preset) => {
-                        if (window.confirm(`Replace all inventory with the "${PRESET_METADATA[preset].label}" preset?`)) {
-                          dispatch({ type: "SEED_INVENTORY", preset });
-                        }
-                      }} />
-                      <Button
-                        type="button"
-                        className="flex-1"
-                        onClick={() => dispatch({ type: "ADD_SHELF", target: storageTab })}
-                      >
-                        + Add Shelf
-                      </Button>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => setStockingOpen(true)}
-                    >
-                      🧺 Stock up
-                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Stock items first to let AI build out fridge and pantry shelves for you.
+                    </p>
                   </div>
                 </TabsContent>
                 <TabsContent value="planner" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
@@ -317,40 +334,5 @@ export function FoodPlannerApp() {
         />
       </div>
     </div>
-  );
-}
-
-const PRESET_ORDER: PresetId[] = ["scarce", "fridge-heavy", "pantry-heavy", "well-stocked"];
-
-function SeedInventoryMenu({ onSeed }: { onSeed: (preset: PresetId) => void }) {
-  return (
-    <Popover>
-      <PopoverTrigger>
-        <Button type="button" size="sm" variant="outline">
-          Seed inventory
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 p-3">
-        <p className="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          Choose a preset
-        </p>
-        <div className="grid gap-1.5">
-          {PRESET_ORDER.map((id) => {
-            const meta = PRESET_METADATA[id];
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => onSeed(id)}
-                className="flex flex-col rounded-lg px-3 py-2 text-left hover:bg-muted transition-colors"
-              >
-                <span className="text-sm font-medium">{meta.label}</span>
-                <span className="text-xs text-muted-foreground">{meta.description}</span>
-              </button>
-            );
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
   );
 }

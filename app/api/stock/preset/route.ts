@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
-import { generateStockParseResponse } from "@/lib/stocking/generate";
-import { buildStockParsePrompt } from "@/lib/stocking/prompts";
-import { stockTextRequestSchema } from "@/lib/stocking/schema";
+import { generateStockPresetResponse } from "@/lib/stocking/generate";
+import { buildPresetStockPrompt } from "@/lib/stocking/prompts";
+import { stockPresetRequestSchema } from "@/lib/stocking/schema";
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -16,14 +16,14 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const parsedRequest = stockTextRequestSchema.safeParse(payload);
+  const parsedRequest = stockPresetRequestSchema.safeParse(payload);
   if (!parsedRequest.success) {
-    return Response.json({ error: "A valid stock input is required" }, { status: 400 });
+    return Response.json({ error: "A valid preset selection is required" }, { status: 400 });
   }
 
   try {
-    const response = await generateStockParseResponse(
-      buildStockParsePrompt(parsedRequest.data.input),
+    const response = await generateStockPresetResponse(
+      buildPresetStockPrompt(parsedRequest.data.presetId),
       apiKey,
     );
     return Response.json(response);

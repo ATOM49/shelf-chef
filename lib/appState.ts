@@ -1,11 +1,11 @@
-import { createCells, createDefaultPantry, createDefaultSingleDoorFridge, createShelf, resizeShelf } from "@/lib/fridge/layout";
+import { createCells, createEmptyFridge, createEmptyPantry, createShelf, resizeShelf } from "@/lib/fridge/layout";
 import type { FridgeLayout, Shelf, StorageLayout, StorageType } from "@/lib/fridge/types";
 import { buildGroceryCartFromMeals } from "@/lib/grocery";
 import { generateId } from "@/lib/id";
 import { applyMealConsumption } from "@/lib/inventory/consumption";
 import { normalizeIngredientName } from "@/lib/inventory/normalize";
 import type { InventoryCategory, InventoryItem, InventoryUnit } from "@/lib/inventory/types";
-import { buildPresetInventory, type PresetId } from "@/lib/inventory/presets";
+import { convertQuantity } from "@/lib/inventory/units";
 import { generateWeeklyPlan } from "@/lib/planner/generatePlan";
 import type {
   PlannedMeal,
@@ -69,7 +69,6 @@ export type AppAction =
   | { type: "SET_MEAL_COOKED"; mealId: string; cooked: boolean }
   | { type: "MOVE_PLANNED_MEAL_SLOT"; mealId: string; day: string; mealType: PlannedMeal["mealType"] }
   | { type: "TOGGLE_GROCERY_ITEM"; itemId: string }
-  | { type: "SEED_INVENTORY"; preset: PresetId }
   | { type: "STOCK_ITEMS"; items: StockingItemDraft[] };
 
 export function createInventoryItem(item: InventoryDraft): InventoryItem {
@@ -96,8 +95,8 @@ function patchInventoryItem(item: InventoryItem, patch: Partial<InventoryDraft>)
 
 export function createDefaultAppState(): AppState {
   return {
-    fridge: createDefaultSingleDoorFridge(),
-    pantry: createDefaultPantry(),
+    fridge: createEmptyFridge(),
+    pantry: createEmptyPantry(),
     inventory: [],
     recipes: [...systemRecipes],
     planner: {
@@ -255,14 +254,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case "RESET_APP": {
       return createDefaultAppState();
-    }
-
-    case "SEED_INVENTORY": {
-      const drafts = buildPresetInventory(action.preset, state.fridge, state.pantry);
-      return {
-        ...state,
-        inventory: drafts.map(createInventoryItem),
-      };
     }
 
     case "ADD_INVENTORY_ITEM": {
@@ -470,6 +461,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
+function normalizeShelfName(name: string) {
+  return name.trim().replace(/\s+/g, " ");
+}
+
+function getDefaultShelfName(storage: StorageLayout) {
+  return `Shelf ${storage.shelves.length + 1}`;
+}
+
 /**
  * Finds or creates a shelf by name within a storage layout, returning both the
  * (possibly updated) layout and the resolved shelf.
@@ -478,17 +477,47 @@ function findOrCreateShelf(
   storage: StorageLayout,
   shelfName: string,
 ): { storage: StorageLayout; shelf: Shelf } {
+  const normalizedShelfName = normalizeShelfName(shelfName);
   const existing = storage.shelves.find(
-    (s) => s.name.toLowerCase() === shelfName.toLowerCase(),
+    (s) => normalizeShelfName(s.name).toLowerCase() === normalizedShelfName.toLowerCase(),
   );
   if (existing) {
     return { storage, shelf: existing };
   }
-  const newShelf = createShelf(shelfName, 1, 3, 120);
+  const newShelf = createShelf(normalizedShelfName || getDefaultShelfName(storage), 1, 3, 120);
   return {
     storage: { ...storage, shelves: [...storage.shelves, newShelf] },
     shelf: newShelf,
   };
+}
+
+function getMergeableInventoryItemIndex(
+  inventory: InventoryItem[],
+  incoming: StockingItemDraft,
+  normalizedName: string,
+  storageId: string,
+  shelfId: string,
+) {
+  const incomingExpiry = incoming.expiresAt ?? "";
+
+  for (let index = 0; index < inventory.length; index += 1) {
+    const item = inventory[index];
+    if (
+      item.storageId !== storageId ||
+      item.shelfId !== shelfId ||
+      item.normalizedName !== normalizedName ||
+      item.category !== incoming.category ||
+      (item.expiresAt ?? "") !== incomingExpiry
+    ) {
+      continue;
+    }
+
+    if (convertQuantity(incoming.quantity, incoming.unit, item.unit) != null) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 /**
@@ -498,14 +527,22 @@ function findOrCreateShelf(
 function applyStockItems(state: AppState, items: StockingItemDraft[]): AppState {
   let nextFridge = state.fridge;
   let nextPantry = state.pantry;
-  const newInventoryItems: InventoryItem[] = [];
+  const nextInventory = state.inventory.map((item) => ({ ...item }));
+  const shelfItemCounts = new Map<string, number>();
 
-  // Group items by storageType + shelfName so we can batch shelf lookups
+  for (const item of nextInventory) {
+    shelfItemCounts.set(item.shelfId, (shelfItemCounts.get(item.shelfId) ?? 0) + 1);
+  }
+
   const groups = new Map<string, { storageType: StorageType; shelfName: string; items: StockingItemDraft[] }>();
   for (const item of items) {
-    const key = `${item.storageType}:${item.shelfName.toLowerCase()}`;
+    const key = `${item.storageType}:${normalizeShelfName(item.shelfName).toLowerCase()}`;
     if (!groups.has(key)) {
-      groups.set(key, { storageType: item.storageType, shelfName: item.shelfName, items: [] });
+      groups.set(key, {
+        storageType: item.storageType,
+        shelfName: normalizeShelfName(item.shelfName),
+        items: [],
+      });
     }
     groups.get(key)!.items.push(item);
   }
@@ -521,9 +558,38 @@ function applyStockItems(state: AppState, items: StockingItemDraft[]): AppState 
     }
 
     const cells = shelf.cells.length > 0 ? shelf.cells : [{ id: "cell-0-0", row: 0, col: 0 }];
-    group.items.forEach((item, index) => {
-      const cellId = cells[index % cells.length].id;
-      newInventoryItems.push(
+
+    for (const item of group.items) {
+      const normalizedName = normalizeIngredientName(item.name);
+      if (!normalizedName) {
+        continue;
+      }
+
+      const mergeIndex = getMergeableInventoryItemIndex(
+        nextInventory,
+        item,
+        normalizedName,
+        updatedStorage.id,
+        shelf.id,
+      );
+
+      if (mergeIndex >= 0) {
+        const currentItem = nextInventory[mergeIndex];
+        const convertedQuantity = convertQuantity(item.quantity, item.unit, currentItem.unit);
+
+        if (convertedQuantity != null) {
+          nextInventory[mergeIndex] = {
+            ...currentItem,
+            quantity: currentItem.quantity + convertedQuantity,
+          };
+          continue;
+        }
+      }
+
+      const currentCount = shelfItemCounts.get(shelf.id) ?? 0;
+      const cellId = cells[currentCount % cells.length].id;
+
+      nextInventory.push(
         createInventoryItem({
           name: item.name,
           quantity: item.quantity,
@@ -535,13 +601,14 @@ function applyStockItems(state: AppState, items: StockingItemDraft[]): AppState 
           expiresAt: item.expiresAt,
         }),
       );
-    });
+      shelfItemCounts.set(shelf.id, currentCount + 1);
+    }
   }
 
   return {
     ...state,
     fridge: nextFridge,
     pantry: nextPantry,
-    inventory: [...state.inventory, ...newInventoryItems],
+    inventory: nextInventory,
   };
 }
