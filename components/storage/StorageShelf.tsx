@@ -81,7 +81,9 @@ export function StorageShelf({
       onDrop={onDrop}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="min-w-0 text-sm font-medium text-zinc-700">{shelf.name}</span>
+        <span className="min-w-0 text-sm font-medium text-zinc-700">
+          {shelf.name}
+        </span>
         <div className="flex items-center gap-2">
           <span className="text-xs text-zinc-400">
             {shelf.rows} × {shelf.cols}
@@ -141,14 +143,13 @@ export function StorageShelf({
 
 function ItemChip({ item }: { item: InventoryItem }) {
   return (
-    <div className={`rounded-md border px-2 py-1 text-xs font-medium ${CATEGORY_COLORS[item.category]}`}>
-      <span className="block truncate">{item.name}</span>
+    <div
+      className={`rounded-md border px-2 py-1 text-xs font-medium ${CATEGORY_COLORS[item.category]}`}
+    >
+      <span className="block truncate">{item.emoji} {item.name}</span>
       <span className="block text-[10px] opacity-75">
         {item.quantity} {item.unit}
       </span>
-      {item.expiresAt ? (
-        <span className="block text-[10px] opacity-60">Exp {item.expiresAt}</span>
-      ) : null}
     </div>
   );
 }

@@ -15,6 +15,7 @@ export type InventoryCategory = (typeof INVENTORY_CATEGORIES)[number];
 
 export type InventoryItem = {
   id: string;
+  emoji?: string;
   name: string;
   normalizedName: string;
   quantity: number;

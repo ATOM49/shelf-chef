@@ -5,23 +5,16 @@ import { parsePreferences } from "@/lib/planner/preferences";
 import type {
   GroceryCartItem,
   PlannedMeal,
+  PlannedMealType,
+  PlannerMealSlot,
   PreferredDishRequest,
   Recipe,
 } from "@/lib/planner/types";
+import { PLANNER_WEEK_DAYS } from "@/lib/planner/types";
 import { validateRecipeAgainstInventory } from "@/lib/planner/validation";
 
-const WEEK_DAYS = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-] as const;
-
 type MealType = Recipe["mealType"];
-const MEAL_TYPES: MealType[] = ["breakfast", "lunch", "dinner"];
+const MEAL_TYPES: PlannedMealType[] = ["breakfast", "lunch", "dinner"];
 
 type PlannerInput = {
   inventory: InventoryItem[];
@@ -155,7 +148,7 @@ export function generateWeeklyPlan({
 
     // For each day, pick the best recipe not yet used for this meal type
     let fallbackIndex = 0;
-    for (const day of WEEK_DAYS) {
+    for (const day of PLANNER_WEEK_DAYS) {
       const used = usedIds.get(mealType)!;
       const pick =
         scored.find((s) => !used.has(s.recipe.id)) ?? scored[fallbackIndex % scored.length];
@@ -174,7 +167,7 @@ export function generateWeeklyPlan({
   }
 
   // Sort meals: Monday→Sunday, within each day: breakfast, lunch, dinner
-  const dayOrder = Object.fromEntries(WEEK_DAYS.map((d, i) => [d, i]));
+  const dayOrder = Object.fromEntries(PLANNER_WEEK_DAYS.map((d, i) => [d, i]));
   const mealTypeOrder: Record<MealType, number> = {
     breakfast: 0,
     lunch: 1,
@@ -199,5 +192,47 @@ export function generateWeeklyDinnerPlan(params: {
   recipes: Recipe[];
 }): PlannedMeal[] {
   return generateWeeklyPlan(params).meals.filter((m) => m.mealType === "dinner");
+}
+
+export function buildGeneratedWeeklyPlan(params: {
+  inventory: InventoryItem[];
+  recipes: Recipe[];
+  mealSlots: PlannerMealSlot[];
+}): PlannerOutput {
+  const recipeMap = new Map(params.recipes.map((recipe) => [recipe.id, recipe]));
+  const meals: PlannedMeal[] = [];
+
+  for (const mealSlot of params.mealSlots) {
+    const recipe = recipeMap.get(mealSlot.recipeId);
+    if (!recipe) {
+      continue;
+    }
+
+    meals.push({
+      id: generateId(),
+      day: mealSlot.day,
+      mealType: mealSlot.mealType,
+      recipe,
+      status: "planned",
+      validation: validateRecipeAgainstInventory(recipe, params.inventory),
+    });
+  }
+
+  const dayOrder = Object.fromEntries(PLANNER_WEEK_DAYS.map((day, index) => [day, index]));
+  const mealTypeOrder: Record<PlannedMealType, number> = {
+    breakfast: 0,
+    lunch: 1,
+    dinner: 2,
+  };
+  meals.sort(
+    (a, b) =>
+      dayOrder[a.day] - dayOrder[b.day] ||
+      mealTypeOrder[a.mealType] - mealTypeOrder[b.mealType],
+  );
+
+  return {
+    meals,
+    groceryCart: buildGroceryCartFromMeals(meals, params.inventory),
+  };
 }
 

@@ -4,11 +4,18 @@ import { MealCard } from "@/components/planner/MealCard";
 import { MealDetailsDrawer } from "@/components/planner/MealDetailsDrawer";
 import {
   Drawer,
+  DrawerClose,
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import type { PlannedMeal } from "@/lib/planner/types";
+import {
+  PLANNED_MEAL_TYPES,
+  PLANNER_WEEK_DAYS,
+  type PlannedMeal,
+  type PlannedMealType,
+  type PlannerWeekDay,
+} from "@/lib/planner/types";
 import {
   DndContext,
   DragOverlay,
@@ -23,38 +30,36 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useMemo, useState } from "react";
-
-const WEEK_DAYS = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-] as const;
-
-const MEAL_TYPES = ["breakfast", "lunch", "dinner"] as const;
-type PlannerMealType = (typeof MEAL_TYPES)[number];
+import { XIcon } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
 
 type Slot = {
   id: string;
-  day: string;
-  mealType: PlannerMealType;
+  day: PlannerWeekDay;
+  mealType: PlannedMealType;
   meal?: PlannedMeal;
 };
+
+const GRID_LABEL_COLUMN_WIDTH = "7rem";
+const GRID_DAY_COLUMN_WIDTH = "minmax(12rem,1fr)";
+const GRID_MIN_WIDTH = "min-w-[calc(7rem+7*12rem)]";
+
+function formatMealLabel(mealType: PlannedMealType) {
+  return mealType.charAt(0).toUpperCase() + mealType.slice(1);
+}
 
 function toSlotId(day: string, mealType: string) {
   return `${day}::${mealType}`;
 }
 
-function isPlannerMealType(value: unknown): value is PlannerMealType {
+function isPlannerMealType(value: unknown): value is PlannedMealType {
   return value === "breakfast" || value === "lunch" || value === "dinner";
 }
 
 function slotForMeal(meals: PlannedMeal[]) {
-  return new Map(meals.map((meal) => [toSlotId(meal.day, meal.mealType), meal]));
+  return new Map(
+    meals.map((meal) => [toSlotId(meal.day, meal.mealType), meal]),
+  );
 }
 
 export function WeeklyPlanList({
@@ -63,13 +68,19 @@ export function WeeklyPlanList({
   onSelectMeal,
   onSetMealCooked,
   onMoveMealSlot,
+  onSwapMeal,
   onDeselectMeal,
 }: {
   meals: PlannedMeal[];
   selectedMealId?: string;
   onSelectMeal: (mealId: string) => void;
   onSetMealCooked: (mealId: string, cooked: boolean) => void;
-  onMoveMealSlot: (mealId: string, day: string, mealType: PlannedMeal["mealType"]) => void;
+  onMoveMealSlot: (
+    mealId: string,
+    day: string,
+    mealType: PlannedMeal["mealType"],
+  ) => void;
+  onSwapMeal: (mealId: string) => void;
   onDeselectMeal: () => void;
 }) {
   const [activeMealId, setActiveMealId] = useState<string>();
@@ -78,20 +89,23 @@ export function WeeklyPlanList({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   const mealsBySlot = useMemo(() => slotForMeal(meals), [meals]);
-  const slots = useMemo<Slot[]>(
+  const slotsByRow = useMemo(
     () =>
-      WEEK_DAYS.flatMap((day) =>
-        MEAL_TYPES.map((mealType) => ({
+      PLANNED_MEAL_TYPES.map((mealType) => ({
+        mealType,
+        slots: PLANNER_WEEK_DAYS.map((day) => ({
           id: toSlotId(day, mealType),
           day,
           mealType,
           meal: mealsBySlot.get(toSlotId(day, mealType)),
         })),
-      ),
+      })),
     [mealsBySlot],
   );
 
@@ -110,11 +124,9 @@ export function WeeklyPlanList({
     if (
       activeData?.type !== "meal" ||
       typeof activeData.mealId !== "string" ||
-      !isPlannerMealType(activeData.mealType) ||
       overData?.type !== "slot" ||
       !isPlannerMealType(overData.mealType) ||
-      typeof overData.day !== "string" ||
-      activeData.mealType !== overData.mealType
+      typeof overData.day !== "string"
     ) {
       return;
     }
@@ -132,46 +144,63 @@ export function WeeklyPlanList({
 
   return (
     <>
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="rounded-xl border bg-muted/20 p-3">
-          <div className="mb-2 text-xs text-muted-foreground">Drag meals across days within the same row</div>
-          <div className="overflow-x-auto pb-1">
-            <div className="flex min-w-max snap-x snap-mandatory divide-x divide-border/50 overflow-hidden rounded-lg border bg-card">
-              {WEEK_DAYS.map((day) => {
-                const daySlots = slots.filter((slot) => slot.day === day);
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="flex h-full w-full min-h-0 flex-col rounded-xl border bg-muted/20 p-3">
+          <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
+            <div
+              className={`grid ${GRID_MIN_WIDTH}`}
+              style={{
+                gridTemplateColumns: `${GRID_LABEL_COLUMN_WIDTH} repeat(${PLANNER_WEEK_DAYS.length}, ${GRID_DAY_COLUMN_WIDTH})`,
+              }}
+            >
+              <div className="sticky top-0 left-0 z-30 border-r border-b bg-card/95 px-3 py-3 backdrop-blur">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                  Meal
+                </span>
+              </div>
+              {PLANNER_WEEK_DAYS.map((day) => (
+                <div
+                  key={day}
+                  className="sticky top-0 z-20 border-r border-b bg-card/95 px-3 py-3 text-xs font-bold uppercase tracking-[0.22em] text-muted-foreground last:border-r-0 backdrop-blur"
+                >
+                  {day}
+                </div>
+              ))}
 
-                return (
-                  <div key={day} className="w-48 shrink-0 snap-start p-3 md:min-w-0 md:flex-1">
-                    <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                      {day}
-                    </div>
-                    <div className="mt-3 divide-y divide-border/40 rounded-md border border-border/40 bg-muted/10">
-                      {daySlots.map((slot) => (
-                        <MealSlot
-                          key={slot.id}
-                          slot={slot}
-                          selectedMealId={selectedMealId}
-                          onSelectMeal={onSelectMeal}
-                          onSetMealCooked={onSetMealCooked}
-                        />
-                      ))}
-                    </div>
+              {slotsByRow.map(({ mealType, slots }) => (
+                <Fragment key={mealType}>
+                  <div className="sticky left-0 z-10 flex border-r border-b bg-card/95 px-3 py-4 backdrop-blur last:border-b-0">
+                    <span className="text-sm font-semibold text-foreground">
+                      {formatMealLabel(mealType)}
+                    </span>
                   </div>
-                );
-              })}
+                  {slots.map((slot) => (
+                    <MealSlot
+                      key={slot.id}
+                      slot={slot}
+                      selectedMealId={selectedMealId}
+                      onSelectMeal={onSelectMeal}
+                      onSwapMeal={onSwapMeal}
+                    />
+                  ))}
+                </Fragment>
+              ))}
             </div>
           </div>
         </div>
 
         <DragOverlay>
           {activeMeal ? (
-            <div className="w-40 md:w-auto md:min-w-[12rem]">
+            <div className="w-40 md:w-auto md:min-w-48">
               <MealCard
                 meal={activeMeal}
                 isSelected={false}
                 isDragging
                 onSelect={() => {}}
-                onSetCooked={() => {}}
               />
             </div>
           ) : null}
@@ -179,15 +208,33 @@ export function WeeklyPlanList({
       </DndContext>
 
       <Drawer
+        direction="left"
         open={Boolean(selectedMealId)}
-        onOpenChange={(open) => { if (!open) onDeselectMeal(); }}
+        onOpenChange={(open) => {
+          if (!open) onDeselectMeal();
+        }}
       >
-        <DrawerContent side="right" showCloseButton>
-          <DrawerHeader>
+        <DrawerContent>
+          <DrawerClose
+            aria-label="Close recipe details"
+            className="absolute top-2 right-2 inline-flex size-7 items-center justify-center rounded-[min(var(--radius-md),12px)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            <XIcon />
+            <span className="sr-only">Close</span>
+          </DrawerClose>
+          <DrawerHeader className="pr-12">
             <DrawerTitle>Recipe details</DrawerTitle>
           </DrawerHeader>
           <div className="flex-1 overflow-y-auto px-4 pb-4">
-            <MealDetailsDrawer meal={selectedMeal} />
+            <MealDetailsDrawer
+              meal={selectedMeal}
+              onSetCooked={
+                selectedMeal
+                  ? (cooked) => onSetMealCooked(selectedMeal.id, cooked)
+                  : undefined
+              }
+              onSwap={selectedMeal ? () => onSwapMeal(selectedMeal.id) : undefined}
+            />
           </div>
         </DrawerContent>
       </Drawer>
@@ -199,12 +246,12 @@ function MealSlot({
   slot,
   selectedMealId,
   onSelectMeal,
-  onSetMealCooked,
+  onSwapMeal,
 }: {
   slot: Slot;
   selectedMealId?: string;
   onSelectMeal: (mealId: string) => void;
-  onSetMealCooked: (mealId: string, cooked: boolean) => void;
+  onSwapMeal: (mealId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `slot-${slot.id}`,
@@ -214,20 +261,19 @@ function MealSlot({
   return (
     <div
       ref={setNodeRef}
-      className={`grid gap-1.5 p-2 transition-colors ${isOver ? "bg-muted/60" : ""}`}
+      className={`min-h-36 border-r border-b p-2 transition-colors last:border-r-0 ${isOver ? "bg-muted/60" : "bg-muted/10"}`}
     >
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {slot.mealType}
-      </div>
       {slot.meal ? (
         <DraggableMealCard
           meal={slot.meal}
           isSelected={slot.meal.id === selectedMealId}
           onSelectMeal={onSelectMeal}
-          onSetMealCooked={onSetMealCooked}
+          onSwapMeal={onSwapMeal}
         />
       ) : (
-        <div className={`rounded-lg border border-dashed p-3 text-xs text-muted-foreground ${isOver ? "bg-muted" : ""}`}>
+        <div
+          className={`flex h-full min-h-32 items-center justify-center rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground ${isOver ? "bg-muted" : "bg-background/50"}`}
+        >
           Drop meal here
         </div>
       )}
@@ -239,17 +285,23 @@ function DraggableMealCard({
   meal,
   isSelected,
   onSelectMeal,
-  onSetMealCooked,
+  onSwapMeal,
 }: {
   meal: PlannedMeal;
   isSelected: boolean;
   onSelectMeal: (mealId: string) => void;
-  onSetMealCooked: (mealId: string, cooked: boolean) => void;
+  onSwapMeal: (mealId: string) => void;
 }) {
-  const { setNodeRef, attributes, listeners, transform, isDragging } = useDraggable({
-    id: `meal-${meal.id}`,
-    data: { type: "meal", mealId: meal.id, mealType: meal.mealType, day: meal.day },
-  });
+  const { setNodeRef, attributes, listeners, transform, isDragging } =
+    useDraggable({
+      id: `meal-${meal.id}`,
+      data: {
+        type: "meal",
+        mealId: meal.id,
+        mealType: meal.mealType,
+        day: meal.day,
+      },
+    });
 
   return (
     <div
@@ -263,7 +315,7 @@ function DraggableMealCard({
         isSelected={isSelected}
         isDragging={isDragging}
         onSelect={() => onSelectMeal(meal.id)}
-        onSetCooked={(cooked) => onSetMealCooked(meal.id, cooked)}
+        onSwap={() => onSwapMeal(meal.id)}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>

@@ -1,5 +1,5 @@
-import { FoodPlannerApp } from "@/components/app/FoodPlannerApp";
+import { FoodPlannerAppClient } from "@/components/app/FoodPlannerAppClient";
 
 export default function Home() {
-  return <FoodPlannerApp />;
+  return <FoodPlannerAppClient />;
 }

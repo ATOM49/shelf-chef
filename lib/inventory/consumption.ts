@@ -1,5 +1,4 @@
 import type { InventoryItem } from "@/lib/inventory/types";
-import { convertQuantity } from "@/lib/inventory/units";
 import type { PlannedMeal } from "@/lib/planner/types";
 
 export function applyMealConsumption(inventory: InventoryItem[], plannedMeal: PlannedMeal) {
@@ -17,8 +16,7 @@ export function applyMealConsumption(inventory: InventoryItem[], plannedMeal: Pl
     }
 
     const usedQuantity = matchingIngredients.reduce((total, match) => {
-      const converted = convertQuantity(match.neededQuantity, match.neededUnit, item.unit);
-      return total + (converted ?? 0);
+      return total + match.resolvedNeededQuantity;
     }, 0);
 
     return {
