@@ -7,7 +7,7 @@ import { Analytics } from '@vercel/analytics/next';
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
-  title: "Food Planner – Inventory and Meal Planning",
+  title: "ShelfChef – Inventory and Meal Planning",
   description: "Manage fridge inventory, generate a weekly dinner plan, validate ingredients, and deduct stock when meals are cooked.",
 };
 

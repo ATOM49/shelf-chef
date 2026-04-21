@@ -36,7 +36,7 @@ export const createEmptyFridge = (): FridgeLayout => ({
   name: "My Fridge",
   storageType: "fridge",
   width: 360,
-  height: 720,
+  height: 500,
   shelves: [],
 });
 
@@ -45,7 +45,7 @@ export const createEmptyPantry = (): StorageLayout => ({
   name: "My Pantry",
   storageType: "pantry",
   width: 360,
-  height: 600,
+  height: 500,
   shelves: [],
 });
 

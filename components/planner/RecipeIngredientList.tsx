@@ -2,6 +2,29 @@
 
 import type { IngredientMatch, RecipeIngredient } from "@/lib/planner/types";
 
+function buildAvailabilityLabel(match: IngredientMatch) {
+  const status = match.status.replace("_", " ");
+  const recipeMeasurement = `${match.neededQuantity} ${match.neededUnit}`;
+  const resolvedMeasurement = `${match.resolvedNeededQuantity} ${match.resolvedNeededUnit}`;
+  const availability = `${match.availableQuantity} ${match.availableUnit}`;
+
+  if (match.measurementSource === "inventory") {
+    const approximation = match.usesHeuristic ? " approx." : "";
+    if (match.resolvedNeededUnit !== match.neededUnit || match.usesHeuristic) {
+      return `${status} · available ${availability} · compare ${resolvedMeasurement}${approximation} (recipe ${recipeMeasurement})`;
+    }
+
+    return `${status} · available ${availability}`;
+  }
+
+  if (match.availableUnit === "unknown") {
+    return `${status} · recipe ${recipeMeasurement}`;
+  }
+
+  const approximation = match.usesHeuristic ? " approx." : "";
+  return `${status} · available ${availability} · canonical ${resolvedMeasurement}${approximation}`;
+}
+
 export function RecipeIngredientList({
   ingredients,
   matches,
@@ -34,7 +57,7 @@ export function RecipeIngredientList({
             </div>
             {match ? (
               <div className={`mt-1 text-xs ${statusTone}`}>
-                {match.status.replace("_", " ")} · available {match.availableQuantity} {match.availableUnit}
+                {buildAvailabilityLabel(match)}
               </div>
             ) : null}
           </div>

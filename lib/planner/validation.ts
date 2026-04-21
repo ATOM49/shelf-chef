@@ -1,53 +1,135 @@
 import { normalizeIngredientName } from "@/lib/inventory/normalize";
-import type { InventoryItem } from "@/lib/inventory/types";
-import { convertQuantity } from "@/lib/inventory/units";
+import type { InventoryItem, InventoryUnit } from "@/lib/inventory/types";
+import {
+  convertQuantity,
+  convertQuantityDetailed,
+  getCanonicalUnitForGroup,
+  getUnitGroup,
+} from "@/lib/inventory/units";
 import type { IngredientMatch, MealValidation, Recipe } from "@/lib/planner/types";
 
-function pickBestInventoryItem(normalizedName: string, inventory: InventoryItem[], targetUnit: InventoryItem["unit"]) {
+function pickBestInventoryItem(
+  normalizedName: string,
+  inventory: InventoryItem[],
+  ingredientQuantity: number,
+  ingredientUnit: InventoryUnit,
+) {
   const namedMatches = inventory.filter((item) => item.normalizedName === normalizedName);
   if (namedMatches.length === 0) {
-    return { item: undefined, quantityInTargetUnit: 0, hasUnitMismatch: false };
+    return {
+      item: undefined,
+      resolvedNeeded: undefined,
+      hasUnitMismatch: false,
+      namedMatches,
+    };
   }
 
   let bestItem: InventoryItem | undefined;
-  let bestQuantity = 0;
+  let bestCoverage = -1;
+  let bestResolved:
+    | { quantity: number; unit: InventoryUnit; usesHeuristic: boolean }
+    | undefined;
   let hasUnitMismatch = false;
 
   for (const item of namedMatches) {
-    const converted = convertQuantity(item.quantity, item.unit, targetUnit);
+    const converted = convertQuantityDetailed(
+      ingredientQuantity,
+      ingredientUnit,
+      item.unit,
+      normalizedName,
+    );
 
     if (converted == null) {
       hasUnitMismatch = true;
       continue;
     }
 
-    if (!bestItem || converted > bestQuantity) {
+    const coverage = item.quantity / converted.quantity;
+    if (
+      !bestItem ||
+      coverage > bestCoverage ||
+      (coverage === bestCoverage && item.quantity > bestItem.quantity) ||
+      (coverage === bestCoverage &&
+        item.quantity === bestItem.quantity &&
+        bestResolved?.usesHeuristic === true &&
+        converted.method === "direct")
+    ) {
       bestItem = item;
-      bestQuantity = converted;
+      bestCoverage = coverage;
+      bestResolved = {
+        quantity: converted.quantity,
+        unit: item.unit,
+        usesHeuristic: converted.method === "heuristic",
+      };
     }
   }
 
-  return { item: bestItem, quantityInTargetUnit: bestQuantity, hasUnitMismatch };
+  return { item: bestItem, resolvedNeeded: bestResolved, hasUnitMismatch, namedMatches };
+}
+
+function summarizeNamedMatches(
+  namedMatches: InventoryItem[],
+  normalizedName: string,
+  fallbackUnit: InventoryUnit,
+) {
+  if (namedMatches.length === 0) {
+    return { quantity: 0, unit: fallbackUnit as InventoryUnit | "unknown" };
+  }
+
+  const uniqueUnits = Array.from(new Set(namedMatches.map((item) => item.unit)));
+  const targetUnit =
+    uniqueUnits.length === 1
+      ? uniqueUnits[0]
+      : getCanonicalUnitForGroup(getUnitGroup(fallbackUnit));
+
+  let total = 0;
+  for (const item of namedMatches) {
+    const converted = convertQuantity(item.quantity, item.unit, targetUnit, normalizedName);
+    if (converted == null) {
+      return { quantity: 0, unit: "unknown" as const };
+    }
+    total += converted;
+  }
+
+  return {
+    quantity: Number(total.toFixed(2)),
+    unit: targetUnit,
+  };
 }
 
 export function validateRecipeAgainstInventory(recipe: Recipe, inventory: InventoryItem[]): MealValidation {
   const matches: IngredientMatch[] = recipe.ingredients.map((ingredient) => {
     const normalizedName = normalizeIngredientName(ingredient.normalizedName || ingredient.name);
-    const { item, quantityInTargetUnit, hasUnitMismatch } = pickBestInventoryItem(
+    const fallbackUnit = getCanonicalUnitForGroup(getUnitGroup(ingredient.unit));
+    const fallbackNeeded = convertQuantityDetailed(
+      ingredient.quantity,
+      ingredient.unit,
+      fallbackUnit,
+      normalizedName,
+    );
+    const { item, resolvedNeeded, hasUnitMismatch, namedMatches } = pickBestInventoryItem(
       normalizedName,
       inventory,
+      ingredient.quantity,
       ingredient.unit,
     );
 
-    if (!item) {
+    if (!item || !resolvedNeeded) {
+      const availableSummary = summarizeNamedMatches(namedMatches, normalizedName, ingredient.unit);
       return {
         ingredientName: ingredient.name,
         normalizedName,
         neededQuantity: ingredient.quantity,
         neededUnit: ingredient.unit,
-        availableQuantity: 0,
-        availableUnit: hasUnitMismatch ? "unknown" : ingredient.unit,
-        status: hasUnitMismatch ? "unit_mismatch" : "missing",
+        resolvedNeededQuantity: Number(
+          (fallbackNeeded?.quantity ?? ingredient.quantity).toFixed(2),
+        ),
+        resolvedNeededUnit: fallbackUnit,
+        measurementSource: "canonical",
+        usesHeuristic: fallbackNeeded?.method === "heuristic",
+        availableQuantity: availableSummary.quantity,
+        availableUnit: availableSummary.unit,
+        status: namedMatches.length > 0 && hasUnitMismatch ? "unit_mismatch" : "missing",
         optional: ingredient.optional,
       };
     }
@@ -57,9 +139,13 @@ export function validateRecipeAgainstInventory(recipe: Recipe, inventory: Invent
       normalizedName,
       neededQuantity: ingredient.quantity,
       neededUnit: ingredient.unit,
-      availableQuantity: Number(quantityInTargetUnit.toFixed(2)),
-      availableUnit: ingredient.unit,
-      status: quantityInTargetUnit >= ingredient.quantity ? "enough" : "low",
+      resolvedNeededQuantity: Number(resolvedNeeded.quantity.toFixed(2)),
+      resolvedNeededUnit: resolvedNeeded.unit,
+      measurementSource: "inventory",
+      usesHeuristic: resolvedNeeded.usesHeuristic,
+      availableQuantity: Number(item.quantity.toFixed(2)),
+      availableUnit: item.unit,
+      status: item.quantity >= resolvedNeeded.quantity ? "enough" : "low",
       matchedInventoryItemId: item.id,
       optional: ingredient.optional,
     };

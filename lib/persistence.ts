@@ -1,9 +1,19 @@
-import { createDefaultAppState, createInventoryItem, type AppState } from "@/lib/appState";
+import {
+  createDefaultAppState,
+  createInventoryItem,
+  mergeRecipes,
+  type AppState,
+} from "@/lib/appState";
 import { generateId } from "@/lib/id";
 import { isSupportedUnit } from "@/lib/inventory/units";
 import type { InventoryCategory, InventoryItem } from "@/lib/inventory/types";
 import type { StorageLayout } from "@/lib/fridge/types";
-import type { Recipe } from "@/lib/planner/types";
+import type {
+  PlannerConfigSnapshot,
+  PlannerPreferredDishInput,
+  Recipe,
+} from "@/lib/planner/types";
+import { RECIPE_MEAL_TYPES } from "@/lib/planner/types";
 import { recipes as systemRecipes } from "@/data/recipes";
 
 const APP_STORAGE_KEY = "food-planner-app-state-v2";
@@ -18,6 +28,40 @@ function toSupportedUnit(value: unknown) {
   if (typeof value !== "string") return "count";
   const normalized = value.trim().toLowerCase();
   return isSupportedUnit(normalized) ? normalized : "count";
+}
+
+function revivePlannerPreferredDishInput(
+  value: unknown,
+): PlannerPreferredDishInput | undefined {
+  if (!isObject(value) || typeof value.name !== "string") {
+    return undefined;
+  }
+
+  const mealType: PlannerPreferredDishInput["mealType"] =
+    typeof value.mealType === "string" &&
+    RECIPE_MEAL_TYPES.includes(value.mealType as (typeof RECIPE_MEAL_TYPES)[number])
+      ? (value.mealType as PlannerPreferredDishInput["mealType"])
+      : undefined;
+
+  return {
+    name: value.name.trim(),
+    mealType,
+  };
+}
+
+function revivePlannerConfigSnapshot(value: unknown): PlannerConfigSnapshot | undefined {
+  if (!isObject(value)) {
+    return undefined;
+  }
+
+  return {
+    preferences: typeof value.preferences === "string" ? value.preferences : "",
+    preferredDishes: Array.isArray(value.preferredDishes)
+      ? value.preferredDishes
+          .map(revivePlannerPreferredDishInput)
+          .filter((dish): dish is PlannerPreferredDishInput => Boolean(dish))
+      : [],
+  };
 }
 
 function migrateLegacyLayout(stored: unknown): AppState | undefined {
@@ -101,6 +145,7 @@ function reviveAppState(stored: unknown): AppState | undefined {
     groceryCart: Array.isArray(storedPlanner.groceryCart) ? storedPlanner.groceryCart : [],
     selectedMealId:
       typeof storedPlanner.selectedMealId === "string" ? storedPlanner.selectedMealId : undefined,
+    lastGeneratedConfig: revivePlannerConfigSnapshot(storedPlanner.lastGeneratedConfig),
   };
 
   // Normalize fridge: ensure storageType is set (old persisted data had `type: "single-door"`)
@@ -125,6 +170,7 @@ function reviveAppState(stored: unknown): AppState | undefined {
     const item = raw as Record<string, unknown>;
     return {
       ...(item as InventoryItem),
+      emoji: typeof item.emoji === "string" ? item.emoji : undefined,
       storageId:
         typeof item.storageId === "string"
           ? item.storageId
@@ -136,10 +182,7 @@ function reviveAppState(stored: unknown): AppState | undefined {
 
   // Merge system recipes with any user-saved recipes persisted in storage
   const storedRecipes = Array.isArray(stored.recipes) ? (stored.recipes as Recipe[]) : [];
-  const mergedRecipes: Recipe[] = [
-    ...storedRecipes.filter((r) => !systemRecipes.some((s) => s.id === r.id)),
-    ...systemRecipes,
-  ];
+  const mergedRecipes: Recipe[] = mergeRecipes(storedRecipes, systemRecipes);
 
   return {
     ...(stored as AppState),

@@ -29,15 +29,16 @@ Parsing rules:
 - If the same ingredient appears more than once in the raw input, keep each occurrence so the client can merge duplicates deliberately later.
 
 For each item:
-1. Parse the ingredient name and clean obvious typos.
-2. If quantity is not given, infer a sensible default (e.g. 1 for count items, 500 for ml/g items).
-3. Pick the best unit from the allowed list (e.g. eggs -> count, milk -> ml, rice -> g).
-4. Assign the most fitting category.
-5. Decide fridge vs. pantry.
-6. Suggest a shelf name.
-7. Estimate expiresAt (YYYY-MM-DD) based on typical shelf life from today and omit the field for shelf-stable dry goods, spices, and canned items.
-8. Set flagged: true if the name is unclear, ambiguous, or you cannot confidently assign all fields.
-9. If a field is genuinely unknown, return the item anyway, omit that field instead of inventing a random value, and keep flagged: true.
+1. Choose one representative food emoji for the item (e.g. eggs -> 🥚, milk -> 🥛, spinach -> 🥬); omit emoji if uncertain.
+2. Parse the ingredient name and clean obvious typos.
+3. If quantity is not given, infer a sensible default (e.g. 1 for count items, 500 for ml/g items).
+4. Pick the best unit from the allowed list (e.g. eggs -> count, milk -> ml, rice -> g).
+5. Assign the most fitting category.
+6. Decide fridge vs. pantry.
+7. Suggest a shelf name.
+8. Estimate expiresAt (YYYY-MM-DD) based on typical shelf life from today and omit the field for shelf-stable dry goods, spices, and canned items.
+9. Set flagged: true if the name is unclear, ambiguous, or you cannot confidently assign all fields.
+10. If a field is genuinely unknown, return the item anyway, omit that field instead of inventing a random value, and keep flagged: true.
 
 Raw input to parse and enrich:
 ${input.trim()}
@@ -78,15 +79,16 @@ Shelf naming guidelines:
 - Pantry shelves: "Dry Goods & Grains", "Canned Goods", "Spices & Herbs", "Oils & Condiments", "Baking"
 
 For each generated item:
-1. Provide a clear item name.
-2. Choose a realistic household quantity.
-3. Pick the best unit from the allowed list.
-4. Assign the best-fit category.
-5. Decide fridge vs. pantry.
-6. Suggest a shelf name.
-7. Estimate expiresAt (YYYY-MM-DD) for perishables and omit it for shelf-stable items.
-8. Set flagged: true only when an item is genuinely ambiguous or uncertain.
-9. If a field is genuinely unknown, return the item anyway, omit that field instead of inventing a random value, and keep flagged: true.
+1. Choose one representative food emoji for the item (e.g. eggs -> 🥚, milk -> 🥛, spinach -> 🥬); omit emoji if uncertain.
+2. Provide a clear item name.
+3. Choose a realistic household quantity.
+4. Pick the best unit from the allowed list.
+5. Assign the best-fit category.
+6. Decide fridge vs. pantry.
+7. Suggest a shelf name.
+8. Estimate expiresAt (YYYY-MM-DD) for perishables and omit it for shelf-stable items.
+9. Set flagged: true only when an item is genuinely ambiguous or uncertain.
+10. If a field is genuinely unknown, return the item anyway, omit that field instead of inventing a random value, and keep flagged: true.
 
 Return JSON with one enriched item object per generated food item.`;
 }

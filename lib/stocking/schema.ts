@@ -62,6 +62,7 @@ const STORAGE_TYPE_ALIASES = {
 } as const;
 
 export const stockReviewItemSchema = z.object({
+  emoji: z.string().trim().emoji().optional(),
   name: z.string().trim().min(1).max(120),
   quantity: z.number().finite().positive().max(100000),
   unit: z.enum(INVENTORY_UNITS),
@@ -77,6 +78,7 @@ export const stockedItemSchema = stockReviewItemSchema.extend({
 }).strict();
 
 const stockReviewItemExtractionSchema = z.object({
+  emoji: z.string().nullable(),
   name: z.string().nullable(),
   quantity: z.number().nullable(),
   unit: z.string().nullable(),
@@ -138,6 +140,11 @@ function normalizeStockReviewItem(item: z.infer<typeof stockReviewItemExtraction
 
   let flagged = item.flagged === true;
 
+  const emoji = normalizeEmoji(item.emoji);
+  if (item.emoji && !emoji) {
+    flagged = true;
+  }
+
   const quantity = normalizeQuantity(item.quantity);
   if (quantity == null) {
     flagged = true;
@@ -173,6 +180,7 @@ function normalizeStockReviewItem(item: z.infer<typeof stockReviewItemExtraction
   }
 
   const normalized = stockReviewItemSchema.safeParse({
+    emoji,
     name,
     quantity: quantity ?? DEFAULT_QUANTITY,
     unit: resolvedUnit,
@@ -211,6 +219,7 @@ function fillMissingStockFields(payload: unknown) {
   return {
     ...candidate,
     items: candidate.items.map((item) => ({
+      emoji: null,
       name: null,
       quantity: null,
       unit: null,
@@ -226,6 +235,20 @@ function fillMissingStockFields(payload: unknown) {
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() || undefined : undefined;
+}
+
+function normalizeEmoji(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const parsed = z.string().emoji().safeParse(trimmed);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function normalizeQuantity(value: unknown) {

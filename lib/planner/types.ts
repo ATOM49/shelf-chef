@@ -1,4 +1,20 @@
-import type { InventoryUnit } from "@/lib/inventory/types";
+import type { InventoryCategory, InventoryUnit } from "@/lib/inventory/types";
+
+export const RECIPE_MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
+export const PLANNED_MEAL_TYPES = ["breakfast", "lunch", "dinner"] as const;
+export const PLANNER_WEEK_DAYS = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const;
+
+export type RecipeMealType = (typeof RECIPE_MEAL_TYPES)[number];
+export type PlannedMealType = (typeof PLANNED_MEAL_TYPES)[number];
+export type PlannerWeekDay = (typeof PLANNER_WEEK_DAYS)[number];
 
 export type RecipeSource = "system" | "user-requested" | "user-saved";
 
@@ -13,7 +29,7 @@ export type RecipeIngredient = {
 export type Recipe = {
   id: string;
   title: string;
-  mealType: "breakfast" | "lunch" | "dinner" | "snack";
+  mealType: RecipeMealType;
   cuisine?: string;
   tags: string[];
   ingredients: RecipeIngredient[];
@@ -27,6 +43,10 @@ export type IngredientMatch = {
   normalizedName: string;
   neededQuantity: number;
   neededUnit: InventoryUnit;
+  resolvedNeededQuantity: number;
+  resolvedNeededUnit: InventoryUnit;
+  measurementSource: "inventory" | "canonical";
+  usesHeuristic: boolean;
   availableQuantity: number;
   availableUnit: InventoryUnit | "unknown";
   status: "enough" | "low" | "missing" | "unit_mismatch";
@@ -44,7 +64,7 @@ export type MealValidation = {
 export type PlannedMeal = {
   id: string;
   day: string;
-  mealType: Recipe["mealType"];
+  mealType: PlannedMealType;
   recipe: Recipe;
   status: "planned" | "completed";
   validation: MealValidation;
@@ -53,9 +73,61 @@ export type PlannedMeal = {
 export type PreferredDishRequest = {
   id: string;
   name: string;
-  mealType?: Recipe["mealType"];
+  mealType?: RecipeMealType;
   status: "pending" | "resolved" | "failed";
   resolvedRecipeId?: string;
+};
+
+export type PlannerInventoryContextItem = {
+  name: string;
+  normalizedName?: string;
+  quantity: number;
+  unit: InventoryUnit;
+  category?: InventoryCategory | string;
+  expiresAt?: string;
+};
+
+export type PlannerPreferredDishInput = {
+  name: string;
+  mealType?: RecipeMealType;
+};
+
+export type PlannerConfigSnapshot = {
+  preferences: string;
+  preferredDishes: PlannerPreferredDishInput[];
+};
+
+export type PlannerGenerationRequest = {
+  inventory: PlannerInventoryContextItem[];
+  preferences: string;
+  preferredDishes: PlannerPreferredDishInput[];
+  recipeBook: Recipe[];
+};
+
+export type CustomRecipeGenerationRequest = {
+  inventory: PlannerInventoryContextItem[];
+  preferences: string;
+  dishName?: string;
+  recipeBook: Recipe[];
+};
+
+export type PlannerMealSlot = {
+  day: PlannerWeekDay;
+  mealType: PlannedMealType;
+  recipeId: string;
+};
+
+export type RecipeGenerationApiResponse = {
+  recipes: Recipe[];
+};
+
+export type PlannerGenerationApiResponse = {
+  recipes: Recipe[];
+  mealSlots: PlannerMealSlot[];
+};
+
+export type CustomRecipeGenerationApiResponse = {
+  recipe: Recipe;
 };
 
 export type GroceryCartItem = {
@@ -76,4 +148,5 @@ export type PlannerState = {
   weeklyPlan: PlannedMeal[];
   groceryCart: GroceryCartItem[];
   selectedMealId?: string;
+  lastGeneratedConfig?: PlannerConfigSnapshot;
 };

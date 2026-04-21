@@ -6,9 +6,12 @@ import { applyMealConsumption } from "@/lib/inventory/consumption";
 import { normalizeIngredientName } from "@/lib/inventory/normalize";
 import type { InventoryCategory, InventoryItem, InventoryUnit } from "@/lib/inventory/types";
 import { convertQuantity } from "@/lib/inventory/units";
-import { generateWeeklyPlan } from "@/lib/planner/generatePlan";
+import { buildGeneratedWeeklyPlan } from "@/lib/planner/generatePlan";
 import type {
   PlannedMeal,
+  PlannerConfigSnapshot,
+  PlannerMealSlot,
+  PlannerPreferredDishInput,
   PlannerState,
   PreferredDishRequest,
   Recipe,
@@ -26,6 +29,7 @@ export type AppState = {
 };
 
 export type InventoryDraft = {
+  emoji?: string;
   name: string;
   quantity: number;
   unit: InventoryUnit;
@@ -37,6 +41,7 @@ export type InventoryDraft = {
 };
 
 export type StockingItemDraft = {
+  emoji?: string;
   name: string;
   quantity: number;
   unit: InventoryUnit;
@@ -61,10 +66,16 @@ export type AppAction =
   | { type: "REMOVE_INVENTORY_ITEM"; itemId: string }
   | { type: "SET_PREFERENCES"; preferences: string }
   | { type: "ADD_PREFERRED_DISH"; name: string; mealType?: PreferredDishRequest["mealType"] }
+  | {
+      type: "SET_PREFERRED_DISHES";
+      preferredDishes: Array<Pick<PreferredDishRequest, "id" | "name" | "mealType">>;
+    }
   | { type: "REMOVE_PREFERRED_DISH"; dishId: string }
   | { type: "ADD_CUSTOM_RECIPE"; recipe: Recipe }
-  | { type: "GENERATE_WEEKLY_PLAN" }
-  | { type: "REPLACE_PLANNED_MEAL"; mealId: string; recipeName: string }
+  | { type: "REMOVE_CUSTOM_RECIPE"; recipeId: string }
+  | { type: "APPLY_GENERATED_PLAN"; recipes: Recipe[]; mealSlots: PlannerMealSlot[] }
+  | { type: "CLEAR_WEEKLY_PLAN" }
+  | { type: "REPLACE_PLANNED_MEAL"; mealId: string; recipeId: string }
   | { type: "SELECT_MEAL"; mealId?: string }
   | { type: "SET_MEAL_COOKED"; mealId: string; cooked: boolean }
   | { type: "MOVE_PLANNED_MEAL_SLOT"; mealId: string; day: string; mealType: PlannedMeal["mealType"] }
@@ -105,8 +116,62 @@ export function createDefaultAppState(): AppState {
       weeklyPlan: [],
       groceryCart: [],
       selectedMealId: undefined,
+      lastGeneratedConfig: undefined,
     },
   };
+}
+
+function normalizePlannerPreferenceText(preferences: string) {
+  return preferences.trim().replace(/\s+/g, " ");
+}
+
+function toPlannerPreferredDishInput(
+  preferredDishes: Array<Pick<PreferredDishRequest, "name" | "mealType">>,
+): PlannerPreferredDishInput[] {
+  return preferredDishes.map((dish) => ({
+    name: dish.name.trim(),
+    mealType: dish.mealType,
+  }));
+}
+
+export function createPlannerConfigSnapshot(
+  planner: {
+    preferences: string;
+    preferredDishes: Array<Pick<PreferredDishRequest, "name" | "mealType">>;
+  },
+): PlannerConfigSnapshot {
+  return {
+    preferences: normalizePlannerPreferenceText(planner.preferences),
+    preferredDishes: toPlannerPreferredDishInput(planner.preferredDishes),
+  };
+}
+
+export function arePlannerConfigsEqual(
+  left?: PlannerConfigSnapshot,
+  right?: PlannerConfigSnapshot,
+) {
+  if (!left || !right) {
+    return false;
+  }
+
+  if (
+    normalizePlannerPreferenceText(left.preferences) !==
+    normalizePlannerPreferenceText(right.preferences)
+  ) {
+    return false;
+  }
+
+  if (left.preferredDishes.length !== right.preferredDishes.length) {
+    return false;
+  }
+
+  return left.preferredDishes.every((dish, index) => {
+    const candidate = right.preferredDishes[index];
+    return (
+      dish.name.trim().toLowerCase() === candidate?.name.trim().toLowerCase() &&
+      dish.mealType === candidate?.mealType
+    );
+  });
 }
 
 function updateShelfInStorage(
@@ -150,8 +215,118 @@ function reorderShelves<T extends { id: string }>(
   return nextShelves;
 }
 
-function selectFirstPlannedMeal(meals: PlannedMeal[]) {
-  return meals[0]?.id;
+function normalizeRecipeTitle(title: string) {
+  return title.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export function getRecipeDedupeKey(recipe: Pick<Recipe, "mealType" | "title">) {
+  return `${recipe.mealType}:${normalizeRecipeTitle(recipe.title)}`;
+}
+
+function getRecipeSourcePriority(source: Recipe["source"]) {
+  if (source === "user-saved") {
+    return 3;
+  }
+
+  if (source === "user-requested") {
+    return 2;
+  }
+
+  return 1;
+}
+
+function choosePreferredRecipe(current: Recipe, candidate: Recipe) {
+  if (current.id === candidate.id) {
+    return candidate;
+  }
+
+  const currentPriority = getRecipeSourcePriority(current.source);
+  const candidatePriority = getRecipeSourcePriority(candidate.source);
+  if (candidatePriority !== currentPriority) {
+    return candidatePriority > currentPriority ? candidate : current;
+  }
+
+  const currentRichness =
+    current.ingredients.length +
+    (current.instructions?.length ?? 0) +
+    (current.referenceUrl ? 1 : 0);
+  const candidateRichness =
+    candidate.ingredients.length +
+    (candidate.instructions?.length ?? 0) +
+    (candidate.referenceUrl ? 1 : 0);
+
+  if (candidateRichness !== currentRichness) {
+    return candidateRichness > currentRichness ? candidate : current;
+  }
+
+  return candidate;
+}
+
+export function mergeRecipes(existingRecipes: Recipe[], incomingRecipes: Recipe[]) {
+  const recipesById = new Map<string, Recipe>();
+  const recipeIdByDedupeKey = new Map<string, string>();
+
+  const ingestRecipe = (recipe: Recipe) => {
+    const dedupeKey = getRecipeDedupeKey(recipe);
+    const existingId = recipeIdByDedupeKey.get(dedupeKey);
+
+    if (existingId) {
+      const current = recipesById.get(existingId);
+      if (!current) {
+        recipesById.set(recipe.id, recipe);
+        recipeIdByDedupeKey.set(dedupeKey, recipe.id);
+        return;
+      }
+
+      const preferred = choosePreferredRecipe(current, recipe);
+      if (preferred.id !== current.id) {
+        recipesById.delete(current.id);
+        recipesById.set(preferred.id, preferred);
+        recipeIdByDedupeKey.set(dedupeKey, preferred.id);
+      } else {
+        recipesById.set(current.id, preferred);
+      }
+      return;
+    }
+
+    const currentById = recipesById.get(recipe.id);
+    if (currentById) {
+      recipesById.set(recipe.id, choosePreferredRecipe(currentById, recipe));
+      recipeIdByDedupeKey.set(dedupeKey, recipe.id);
+      return;
+    }
+
+    recipesById.set(recipe.id, recipe);
+    recipeIdByDedupeKey.set(dedupeKey, recipe.id);
+  };
+
+  for (const recipe of existingRecipes) {
+    ingestRecipe(recipe);
+  }
+
+  for (const recipe of incomingRecipes) {
+    ingestRecipe(recipe);
+  }
+
+  return Array.from(recipesById.values());
+}
+
+function reconcilePreferredDishes(
+  preferredDishes: PreferredDishRequest[],
+  recipes: Recipe[],
+): PreferredDishRequest[] {
+  return preferredDishes.map((dish) => {
+    const candidateRecipes = dish.mealType
+      ? recipes.filter((recipe) => recipe.mealType === dish.mealType)
+      : recipes;
+    const resolved = resolveRecipeByDishName(dish.name, candidateRecipes);
+
+    return {
+      ...dish,
+      status: resolved ? "resolved" : "failed",
+      resolvedRecipeId: resolved?.id,
+    };
+  });
 }
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -162,6 +337,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const shelfNumber = storage.shelves.length + 1;
       const newShelf = {
         id: generateId(),
+    
         name: `Shelf ${shelfNumber}`,
         rows: 1,
         cols: 3,
@@ -290,19 +466,32 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
 
     case "ADD_PREFERRED_DISH": {
-      const resolved = resolveRecipeByDishName(action.name, state.recipes);
       const dish: PreferredDishRequest = {
         id: generateId(),
         name: action.name.trim(),
         mealType: action.mealType,
-        status: resolved ? "resolved" : "failed",
-        resolvedRecipeId: resolved?.id,
+        status: "pending",
       };
       return {
         ...state,
         planner: {
           ...state.planner,
           preferredDishes: [...state.planner.preferredDishes, dish],
+        },
+      };
+    }
+
+    case "SET_PREFERRED_DISHES": {
+      return {
+        ...state,
+        planner: {
+          ...state.planner,
+          preferredDishes: action.preferredDishes.map((dish) => ({
+            id: dish.id,
+            name: dish.name.trim(),
+            mealType: dish.mealType,
+            status: "pending",
+          })),
         },
       };
     }
@@ -320,31 +509,48 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "ADD_CUSTOM_RECIPE": {
       return {
         ...state,
-        recipes: [...state.recipes, action.recipe],
+        recipes: mergeRecipes(state.recipes, [action.recipe]),
       };
     }
 
-    case "GENERATE_WEEKLY_PLAN": {
-      const { meals, groceryCart } = generateWeeklyPlan({
+    case "APPLY_GENERATED_PLAN": {
+      const nextRecipes = mergeRecipes(state.recipes, action.recipes);
+      const lastGeneratedConfig = createPlannerConfigSnapshot(state.planner);
+      const { meals, groceryCart } = buildGeneratedWeeklyPlan({
         inventory: state.inventory,
-        preferences: state.planner.preferences,
-        recipes: state.recipes,
-        preferredDishes: state.planner.preferredDishes,
+        recipes: nextRecipes,
+        mealSlots: action.mealSlots,
       });
 
       return {
         ...state,
+        recipes: nextRecipes,
         planner: {
           ...state.planner,
+          preferredDishes: reconcilePreferredDishes(state.planner.preferredDishes, nextRecipes),
           weeklyPlan: meals,
           groceryCart,
-          selectedMealId: selectFirstPlannedMeal(meals),
+          selectedMealId: undefined,
+          lastGeneratedConfig,
+        },
+      };
+    }
+
+    case "CLEAR_WEEKLY_PLAN": {
+      return {
+        ...state,
+        planner: {
+          ...state.planner,
+          weeklyPlan: [],
+          groceryCart: [],
+          selectedMealId: undefined,
+          lastGeneratedConfig: undefined,
         },
       };
     }
 
     case "REPLACE_PLANNED_MEAL": {
-      const resolved = resolveRecipeByDishName(action.recipeName, state.recipes);
+      const resolved = state.recipes.find((recipe) => recipe.id === action.recipeId) ?? null;
       if (!resolved) return state;
 
       const validation = validateRecipeAgainstInventory(resolved, state.inventory);
@@ -410,7 +616,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case "MOVE_PLANNED_MEAL_SLOT": {
       const activeMeal = state.planner.weeklyPlan.find((plannedMeal) => plannedMeal.id === action.mealId);
-      if (!activeMeal || activeMeal.mealType !== action.mealType || activeMeal.day === action.day) {
+      if (!activeMeal || (activeMeal.mealType === action.mealType && activeMeal.day === action.day)) {
         return state;
       }
 
@@ -423,10 +629,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       const nextPlan = state.planner.weeklyPlan.map((plannedMeal) => {
         if (plannedMeal.id === action.mealId) {
-          return { ...plannedMeal, day: action.day };
+          return { ...plannedMeal, day: action.day, mealType: action.mealType };
         }
         if (targetMeal && plannedMeal.id === targetMeal.id) {
-          return { ...plannedMeal, day: activeMeal.day };
+          return { ...plannedMeal, day: activeMeal.day, mealType: activeMeal.mealType };
         }
         return plannedMeal;
       });
@@ -591,6 +797,7 @@ function applyStockItems(state: AppState, items: StockingItemDraft[]): AppState 
 
       nextInventory.push(
         createInventoryItem({
+          emoji: item.emoji,
           name: item.name,
           quantity: item.quantity,
           unit: item.unit,

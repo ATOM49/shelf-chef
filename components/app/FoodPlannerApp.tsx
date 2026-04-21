@@ -1,20 +1,60 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+import { WeeklyPlanList } from "@/components/planner/WeeklyPlanList";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { RecipeBookDialog } from "@/components/planner/RecipeBookDialog";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StorageCanvas } from "@/components/storage/StorageCanvas";
 import { StorageEditorPanel } from "@/components/storage/StorageEditorPanel";
 import { GroceryCartPanel } from "@/components/planner/GroceryCartPanel";
 import { PlannerSidebar } from "@/components/planner/PlannerSidebar";
 import { StockingDialog } from "@/components/stocking/StockingDialog";
-import { appReducer } from "@/lib/appState";
+import {
+  appReducer,
+  arePlannerConfigsEqual,
+  createPlannerConfigSnapshot,
+} from "@/lib/appState";
 import type { StockingItemDraft } from "@/lib/appState";
 import type { StorageType } from "@/lib/fridge/types";
+import {
+  parseCustomRecipeGenerationApiResponse,
+  parsePlannerGenerationApiResponse,
+} from "@/lib/planner/schema";
+import type {
+  PlannerGenerationApiResponse,
+  PlannerGenerationRequest,
+  PlannedMeal,
+  PreferredDishRequest,
+} from "@/lib/planner/types";
 import { clearAppState, loadAppState, saveAppState } from "@/lib/persistence";
+import { BookOpen, LoaderCircle, ShoppingCart, XIcon } from "lucide-react";
 
-type DesktopTab = "planner" | "cart";
-type MobileTab = "storage" | "planner" | "cart";
+type MobileTab = "storage" | "planner";
+
+type RecipeBookState = {
+  open: boolean;
+  mode: "browse" | "swap";
+  mealId?: string;
+  swapMealType?: PlannedMeal["mealType"];
+};
 
 export function FoodPlannerApp() {
   const [state, dispatch] = useReducer(appReducer, undefined, loadAppState);
@@ -23,13 +63,47 @@ export function FoodPlannerApp() {
   const [storageTab, setStorageTab] = useState<StorageType>("fridge");
   const [stockingOpen, setStockingOpen] = useState(false);
   const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
-  const [selectedCell, setSelectedCell] = useState<{ shelfId: string; cellId: string } | undefined>();
-  const [selectedPantryShelfId, setSelectedPantryShelfId] = useState<string | undefined>();
-  const [selectedPantryCell, setSelectedPantryCell] = useState<{ shelfId: string; cellId: string } | undefined>();
-  const [desktopTab, setDesktopTab] = useState<DesktopTab>("planner");
+  const [selectedCell, setSelectedCell] = useState<
+    { shelfId: string; cellId: string } | undefined
+  >();
+  const [selectedPantryShelfId, setSelectedPantryShelfId] = useState<
+    string | undefined
+  >();
+  const [selectedPantryCell, setSelectedPantryCell] = useState<
+    { shelfId: string; cellId: string } | undefined
+  >();
+  const [cartOpen, setCartOpen] = useState(false);
+  const [plannerSettingsOpen, setPlannerSettingsOpen] = useState(false);
+  const [recipeBookState, setRecipeBookState] = useState<RecipeBookState>({
+    open: false,
+    mode: "browse",
+  });
   const [mobileTab, setMobileTab] = useState<MobileTab>("storage");
-  const fridgeInventory = state.inventory.filter((item) => item.storageId === state.fridge.id);
-  const pantryInventory = state.inventory.filter((item) => item.storageId === state.pantry.id);
+  const [plannerApiError, setPlannerApiError] = useState<string | null>(null);
+  const [isPlannerPending, startPlannerTransition] = useTransition();
+  const fridgeInventory = state.inventory.filter(
+    (item) => item.storageId === state.fridge.id,
+  );
+  const pantryInventory = state.inventory.filter(
+    (item) => item.storageId === state.pantry.id,
+  );
+  const uncheckedCartCount = state.planner.groceryCart.filter(
+    (item) => !item.checked,
+  ).length;
+  const hasPlan = state.planner.weeklyPlan.length > 0;
+  const savedPlannerConfig = createPlannerConfigSnapshot(state.planner);
+  const isPlanStale = hasPlan
+    ? !state.planner.lastGeneratedConfig ||
+      !arePlannerConfigsEqual(
+        savedPlannerConfig,
+        state.planner.lastGeneratedConfig,
+      )
+    : false;
+  const planActionLabel = !hasPlan
+    ? "Create plan"
+    : isPlanStale
+      ? "Recreate plan"
+      : "Create plan";
 
   useLayoutEffect(() => {
     latestStateRef.current = state;
@@ -87,51 +161,373 @@ export function FoodPlannerApp() {
     setMobileTab("storage");
   }, []);
 
-  const handleSelectPantryCell = useCallback((shelfId: string, cellId: string) => {
-    setSelectedPantryShelfId(shelfId);
-    setSelectedPantryCell({ shelfId, cellId });
-    setStorageTab("pantry");
-    setMobileTab("storage");
-  }, []);
+  const handleSelectPantryCell = useCallback(
+    (shelfId: string, cellId: string) => {
+      setSelectedPantryShelfId(shelfId);
+      setSelectedPantryCell({ shelfId, cellId });
+      setStorageTab("pantry");
+      setMobileTab("storage");
+    },
+    [],
+  );
 
   const handleClearPantrySelection = useCallback(() => {
     setSelectedPantryShelfId(undefined);
     setSelectedPantryCell(undefined);
   }, []);
 
-  const handleReorderFridgeShelves = useCallback((activeShelfId: string, overShelfId: string) => {
-    dispatch({
-      type: "REORDER_SHELVES",
-      target: "fridge",
-      activeShelfId,
-      overShelfId,
-    });
-  }, []);
+  const handleReorderFridgeShelves = useCallback(
+    (activeShelfId: string, overShelfId: string) => {
+      dispatch({
+        type: "REORDER_SHELVES",
+        target: "fridge",
+        activeShelfId,
+        overShelfId,
+      });
+    },
+    [],
+  );
 
-  const handleReorderPantryShelves = useCallback((activeShelfId: string, overShelfId: string) => {
-    dispatch({
-      type: "REORDER_SHELVES",
-      target: "pantry",
-      activeShelfId,
-      overShelfId,
-    });
-  }, []);
+  const handleReorderPantryShelves = useCallback(
+    (activeShelfId: string, overShelfId: string) => {
+      dispatch({
+        type: "REORDER_SHELVES",
+        target: "pantry",
+        activeShelfId,
+        overShelfId,
+      });
+    },
+    [],
+  );
 
   const handleCommitStock = useCallback((items: StockingItemDraft[]) => {
     dispatch({ type: "STOCK_ITEMS", items });
   }, []);
 
+  const handleGeneratePlan = useCallback(() => {
+    setPlannerApiError(null);
+    startPlannerTransition(() => {
+      void (async () => {
+        try {
+          const payload: PlannerGenerationRequest = {
+            inventory: state.inventory.map((item) => ({
+              name: item.name,
+              normalizedName: item.normalizedName,
+              quantity: item.quantity,
+              unit: item.unit,
+              category: item.category,
+              expiresAt: item.expiresAt,
+            })),
+            preferences: state.planner.preferences,
+            preferredDishes: state.planner.preferredDishes.map((dish) => ({
+              name: dish.name,
+              mealType: dish.mealType,
+            })),
+            recipeBook: state.recipes,
+          };
+
+          const response = await fetch("/api/planner/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) {
+            const err = (await response.json()) as {
+              error?: string;
+              detail?: string;
+            };
+            throw new Error(
+              err.detail || err.error || `HTTP ${response.status}`,
+            );
+          }
+
+          const rawData =
+            (await response.json()) as PlannerGenerationApiResponse;
+          const data = parsePlannerGenerationApiResponse(rawData);
+          dispatch({
+            type: "APPLY_GENERATED_PLAN",
+            recipes: data.recipes,
+            mealSlots: data.mealSlots,
+          });
+        } catch (err) {
+          setPlannerApiError(
+            err instanceof Error ? err.message : "Unknown planner error",
+          );
+        }
+      })();
+    });
+  }, [
+    state.inventory,
+    state.planner.preferences,
+    state.planner.preferredDishes,
+    state.recipes,
+  ]);
+
+  const handleSavePlannerSettings = useCallback(
+    (payload: {
+      preferences: string;
+      preferredDishes: Array<
+        Pick<PreferredDishRequest, "id" | "name" | "mealType">
+      >;
+    }) => {
+      dispatch({ type: "SET_PREFERENCES", preferences: payload.preferences });
+      dispatch({
+        type: "SET_PREFERRED_DISHES",
+        preferredDishes: payload.preferredDishes,
+      });
+      setPlannerSettingsOpen(false);
+    },
+    [],
+  );
+
+  const handleOpenRecipeBook = useCallback(() => {
+    setRecipeBookState({ open: true, mode: "browse" });
+  }, []);
+
+  const handleOpenSwapRecipeBook = useCallback(
+    (mealId: string) => {
+      const meal = state.planner.weeklyPlan.find(
+        (candidate) => candidate.id === mealId,
+      );
+      if (!meal) {
+        return;
+      }
+
+      setRecipeBookState({
+        open: true,
+        mode: "swap",
+        mealId,
+        swapMealType: meal.mealType,
+      });
+    },
+    [state.planner.weeklyPlan],
+  );
+
+  const handleRecipeBookOpenChange = useCallback((open: boolean) => {
+    setRecipeBookState((current) =>
+      open
+        ? current
+        : {
+            open: false,
+            mode: "browse",
+          },
+    );
+  }, []);
+
+  const handleSwapRecipeSelection = useCallback(
+    (recipeId: string) => {
+      if (!recipeBookState.mealId) {
+        return;
+      }
+
+      dispatch({
+        type: "REPLACE_PLANNED_MEAL",
+        mealId: recipeBookState.mealId,
+        recipeId,
+      });
+      setRecipeBookState({ open: false, mode: "browse" });
+    },
+    [recipeBookState.mealId],
+  );
+
+  const handleCreateCustomRecipe = useCallback(
+    async (payload: {
+      inventoryItemIds: string[];
+      preferences: string;
+      dishName: string;
+    }) => {
+      const inventorySubset = state.inventory
+        .filter((item) => payload.inventoryItemIds.includes(item.id))
+        .map((item) => ({
+          name: item.name,
+          normalizedName: item.normalizedName,
+          quantity: item.quantity,
+          unit: item.unit,
+          category: item.category,
+          expiresAt: item.expiresAt,
+        }));
+
+      const response = await fetch("/api/recipes/generate/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inventory: inventorySubset,
+          preferences: payload.preferences,
+          dishName: payload.dishName.trim() || undefined,
+          recipeBook: state.recipes,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = (await response.json()) as {
+          error?: string;
+          detail?: string;
+        };
+        throw new Error(err.detail || err.error || `HTTP ${response.status}`);
+      }
+
+      const rawData = await response.json();
+      const data = parseCustomRecipeGenerationApiResponse(rawData);
+
+      dispatch({ type: "ADD_CUSTOM_RECIPE", recipe: data.recipe });
+      return data.recipe.id;
+    },
+    [state.inventory, state.recipes],
+  );
+
+  const handleDeleteCustomRecipe = useCallback((recipeId: string) => {
+    dispatch({ type: "REMOVE_CUSTOM_RECIPE", recipeId });
+  }, []);
+
+  const handleClearPlan = useCallback(() => {
+    if (
+      !window.confirm(
+        "Clear the weekly plan and shopping cart? Your saved preferences will stay in place.",
+      )
+    ) {
+      return;
+    }
+
+    setPlannerApiError(null);
+    dispatch({ type: "CLEAR_WEEKLY_PLAN" });
+  }, []);
+
   const handleReset = () => {
-    if (window.confirm("Reset the fridge, inventory, and weekly plan to defaults?")) {
+    if (
+      window.confirm(
+        "Reset the fridge, inventory, and weekly plan to defaults?",
+      )
+    ) {
       resetPendingRef.current = true;
       clearAppState();
       dispatch({ type: "RESET_APP" });
       handleClearSelection();
       handleClearPantrySelection();
-      setDesktopTab("planner");
+      setCartOpen(false);
+      setPlannerSettingsOpen(false);
       setMobileTab("storage");
+      setPlannerApiError(null);
     }
   };
+
+  function renderPlannerMainContent() {
+    return (
+      <section className="flex min-h-0 w-full flex-1 flex-col rounded-xl border bg-muted/20 p-3">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 pb-3">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">
+                This week&apos;s plan
+              </h2>
+              {isPlanStale ? (
+                <Badge
+                  variant="outline"
+                  className="border-amber-300 bg-amber-50 text-amber-700"
+                >
+                  Saved settings not used for this plan
+                </Badge>
+              ) : null}
+            </div>
+            {/* <p className="text-sm text-muted-foreground">
+              Drag meals across the week, inspect recipe details, and validate
+              against inventory before cooking.
+            </p> */}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {hasPlan ? (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={handleClearPlan}
+                disabled={isPlannerPending}
+              >
+                Clear plan
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPlannerSettingsOpen(true)}
+              disabled={isPlannerPending}
+            >
+              Customise plan
+            </Button>
+            <Button
+              type="button"
+              onClick={handleGeneratePlan}
+              disabled={isPlannerPending}
+            >
+              {isPlannerPending ? (
+                <>
+                  <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                  <span>Creating plan...</span>
+                </>
+              ) : (
+                planActionLabel
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-3">
+          {isPlannerPending ? (
+            <div className="flex items-start gap-3 rounded-xl border border-border bg-background/80 px-4 py-3 text-sm text-muted-foreground">
+              <LoaderCircle
+                className="mt-0.5 size-4 shrink-0 animate-spin text-foreground"
+                aria-hidden
+              />
+              <p>
+                Generating your weekly plan. This can take a little time while
+                recipes and meal slots are assembled.
+              </p>
+            </div>
+          ) : null}
+
+          {plannerApiError ? (
+            <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {plannerApiError}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-3 min-h-0 flex-1">
+          <WeeklyPlanList
+            meals={state.planner.weeklyPlan}
+            selectedMealId={state.planner.selectedMealId}
+            onSelectMeal={(mealId) => dispatch({ type: "SELECT_MEAL", mealId })}
+            onSetMealCooked={(mealId, cooked) =>
+              dispatch({ type: "SET_MEAL_COOKED", mealId, cooked })
+            }
+            onMoveMealSlot={(mealId, day, mealType) =>
+              dispatch({
+                type: "MOVE_PLANNED_MEAL_SLOT",
+                mealId,
+                day,
+                mealType,
+              })
+            }
+            onSwapMeal={handleOpenSwapRecipeBook}
+            onDeselectMeal={() =>
+              dispatch({ type: "SELECT_MEAL", mealId: undefined })
+            }
+          />
+        </div>
+      </section>
+    );
+  }
+
+  const groceryCartContent =
+    state.planner.groceryCart.length > 0 ? (
+      <GroceryCartPanel
+        items={state.planner.groceryCart}
+        onToggle={(id) => dispatch({ type: "TOGGLE_GROCERY_ITEM", itemId: id })}
+      />
+    ) : (
+      <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+        Grocery cart is empty. Generate a weekly plan first.
+      </div>
+    );
 
   return (
     <div className="h-svh overflow-hidden bg-muted/30">
@@ -142,42 +538,69 @@ export function FoodPlannerApp() {
               <span className="text-xl">🍽️</span>
               <span className="text-lg font-semibold">ShelfChef</span>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={handleReset} className="shrink-0">
-              Reset app
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={handleReset}
+                className="shrink-0"
+              >
+                Reset
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleOpenRecipeBook}
+                disabled={isPlannerPending}
+              >
+                <BookOpen className="size-4" aria-hidden />
+                Recipe book
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCartOpen(true)}
+                className="relative shrink-0"
+              >
+                <ShoppingCart className="size-4" aria-hidden />
+                <span>Cart</span>
+                {uncheckedCartCount > 0 ? (
+                  <Badge className="ml-1 min-w-5 justify-center px-1.5">
+                    {uncheckedCartCount}
+                  </Badge>
+                ) : null}
+              </Button>
+            </div>
           </div>
         </header>
 
         <div className="mt-3 flex min-h-0 flex-1 gap-3">
           <div className="hidden min-h-0 w-96 shrink-0 flex-col rounded-xl border bg-card p-3 md:flex">
-            <div className="mb-3 flex items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                className="flex-1"
-                onClick={() => setStockingOpen(true)}
-              >
-                Stock items
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => dispatch({ type: "ADD_SHELF", target: storageTab })}
-              >
-                + Add Shelf
-              </Button>
-            </div>
             <Tabs
               value={storageTab}
               onValueChange={(v) => setStorageTab(v as StorageType)}
               className="flex min-h-0 flex-1 flex-col"
             >
-              <TabsList className="grid w-full grid-cols-2 shrink-0">
-                <TabsTrigger value="fridge">🧊 Fridge</TabsTrigger>
-                <TabsTrigger value="pantry">🗄️ Pantry</TabsTrigger>
-              </TabsList>
-              <TabsContent value="fridge" className="mt-2 min-h-0 flex-1 overflow-y-auto">
+              <div className="mb-3 flex items-center gap-2">
+                <TabsList className="grid flex-1 grid-cols-2 shrink-0">
+                  <TabsTrigger value="fridge">🧊 Fridge</TabsTrigger>
+                  <TabsTrigger value="pantry">🗄️ Pantry</TabsTrigger>
+                </TabsList>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setStockingOpen(true)}
+                >
+                  Stock items
+                </Button>
+              </div>
+              <TabsContent
+                value="fridge"
+                className="mt-2 min-h-0 flex-1 overflow-hidden"
+              >
                 <StorageCanvas
                   layout={state.fridge}
                   inventory={fridgeInventory}
@@ -187,7 +610,10 @@ export function FoodPlannerApp() {
                   onReorderShelves={handleReorderFridgeShelves}
                 />
               </TabsContent>
-              <TabsContent value="pantry" className="mt-2 min-h-0 flex-1 overflow-y-auto">
+              <TabsContent
+                value="pantry"
+                className="mt-2 min-h-0 flex-1 overflow-hidden"
+              >
                 <StorageCanvas
                   layout={state.pantry}
                   inventory={pantryInventory}
@@ -198,111 +624,80 @@ export function FoodPlannerApp() {
                 />
               </TabsContent>
             </Tabs>
-            <div className="mt-3 flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">
-                Drag shelf handles to reorder, or select a shelf or cell to edit.
-              </p>
-              <p className="text-xs text-muted-foreground">Use Stock items to let AI create shelves as needed.</p>
-            </div>
           </div>
 
           <div className="min-h-0 min-w-0 flex-1 rounded-xl border bg-card p-3 md:p-4">
-            <div className="hidden h-full md:block">
-              <Tabs value={desktopTab} onValueChange={(value) => setDesktopTab(value as DesktopTab)} className="h-full">
-                <TabsList className="grid w-full max-w-sm grid-cols-2">
-                  <TabsTrigger value="planner">Planner</TabsTrigger>
-                  <TabsTrigger value="cart">Shopping Cart</TabsTrigger>
-                </TabsList>
-                <TabsContent value="planner" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
-                  <PlannerSidebar state={state} dispatch={dispatch} />
-                </TabsContent>
-                <TabsContent value="cart" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
-                  {state.planner.groceryCart.length > 0 ? (
-                    <GroceryCartPanel
-                      items={state.planner.groceryCart}
-                      onToggle={(id) => dispatch({ type: "TOGGLE_GROCERY_ITEM", itemId: id })}
-                    />
-                  ) : (
-                    <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-                      Grocery cart is empty. Generate a weekly plan first.
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
+            <div className="hidden h-full md:flex md:min-h-0">
+              {renderPlannerMainContent()}
             </div>
 
             <div className="h-full md:hidden">
-              <Tabs value={mobileTab} onValueChange={(value) => setMobileTab(value as MobileTab)} className="h-full">
-                <TabsList className="grid w-full grid-cols-3">
+              <Tabs
+                value={mobileTab}
+                onValueChange={(value) => setMobileTab(value as MobileTab)}
+                className="h-full"
+              >
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="storage">Storage</TabsTrigger>
                   <TabsTrigger value="planner">Planner</TabsTrigger>
-                  <TabsTrigger value="cart">Cart</TabsTrigger>
                 </TabsList>
-                <TabsContent value="storage" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        className="flex-1"
-                        onClick={() => setStockingOpen(true)}
-                      >
-                        Stock items
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => dispatch({ type: "ADD_SHELF", target: storageTab })}
-                      >
-                        + Add Shelf
-                      </Button>
-                    </div>
+                <TabsContent
+                  value="storage"
+                  className="mt-3 flex h-[calc(100%-2.5rem)] min-h-0 flex-col overflow-hidden"
+                >
+                  <div className="flex h-full min-h-0 flex-col gap-3">
                     <Tabs
                       value={storageTab}
                       onValueChange={(v) => setStorageTab(v as StorageType)}
+                      className="shrink-0 gap-3"
                     >
-                      <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="fridge">🧊 Fridge</TabsTrigger>
-                        <TabsTrigger value="pantry">🗄️ Pantry</TabsTrigger>
-                      </TabsList>
+                      <div className="flex items-center gap-2">
+                        <TabsList className="grid flex-1 grid-cols-2">
+                          <TabsTrigger value="fridge">🧊 Fridge</TabsTrigger>
+                          <TabsTrigger value="pantry">🗄️ Pantry</TabsTrigger>
+                        </TabsList>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="shrink-0"
+                          onClick={() => setStockingOpen(true)}
+                        >
+                          Stock items
+                        </Button>
+                      </div>
                     </Tabs>
-                    {storageTab === "fridge" ? (
-                      <StorageCanvas
-                        layout={state.fridge}
-                        inventory={fridgeInventory}
-                        selectedShelfId={selectedShelfId}
-                        onSelectShelf={handleSelectShelf}
-                        onSelectCell={handleSelectCell}
-                        onReorderShelves={handleReorderFridgeShelves}
-                      />
-                    ) : (
-                      <StorageCanvas
-                        layout={state.pantry}
-                        inventory={pantryInventory}
-                        selectedShelfId={selectedPantryShelfId}
-                        onSelectShelf={handleSelectPantryShelf}
-                        onSelectCell={handleSelectPantryCell}
-                        onReorderShelves={handleReorderPantryShelves}
-                      />
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Stock items first to let AI build out fridge and pantry shelves for you.
+                    <div className="min-h-0 flex-1">
+                      {storageTab === "fridge" ? (
+                        <StorageCanvas
+                          layout={state.fridge}
+                          inventory={fridgeInventory}
+                          selectedShelfId={selectedShelfId}
+                          onSelectShelf={handleSelectShelf}
+                          onSelectCell={handleSelectCell}
+                          onReorderShelves={handleReorderFridgeShelves}
+                        />
+                      ) : (
+                        <StorageCanvas
+                          layout={state.pantry}
+                          inventory={pantryInventory}
+                          selectedShelfId={selectedPantryShelfId}
+                          onSelectShelf={handleSelectPantryShelf}
+                          onSelectCell={handleSelectPantryCell}
+                          onReorderShelves={handleReorderPantryShelves}
+                        />
+                      )}
+                    </div>
+                    <p className="shrink-0 text-xs text-muted-foreground">
+                      Stock items first to let AI build out fridge and pantry
+                      shelves for you.
                     </p>
                   </div>
                 </TabsContent>
-                <TabsContent value="planner" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
-                  <PlannerSidebar state={state} dispatch={dispatch} />
-                </TabsContent>
-                <TabsContent value="cart" className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1">
-                  {state.planner.groceryCart.length > 0 ? (
-                    <GroceryCartPanel
-                      items={state.planner.groceryCart}
-                      onToggle={(id) => dispatch({ type: "TOGGLE_GROCERY_ITEM", itemId: id })}
-                    />
-                  ) : (
-                    <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-                      Grocery cart is empty. Generate a weekly plan first.
-                    </div>
-                  )}
+                <TabsContent
+                  value="planner"
+                  className="mt-3 h-[calc(100%-2.5rem)] overflow-y-auto pr-1"
+                >
+                  {renderPlannerMainContent()}
                 </TabsContent>
               </Tabs>
             </div>
@@ -331,6 +726,75 @@ export function FoodPlannerApp() {
           open={stockingOpen}
           onOpenChange={setStockingOpen}
           onCommit={handleCommitStock}
+        />
+        <Drawer
+          direction="bottom"
+          open={plannerSettingsOpen}
+          onOpenChange={setPlannerSettingsOpen}
+        >
+          <DrawerContent>
+            <DrawerClose
+              aria-label="Close planner settings"
+              className="absolute top-2 right-2 inline-flex size-7 items-center justify-center rounded-[min(var(--radius-md),12px)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              <XIcon />
+              <span className="sr-only">Close</span>
+            </DrawerClose>
+            <DrawerHeader className="pr-12">
+              <DrawerTitle>Customise plan</DrawerTitle>
+              <DrawerDescription>
+                Save planner preferences and preferred dishes here, then create
+                or recreate the week from the planner header.
+              </DrawerDescription>
+            </DrawerHeader>
+            <PlannerSidebar
+              key={`${plannerSettingsOpen ? "open" : "closed"}::${state.planner.preferences}::${state.planner.preferredDishes
+                .map((dish) => `${dish.id}:${dish.name}:${dish.mealType ?? ""}`)
+                .join("|")}`}
+              savedPreferences={state.planner.preferences}
+              savedPreferredDishes={state.planner.preferredDishes}
+              onSave={handleSavePlannerSettings}
+              onCancel={() => setPlannerSettingsOpen(false)}
+              isDisabled={isPlannerPending}
+            />
+          </DrawerContent>
+        </Drawer>
+        <Drawer direction="right" open={cartOpen} onOpenChange={setCartOpen}>
+          <DrawerContent>
+            <DrawerClose
+              aria-label="Close shopping cart"
+              className="absolute top-2 right-2 inline-flex size-7 items-center justify-center rounded-[min(var(--radius-md),12px)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              <XIcon />
+              <span className="sr-only">Close</span>
+            </DrawerClose>
+            <DrawerHeader className="pr-12">
+              <DrawerTitle>Shopping cart</DrawerTitle>
+              <DrawerDescription>
+                Review missing and low-stock ingredients from your current
+                weekly plan.
+              </DrawerDescription>
+            </DrawerHeader>
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
+              {groceryCartContent}
+            </div>
+          </DrawerContent>
+        </Drawer>
+        <RecipeBookDialog
+          key={`${recipeBookState.mode}:${recipeBookState.mealId ?? "none"}:${recipeBookState.open ? "open" : "closed"}`}
+          open={recipeBookState.open}
+          onOpenChange={handleRecipeBookOpenChange}
+          recipes={state.recipes}
+          inventory={state.inventory}
+          mode={recipeBookState.mode}
+          swapMealType={recipeBookState.swapMealType}
+          onSelectRecipe={
+            recipeBookState.mode === "swap"
+              ? handleSwapRecipeSelection
+              : undefined
+          }
+          onCreateCustomRecipe={handleCreateCustomRecipe}
+          onDeleteRecipe={handleDeleteCustomRecipe}
         />
       </div>
     </div>

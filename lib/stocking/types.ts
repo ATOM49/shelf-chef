@@ -3,6 +3,7 @@ import type { StorageType } from "@/lib/fridge/types";
 import type { PresetId } from "@/lib/inventory/presets";
 
 export type StockReviewItem = {
+  emoji?: string;
   name: string;
   quantity: number;
   unit: InventoryUnit;

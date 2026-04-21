@@ -2,9 +2,40 @@
 
 import { MealValidationSummary } from "@/components/planner/MealValidationSummary";
 import { RecipeIngredientList } from "@/components/planner/RecipeIngredientList";
-import type { PlannedMeal } from "@/lib/planner/types";
+import { Button } from "@/components/ui/button";
+import type { IngredientMatch, PlannedMeal } from "@/lib/planner/types";
 
-export function MealDetailsDrawer({ meal }: { meal?: PlannedMeal }) {
+function describeMatch(match: IngredientMatch) {
+  const recipeMeasurement = `${match.neededQuantity} ${match.neededUnit}`;
+  const resolvedMeasurement = `${match.resolvedNeededQuantity} ${match.resolvedNeededUnit}`;
+  const availability = `${match.availableQuantity} ${match.availableUnit}`;
+  const status = match.status.replace("_", " ");
+  const approximation = match.usesHeuristic ? "approx. " : "";
+
+  if (match.measurementSource === "inventory") {
+    if (match.resolvedNeededUnit === match.neededUnit && !match.usesHeuristic) {
+      return `${match.ingredientName}: need ${recipeMeasurement}, available ${availability} · ${status}`;
+    }
+
+    return `${match.ingredientName}: recipe ${recipeMeasurement}, compare as ${approximation}${resolvedMeasurement}, available ${availability} · ${status}`;
+  }
+
+  if (match.availableUnit === "unknown") {
+    return `${match.ingredientName}: recipe ${recipeMeasurement} · ${status}`;
+  }
+
+  return `${match.ingredientName}: recipe ${recipeMeasurement}, canonical ${approximation}${resolvedMeasurement}, available ${availability} · ${status}`;
+}
+
+export function MealDetailsDrawer({
+  meal,
+  onSetCooked,
+  onSwap,
+}: {
+  meal?: PlannedMeal;
+  onSetCooked?: (cooked: boolean) => void;
+  onSwap?: () => void;
+}) {
   if (!meal) {
     return (
       <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-500">
@@ -12,6 +43,9 @@ export function MealDetailsDrawer({ meal }: { meal?: PlannedMeal }) {
       </div>
     );
   }
+
+  const isCooked = meal.status === "completed";
+  const isCheckboxDisabled = isCooked || !meal.validation.canCook;
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
@@ -25,6 +59,43 @@ export function MealDetailsDrawer({ meal }: { meal?: PlannedMeal }) {
         </div>
       </div>
 
+      <div className="rounded-lg border border-zinc-200 bg-white p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-semibold text-zinc-700">Meal actions</h4>
+            <p className="mt-1 text-xs text-zinc-500">
+              Marking a meal as cooked consumes the matched inventory items.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {onSwap ? (
+              <Button type="button" variant="outline" size="sm" onClick={onSwap}>
+                Swap recipe
+              </Button>
+            ) : null}
+            <label className="flex items-center gap-2 text-sm font-medium text-zinc-700">
+              <input
+                type="checkbox"
+                checked={isCooked}
+                disabled={isCheckboxDisabled}
+                onChange={(event) => onSetCooked?.(event.currentTarget.checked)}
+              />
+              Cooked
+            </label>
+          </div>
+        </div>
+        {meal.recipe.referenceUrl ? (
+          <a
+            href={meal.recipe.referenceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex text-sm font-medium text-primary hover:underline"
+          >
+            Open recipe source
+          </a>
+        ) : null}
+      </div>
+
       <div>
         <h4 className="mb-2 text-sm font-semibold text-zinc-700">Ingredients</h4>
         <RecipeIngredientList ingredients={meal.recipe.ingredients} matches={meal.validation.matches} />
@@ -35,8 +106,7 @@ export function MealDetailsDrawer({ meal }: { meal?: PlannedMeal }) {
         <div className="flex flex-col gap-2 text-sm text-zinc-600">
           {meal.validation.matches.map((match) => (
             <div key={`${match.normalizedName}-${match.neededUnit}`} className="rounded-lg bg-white px-3 py-2">
-              {match.ingredientName}: need {match.neededQuantity} {match.neededUnit}, available {match.availableQuantity}{" "}
-              {match.availableUnit} · {match.status.replace("_", " ")}
+              {describeMatch(match)}
             </div>
           ))}
         </div>

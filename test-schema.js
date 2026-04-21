@@ -1,4 +1,4 @@
-const { z } = require("zod");
+import { z } from "zod";
 const schema = z.object({
   name: z.string().nullable(),
   items: z.array(z.object({ id: z.number().nullable() }))

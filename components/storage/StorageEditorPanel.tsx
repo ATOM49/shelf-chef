@@ -64,9 +64,12 @@ export function StorageEditorPanel({
   onClearSelection,
   showInlinePanel = true,
 }: StorageEditorPanelProps) {
-  const selectedShelf = storage.shelves.find((shelf) => shelf.id === selectedShelfId);
+  const selectedShelf = storage.shelves.find(
+    (shelf) => shelf.id === selectedShelfId,
+  );
   const isShelfPopupOpen = Boolean(
-    selectedShelf && (!selectedCell || selectedCell.shelfId !== selectedShelf.id),
+    selectedShelf &&
+    (!selectedCell || selectedCell.shelfId !== selectedShelf.id),
   );
   const isCellPopupOpen = Boolean(
     selectedShelf && selectedCell && selectedCell.shelfId === selectedShelf.id,
@@ -85,7 +88,9 @@ export function StorageEditorPanel({
           <Button
             type="button"
             className="mt-3"
-            onClick={() => dispatch({ type: "ADD_SHELF", target: storage.storageType })}
+            onClick={() =>
+              dispatch({ type: "ADD_SHELF", target: storage.storageType })
+            }
           >
             + Add Shelf
           </Button>
@@ -99,26 +104,35 @@ export function StorageEditorPanel({
             if (!open) onClearSelection();
           }}
         >
-          <DialogContent
-            className="w-full max-w-[min(44rem,calc(100vw-2rem))] max-h-[min(90svh,800px)] overflow-y-auto"
-          >
-            <DialogDescription className="text-xs">
-              Edit shelf grid and dimensions without changing inventory behavior.
-            </DialogDescription>
+          <DialogContent className="w-full max-w-[min(44rem,calc(100vw-2rem))] max-h-[min(90svh,800px)] overflow-y-auto">
             <ShelfEditor
               key={selectedShelf.id}
               shelf={selectedShelf}
-              onClose={onClearSelection}
               onUpdateName={(name) =>
-                dispatch({ type: "UPDATE_SHELF", shelfId: selectedShelf.id, patch: { name } })
+                dispatch({
+                  type: "UPDATE_SHELF",
+                  shelfId: selectedShelf.id,
+                  patch: { name },
+                })
               }
               onResize={(rows, cols) =>
-                dispatch({ type: "RESIZE_SHELF", shelfId: selectedShelf.id, rows, cols })
+                dispatch({
+                  type: "RESIZE_SHELF",
+                  shelfId: selectedShelf.id,
+                  rows,
+                  cols,
+                })
               }
               onUpdateHeight={(height) =>
-                dispatch({ type: "UPDATE_SHELF", shelfId: selectedShelf.id, patch: { height } })
+                dispatch({
+                  type: "UPDATE_SHELF",
+                  shelfId: selectedShelf.id,
+                  patch: { height },
+                })
               }
-              onAddShelf={() => dispatch({ type: "ADD_SHELF", target: storage.storageType })}
+              onAddShelf={() =>
+                dispatch({ type: "ADD_SHELF", target: storage.storageType })
+              }
               onDeleteShelf={() => {
                 dispatch({ type: "REMOVE_SHELF", shelfId: selectedShelf.id });
                 onClearSelection();
@@ -135,9 +149,7 @@ export function StorageEditorPanel({
             if (!open) onClearSelection();
           }}
         >
-          <DialogContent
-            className="w-full max-w-[min(52rem,calc(100vw-2rem))] max-h-[min(90svh,900px)] overflow-y-auto"
-          >
+          <DialogContent className="w-full max-w-[min(52rem,calc(100vw-2rem))] max-h-[min(90svh,900px)] overflow-y-auto">
             <DialogHeader className="pr-10">
               <DialogTitle>
                 {selectedShelf.name} | {selectedCell.cellId}
@@ -152,13 +164,18 @@ export function StorageEditorPanel({
               cellId={selectedCell.cellId}
               cellItems={inventory.filter(
                 (item) =>
-                  item.shelfId === selectedShelf.id && item.cellId === selectedCell.cellId,
+                  item.shelfId === selectedShelf.id &&
+                  item.cellId === selectedCell.cellId,
               )}
-              onAddItem={(item) => dispatch({ type: "ADD_INVENTORY_ITEM", item })}
+              onAddItem={(item) =>
+                dispatch({ type: "ADD_INVENTORY_ITEM", item })
+              }
               onUpdateItem={(itemId, patch) =>
                 dispatch({ type: "UPDATE_INVENTORY_ITEM", itemId, patch })
               }
-              onRemoveItem={(itemId) => dispatch({ type: "REMOVE_INVENTORY_ITEM", itemId })}
+              onRemoveItem={(itemId) =>
+                dispatch({ type: "REMOVE_INVENTORY_ITEM", itemId })
+              }
               storageId={storage.id}
               shelfId={selectedShelf.id}
               onClose={onClearSelection}
@@ -177,7 +194,6 @@ function ShelfEditor({
   onUpdateHeight,
   onAddShelf,
   onDeleteShelf,
-  onClose,
 }: {
   shelf: StorageLayout["shelves"][number];
   onUpdateName: (name: string) => void;
@@ -185,7 +201,6 @@ function ShelfEditor({
   onUpdateHeight: (height: number) => void;
   onAddShelf: () => void;
   onDeleteShelf: () => void;
-  onClose: () => void;
 }) {
   const [name, setName] = useState(shelf.name);
 
@@ -193,7 +208,10 @@ function ShelfEditor({
     <div className="grid gap-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <Label htmlFor="shelf-name" className="mb-1 text-xs text-muted-foreground">
+          <Label
+            htmlFor="shelf-name"
+            className="mb-1 text-xs text-muted-foreground"
+          >
             Shelf name
           </Label>
           <Input
@@ -204,9 +222,6 @@ function ShelfEditor({
             className="h-9 border-transparent bg-transparent px-0 text-lg font-semibold shadow-none focus-visible:border-ring"
           />
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>
-          Close
-        </Button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -218,7 +233,9 @@ function ShelfEditor({
             min={1}
             max={6}
             value={shelf.rows}
-            onChange={(event) => onResize(Math.max(1, Number(event.target.value) || 1), shelf.cols)}
+            onChange={(event) =>
+              onResize(Math.max(1, Number(event.target.value) || 1), shelf.cols)
+            }
           />
         </div>
         <div className="grid gap-1.5">
@@ -229,7 +246,9 @@ function ShelfEditor({
             min={1}
             max={8}
             value={shelf.cols}
-            onChange={(event) => onResize(shelf.rows, Math.max(1, Number(event.target.value) || 1))}
+            onChange={(event) =>
+              onResize(shelf.rows, Math.max(1, Number(event.target.value) || 1))
+            }
           />
         </div>
       </div>
@@ -237,7 +256,9 @@ function ShelfEditor({
       <div className="grid gap-2">
         <div className="flex items-center justify-between">
           <Label>Height</Label>
-          <span className="text-sm text-muted-foreground">{shelf.height}px</span>
+          <span className="text-sm text-muted-foreground">
+            {shelf.height}px
+          </span>
         </div>
         <Slider
           min={80}
@@ -349,7 +370,9 @@ function CellInventoryEditor({
     <div className="grid gap-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h4 className="text-base font-semibold text-foreground">{shelfName}</h4>
+          <h4 className="text-base font-semibold text-foreground">
+            {shelfName}
+          </h4>
           <p className="text-xs text-muted-foreground">Editing cell {cellId}</p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={onClose}>
@@ -366,14 +389,21 @@ function CellInventoryEditor({
               className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2"
             >
               <div>
-                <div className="text-sm font-medium text-foreground">{item.name}</div>
+                <div className="text-sm font-medium text-foreground">
+                  {item.name}
+                </div>
                 <div className="text-xs text-muted-foreground">
                   {item.quantity} {item.unit} | {item.category}
                   {item.expiresAt ? ` | exp ${item.expiresAt}` : ""}
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => handleEdit(item)}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleEdit(item)}
+                >
                   Edit
                 </Button>
                 <Button
@@ -401,7 +431,9 @@ function CellInventoryEditor({
             id="item-name"
             placeholder="e.g. Eggs"
             value={form.name}
-            onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+            onChange={(event) =>
+              setForm((current) => ({ ...current, name: event.target.value }))
+            }
           />
         </div>
 
@@ -415,7 +447,10 @@ function CellInventoryEditor({
               step="any"
               value={form.quantity}
               onChange={(event) =>
-                setForm((current) => ({ ...current, quantity: event.target.value }))
+                setForm((current) => ({
+                  ...current,
+                  quantity: event.target.value,
+                }))
               }
             />
           </div>
@@ -424,7 +459,10 @@ function CellInventoryEditor({
             <Select
               value={form.unit}
               onValueChange={(value) =>
-                setForm((current) => ({ ...current, unit: value as InventoryUnit }))
+                setForm((current) => ({
+                  ...current,
+                  unit: value as InventoryUnit,
+                }))
               }
             >
               <SelectTrigger className="w-full">
@@ -447,7 +485,10 @@ function CellInventoryEditor({
             <Select
               value={form.category}
               onValueChange={(value) =>
-                setForm((current) => ({ ...current, category: value as InventoryCategory }))
+                setForm((current) => ({
+                  ...current,
+                  category: value as InventoryCategory,
+                }))
               }
             >
               <SelectTrigger className="w-full">
@@ -469,14 +510,21 @@ function CellInventoryEditor({
               type="date"
               value={form.expiresAt}
               onChange={(event) =>
-                setForm((current) => ({ ...current, expiresAt: event.target.value }))
+                setForm((current) => ({
+                  ...current,
+                  expiresAt: event.target.value,
+                }))
               }
             />
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button type="button" disabled={!form.name.trim()} onClick={handleSave}>
+          <Button
+            type="button"
+            disabled={!form.name.trim()}
+            onClick={handleSave}
+          >
             {editingItemId ? "Update item" : "Add item"}
           </Button>
           {editingItemId ? (

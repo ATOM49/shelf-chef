@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { LoaderCircle } from "lucide-react";
 import { generateId } from "@/lib/id";
 import type { StockingItemDraft } from "@/lib/appState";
 import {
@@ -33,9 +34,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { Textarea } from "@/components/ui/textarea";
 
 type Step = "input" | "preview";
+type PendingAction = "text" | PresetId;
 
 type StockingDialogProps = {
   open: boolean;
@@ -54,7 +57,9 @@ export function StockingDialog({
   const [freeText, setFreeText] = useState("");
   const [stockedItems, setStockedItems] = useState<StockedItem[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [pendingLabel, setPendingLabel] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(
+    null,
+  );
   const [isPending, startTransition] = useTransition();
 
   const handleClose = () => {
@@ -64,7 +69,7 @@ export function StockingDialog({
       setFreeText("");
       setStockedItems([]);
       setApiError(null);
-      setPendingLabel(null);
+      setPendingAction(null);
     }, 300);
   };
 
@@ -80,10 +85,10 @@ export function StockingDialog({
   const requestReview = (
     endpoint: string,
     request: StockTextRequest | StockPresetRequest,
-    label: string,
+    nextPendingAction: PendingAction,
   ) => {
     setApiError(null);
-    setPendingLabel(label);
+    setPendingAction(nextPendingAction);
     startTransition(() => {
       void (async () => {
         try {
@@ -98,12 +103,14 @@ export function StockingDialog({
           }
           const rawData = (await res.json()) as StockApiResponse;
           const data = parseStockApiResponseForReview(rawData);
-          setStockedItems(data.items.map((item) => ({ ...item, id: generateId() })));
+          setStockedItems(
+            data.items.map((item) => ({ ...item, id: generateId() })),
+          );
           setStep("preview");
         } catch (err) {
           setApiError(err instanceof Error ? err.message : "Unknown error");
         } finally {
-          setPendingLabel(null);
+          setPendingAction(null);
         }
       })();
     });
@@ -115,19 +122,16 @@ export function StockingDialog({
       return;
     }
 
-    requestReview("/api/stock", { input }, "list");
+    requestReview("/api/stock", { input }, "text");
   };
 
   const handlePresetSelect = (presetId: PresetId) => {
-    requestReview(
-      "/api/stock/preset",
-      { presetId },
-      PRESET_METADATA[presetId].label,
-    );
+    requestReview("/api/stock/preset", { presetId }, presetId);
   };
 
   const handleCommit = () => {
     const drafts: StockingItemDraft[] = stockedItems.map((item) => ({
+      emoji: item.emoji || undefined,
       name: item.name,
       quantity: item.quantity,
       unit: item.unit,
@@ -160,7 +164,7 @@ export function StockingDialog({
             freeText={freeText}
             onFreeTextChange={setFreeText}
             isPending={isPending}
-            pendingLabel={pendingLabel}
+            pendingAction={pendingAction}
             apiError={apiError}
             onAnalyze={handleAnalyze}
             onSelectPreset={handlePresetSelect}
@@ -185,7 +189,7 @@ type InputStepProps = {
   freeText: string;
   onFreeTextChange: (v: string) => void;
   isPending: boolean;
-  pendingLabel: string | null;
+  pendingAction: PendingAction | null;
   apiError: string | null;
   onAnalyze: () => void;
   onSelectPreset: (presetId: PresetId) => void;
@@ -196,22 +200,21 @@ function InputStep({
   freeText,
   onFreeTextChange,
   isPending,
-  pendingLabel,
+  pendingAction,
   apiError,
   onAnalyze,
   onSelectPreset,
   onClose,
 }: InputStepProps) {
   const trimmedInput = freeText.trim();
+  const isTextPending = isPending && pendingAction === "text";
 
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Stock up your kitchen</DialogTitle>
+        <DialogTitle>Stock up!</DialogTitle>
         <DialogDescription>
-          Describe what you bought or start from an AI-generated preset. AI
-          will parse the items, organize them into shelves, and prepare
-          everything for review.
+          Add items to your storage inventory.
         </DialogDescription>
       </DialogHeader>
 
@@ -224,10 +227,10 @@ function InputStep({
               one to generate fridge and pantry items, then review the result.
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2" aria-busy={isPending}>
             {PRESET_ORDER.map((presetId) => {
               const meta = PRESET_METADATA[presetId];
-              const isActive = pendingLabel === meta.label;
+              const isActive = pendingAction === presetId;
 
               return (
                 <button
@@ -235,14 +238,31 @@ function InputStep({
                   type="button"
                   disabled={isPending}
                   onClick={() => onSelectPreset(presetId)}
-                  className="rounded-lg border bg-background px-4 py-3 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-busy={isActive && isPending}
+                  className={`rounded-lg border bg-background px-4 py-3 text-left transition-[border-color,background-color,opacity] disabled:cursor-not-allowed disabled:opacity-100 ${
+                    isActive
+                      ? "border-foreground/20 bg-muted/80 shadow-sm"
+                      : "hover:bg-muted"
+                  } ${isPending && !isActive ? "opacity-60" : ""}`}
                 >
-                  <span className="block text-sm font-medium">{meta.label}</span>
+                  <span className="block text-sm font-medium">
+                    {meta.label}
+                  </span>
                   <span className="mt-1 block text-xs text-muted-foreground">
                     {meta.description}
                   </span>
-                  <span className="mt-3 block text-xs font-medium text-foreground">
-                    {isActive && isPending ? "Generating review..." : "Generate from preset"}
+                  <span className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-foreground">
+                    {isActive && isPending ? (
+                      <>
+                        <LoaderCircle
+                          className="size-3 animate-spin"
+                          aria-hidden
+                        />
+                        <span>Generating review...</span>
+                      </>
+                    ) : (
+                      <span>Generate from preset</span>
+                    )}
                   </span>
                 </button>
               );
@@ -251,10 +271,13 @@ function InputStep({
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="stock-freetext">Describe what you want to stock</Label>
+          <Label htmlFor="stock-freetext">
+            Describe what you want to stock
+          </Label>
           <Textarea
             id="stock-freetext"
             rows={6}
+            disabled={isPending}
             placeholder={
               "I bought eggs, milk, yogurt, spinach, rice, olive oil, and a few spices for the pantry."
             }
@@ -263,8 +286,8 @@ function InputStep({
             className="text-sm"
           />
           <p className="text-xs text-muted-foreground">
-            Natural language, loose lists, and mixed formatting are all fine.
-            AI will extract the items and suggest storage details.
+            Natural language, loose lists, and mixed formatting are all fine. AI
+            will extract the items and suggest storage details.
           </p>
         </div>
 
@@ -276,9 +299,11 @@ function InputStep({
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
-            {trimmedInput
-              ? "AI will parse this note into inventory rows for you to review."
-              : "Paste a note or use a preset to begin."}
+            {isTextPending
+              ? "AI is parsing your stock note into reviewable inventory rows."
+              : trimmedInput
+                ? "AI will parse this note into inventory rows for you to review."
+                : "Paste a note or use a preset to begin."}
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
@@ -287,11 +312,17 @@ function InputStep({
             <Button
               type="button"
               disabled={!trimmedInput || isPending}
+              aria-busy={isTextPending}
               onClick={onAnalyze}
             >
-              {isPending && pendingLabel === "list"
-                ? "Analyzing list..."
-                : "Review stock suggestions"}
+              {isTextPending ? (
+                <>
+                  <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                  <span>Analyzing list...</span>
+                </>
+              ) : (
+                "Review stock suggestions"
+              )}
             </Button>
           </div>
         </div>
@@ -337,6 +368,9 @@ function PreviewStep({
           <table className="w-full text-sm" style={{ tableLayout: "auto" }}>
             <thead className="bg-muted/50">
               <tr>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground min-w-16 w-16">
+                  Emoji
+                </th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground min-w-32">
                   Name
                 </th>
@@ -400,6 +434,12 @@ function PreviewRow({ item, onUpdate }: PreviewRowProps) {
 
   return (
     <tr className={rowCls}>
+      <td className="px-2 py-1 min-w-16 w-16">
+        <EmojiPicker
+          value={item.emoji}
+          onValueChange={(value) => onUpdate(item.id, "emoji", value)}
+        />
+      </td>
       <td className="px-2 py-1 min-w-32">
         <Input
           value={item.name}
