@@ -12,6 +12,16 @@ import {
 import { WeeklyPlanList } from "@/components/planner/WeeklyPlanList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { RecipeBookDialog } from "@/components/planner/RecipeBookDialog";
 import {
   Drawer,
@@ -79,6 +89,7 @@ export function FoodPlannerApp() {
     mode: "browse",
   });
   const [mobileTab, setMobileTab] = useState<MobileTab>("storage");
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [plannerApiError, setPlannerApiError] = useState<string | null>(null);
   const [isPlannerPending, startPlannerTransition] = useTransition();
   const fridgeInventory = state.inventory.filter(
@@ -393,21 +404,20 @@ export function FoodPlannerApp() {
   }, []);
 
   const handleReset = () => {
-    if (
-      window.confirm(
-        "Reset the fridge, inventory, and weekly plan to defaults?",
-      )
-    ) {
-      resetPendingRef.current = true;
-      clearAppState();
-      dispatch({ type: "RESET_APP" });
-      handleClearSelection();
-      handleClearPantrySelection();
-      setCartOpen(false);
-      setPlannerSettingsOpen(false);
-      setMobileTab("storage");
-      setPlannerApiError(null);
-    }
+    setResetDialogOpen(true);
+  };
+
+  const handleConfirmReset = () => {
+    resetPendingRef.current = true;
+    clearAppState();
+    dispatch({ type: "RESET_APP" });
+    handleClearSelection();
+    handleClearPantrySelection();
+    setCartOpen(false);
+    setPlannerSettingsOpen(false);
+    setMobileTab("storage");
+    setPlannerApiError(null);
+    setResetDialogOpen(false);
   };
 
   function renderPlannerMainContent() {
@@ -796,6 +806,30 @@ export function FoodPlannerApp() {
           onCreateCustomRecipe={handleCreateCustomRecipe}
           onDeleteRecipe={handleDeleteCustomRecipe}
         />
+        <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Reset the app to default state?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                This will clear your fridge, pantry inventory, weekly plan, and
+                grocery cart.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel render={<Button variant="outline" />}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                render={<Button variant="destructive" />}
+                onClick={handleConfirmReset}
+              >
+                Reset app
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
