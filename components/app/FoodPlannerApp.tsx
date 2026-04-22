@@ -69,6 +69,7 @@ import { clearAppState, loadAppState, saveAppState } from "@/lib/persistence";
 import {
   BookOpen,
   CircleHelp,
+  Copy,
   LoaderCircle,
   PackagePlus,
   ShoppingCart,
@@ -114,6 +115,9 @@ export function FoodPlannerApp() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [plannerApiError, setPlannerApiError] = useState<string | null>(null);
   const [isPlannerPending, setIsPlannerPending] = useState(false);
+  const [cartCopyStatus, setCartCopyStatus] = useState<
+    "idle" | "copied" | "failed"
+  >("idle");
   const fridgeInventory = state.inventory.filter(
     (item) => item.storageId === state.fridge.id,
   );
@@ -133,6 +137,55 @@ export function FoodPlannerApp() {
       )
     : false;
   const planActionLabel = "Create plan";
+  const cartItemsToCopy = state.planner.groceryCart.filter((item) => !item.checked);
+
+  const handleCopyShoppingList = useCallback(async () => {
+    const listItems =
+      cartItemsToCopy.length > 0 ? cartItemsToCopy : state.planner.groceryCart;
+    if (listItems.length === 0) return;
+
+    const required = listItems.filter((item) => item.reason === "missing");
+    const lowStock = listItems.filter((item) => item.reason === "low");
+    const lines: string[] = ["Shopping list", ""];
+
+    if (required.length > 0) {
+      lines.push("Missing");
+      lines.push(
+        ...required.map((item) => {
+          const quantity = Number.isInteger(item.neededQuantity)
+            ? item.neededQuantity
+            : item.neededQuantity.toFixed(1);
+          return `- ${item.displayName} — ${quantity} ${item.unit}`;
+        }),
+      );
+      lines.push("");
+    }
+
+    if (lowStock.length > 0) {
+      lines.push("Low stock top-ups");
+      lines.push(
+        ...lowStock.map((item) => {
+          const quantity = Number.isInteger(item.neededQuantity)
+            ? item.neededQuantity
+            : item.neededQuantity.toFixed(1);
+          return `- ${item.displayName} — ${quantity} ${item.unit}`;
+        }),
+      );
+      lines.push("");
+    }
+
+    const shoppingListText = lines.join("\n").trim();
+
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(shoppingListText);
+      setCartCopyStatus("copied");
+    } catch {
+      setCartCopyStatus("failed");
+    }
+
+    window.setTimeout(() => setCartCopyStatus("idle"), 1800);
+  }, [cartItemsToCopy, state.planner.groceryCart]);
 
   useLayoutEffect(() => {
     latestStateRef.current = state;
@@ -858,6 +911,22 @@ export function FoodPlannerApp() {
             </DrawerHeader>
             <div className="flex-1 overflow-y-auto px-4 pb-4">
               {groceryCartContent}
+            </div>
+            <div className="sticky bottom-0 border-t bg-background/95 p-4 backdrop-blur">
+              <Button
+                type="button"
+                variant="default"
+                className="w-full"
+                onClick={handleCopyShoppingList}
+                disabled={state.planner.groceryCart.length === 0}
+              >
+                <Copy className="size-4" aria-hidden />
+                {cartCopyStatus === "copied"
+                  ? "Copied shopping list"
+                  : cartCopyStatus === "failed"
+                    ? "Copy failed"
+                    : "Copy shopping list"}
+              </Button>
             </div>
           </DrawerContent>
         </Drawer>
