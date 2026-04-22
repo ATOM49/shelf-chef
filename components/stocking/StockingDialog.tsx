@@ -19,13 +19,13 @@ import type {
 } from "@/lib/stocking/types";
 import { Button } from "@/components/ui/button";
 import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -78,7 +78,7 @@ export function StockingDialog({
     }, 300);
   };
 
-  const handleDrawerOpenChange = (nextOpen: boolean) => {
+  const handleDialogOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
       onOpenChange(true);
       return;
@@ -167,29 +167,30 @@ export function StockingDialog({
   const pendingState = getStockPendingState(pendingAction);
 
   return (
-    <Drawer
+    <Dialog
       open={open}
-      onOpenChange={handleDrawerOpenChange}
-      direction="left"
-      modal={true}
+      onOpenChange={handleDialogOpenChange}
     >
-      <DrawerContent
+      <DialogContent
         aria-busy={isPending}
-        className="fixed inset-y-0 left-0 z-60 h-svh w-[min(96vw,76rem)] max-w-[min(96vw,76rem)] rounded-r-xl border-r overflow-y-auto p-0 data-[vaul-drawer-direction=left]:w-[min(96vw,72rem)] data-[vaul-drawer-direction=left]:sm:max-w-[min(96vw,72rem)]"
+        showCloseButton={false}
+        className="w-full max-w-[min(96vw,76rem)] max-h-[min(90svh,800px)] overflow-y-auto p-0"
       >
         <div className="relative flex min-h-0 flex-1 flex-col p-6">
-          <div className="absolute right-0 top-0 z-20">
-            <DrawerClose asChild>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                aria-label="Close stocking drawer"
-                disabled={isPending}
-              >
-                <XIcon className="size-4" aria-hidden />
-              </Button>
-            </DrawerClose>
+          <div className="absolute right-2 top-2 z-20">
+            <DialogClose
+              render={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Close stocking dialog"
+                  disabled={isPending}
+                >
+                  <XIcon className="size-4" aria-hidden />
+                </Button>
+              }
+            />
           </div>
 
           <div
@@ -233,8 +234,8 @@ export function StockingDialog({
             </div>
           ) : null}
         </div>
-      </DrawerContent>
-    </Drawer>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -294,12 +295,12 @@ function InputStep({
 
   return (
     <>
-      <DrawerHeader className="px-0 pb-2 pt-0">
-        <DrawerTitle>Stock up!</DrawerTitle>
-        <DrawerDescription>
+      <DialogHeader className="px-0 pb-2 pt-0">
+        <DialogTitle>Stock up!</DialogTitle>
+        <DialogDescription>
           Add items to your storage inventory.
-        </DrawerDescription>
-      </DrawerHeader>
+        </DialogDescription>
+      </DialogHeader>
 
       <div className="grid gap-6 pt-2">
         <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
@@ -437,14 +438,14 @@ function PreviewStep({
 
   return (
     <>
-      <DrawerHeader className="px-0 pb-2 pt-0">
-        <DrawerTitle>Review AI-organized stock</DrawerTitle>
-        <DrawerDescription>
+      <DialogHeader className="px-0 pb-2 pt-0">
+        <DialogTitle>Review AI-organized stock</DialogTitle>
+        <DialogDescription>
           {flaggedCount > 0
             ? `${flaggedCount} item${flaggedCount !== 1 ? "s" : ""} flagged for review (highlighted in amber). Edit any field before adding to inventory.`
             : "Everything looks ready. Edit any field before adding to inventory."}
-        </DrawerDescription>
-      </DrawerHeader>
+        </DialogDescription>
+      </DialogHeader>
 
       <div className="grid gap-4 pt-2">
         <div className="overflow-x-auto rounded-lg border">
