@@ -28,7 +28,9 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "A non-empty transcript is required." }, { status: 400 });
   }
 
-  if (transcript.length > MAX_TRANSCRIPT_LENGTH) {
+  const trimmedTranscript = transcript.trim();
+
+  if (trimmedTranscript.length > MAX_TRANSCRIPT_LENGTH) {
     return Response.json(
       { error: `Transcript must be under ${MAX_TRANSCRIPT_LENGTH} characters.` },
       { status: 400 },
@@ -44,7 +46,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const prompt = buildVoiceRecipeGenerationPrompt({
-      transcript: transcript.trim(),
+      transcript: trimmedTranscript,
       preferences: typeof preferences === "string" ? preferences.trim() : "",
       recipeBook: parsedRecipeBook.data.recipeBook,
     });
