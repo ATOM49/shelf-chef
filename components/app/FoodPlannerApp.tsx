@@ -98,6 +98,7 @@ export function FoodPlannerApp() {
   const [state, dispatch] = useReducer(appReducer, undefined, loadAppState);
   const latestStateRef = useRef(state);
   const resetPendingRef = useRef(false);
+  const cartCopyStatusTimeoutRef = useRef<number | undefined>(undefined);
   const [storageTab, setStorageTab] = useState<StorageType>("fridge");
   const [stockingOpen, setStockingOpen] = useState(false);
   const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
@@ -179,14 +180,21 @@ export function FoodPlannerApp() {
     const shoppingListText = lines.join("\n").trim();
 
     try {
-      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      if (!navigator.clipboard?.writeText) {
+        setCartCopyStatus("failed");
+        return;
+      }
       await navigator.clipboard.writeText(shoppingListText);
       setCartCopyStatus("copied");
     } catch {
       setCartCopyStatus("failed");
     }
 
-    window.setTimeout(
+    if (cartCopyStatusTimeoutRef.current !== undefined) {
+      window.clearTimeout(cartCopyStatusTimeoutRef.current);
+    }
+
+    cartCopyStatusTimeoutRef.current = window.setTimeout(
       () => setCartCopyStatus("idle"),
       COPY_STATUS_RESET_DELAY_MS,
     );
@@ -221,6 +229,15 @@ export function FoodPlannerApp() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
+
+  useEffect(
+    () => () => {
+      if (cartCopyStatusTimeoutRef.current !== undefined) {
+        window.clearTimeout(cartCopyStatusTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   const handleSelectShelf = useCallback((shelfId: string) => {
     setSelectedShelfId(shelfId);
