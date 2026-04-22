@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MealValidationSummary } from "@/components/planner/MealValidationSummary";
 import { RecipeIngredientList } from "@/components/planner/RecipeIngredientList";
 import { Badge } from "@/components/ui/badge";
@@ -26,10 +26,20 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, ExternalLink, Trash2, XIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  ExternalLink,
+  Mic,
+  MicOff,
+  Square,
+  Trash2,
+  Upload,
+  XIcon,
+} from "lucide-react";
 import type { InventoryItem } from "@/lib/inventory/types";
 import type { PlannedMealType, Recipe, RecipeSource } from "@/lib/planner/types";
 import { validateRecipeAgainstInventory } from "@/lib/planner/validation";
+import { SUPPORTED_AUDIO_MIME_TYPES } from "@/lib/ai/transcription";
 
 type RecipeBookDialogProps = {
   open: boolean;
@@ -44,12 +54,16 @@ type RecipeBookDialogProps = {
     preferences: string;
     dishName: string;
   }) => Promise<string>;
+  onCreateVoiceRecipe: (payload: {
+    audioFile: File;
+    preferences: string;
+  }) => Promise<string>;
   onDeleteRecipe: (recipeId: string) => void;
 };
 
 type RecipeSourceFilter = RecipeSource | "all";
 type RecipeMealTypeFilter = Recipe["mealType"] | "all";
-type DialogView = "browse" | "detail" | "create";
+type DialogView = "browse" | "detail" | "create" | "voice";
 type RecipeBrowseState = {
   searchTerm: string;
   mealTypeFilter: RecipeMealTypeFilter;
@@ -511,6 +525,325 @@ function RecipeBookCreate({
   );
 }
 
+const MAX_AUDIO_SIZE_MB = 8;
+const MAX_AUDIO_SIZE_BYTES = MAX_AUDIO_SIZE_MB * 1024 * 1024;
+const ACCEPTED_AUDIO_TYPES = "audio/mp3,audio/mpeg,audio/wav,audio/webm,audio/ogg,audio/flac,audio/aac,audio/mp4,audio/x-m4a";
+
+type VoiceCaptureMode = "upload" | "record";
+type RecordingState = "idle" | "recording" | "stopped";
+
+function formatDuration(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function RecipeBookVoiceCreate({
+  onCreateVoiceRecipe,
+  onRecipeCreated,
+}: {
+  onCreateVoiceRecipe: (payload: { audioFile: File; preferences: string }) => Promise<string>;
+  onRecipeCreated: (recipeId: string) => void;
+}) {
+  const [captureMode, setCaptureMode] = useState<VoiceCaptureMode>("upload");
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [preferences, setPreferences] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Recording state
+  const [recordingState, setRecordingState] = useState<RecordingState>("idle");
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [micError, setMicError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Stop and clean up the media stream when the component unmounts or mode changes
+  const stopStream = useCallback(() => {
+    if (mediaRecorderRef.current) {
+      if (mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
+      const tracks = (mediaRecorderRef.current.stream as MediaStream | undefined)?.getTracks();
+      tracks?.forEach((t) => t.stop());
+      mediaRecorderRef.current = null;
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => stopStream();
+  }, [stopStream]);
+
+  function switchCaptureMode(mode: VoiceCaptureMode) {
+    stopStream();
+    setAudioFile(null);
+    setRecordingState("idle");
+    setRecordingSeconds(0);
+    setMicError(null);
+    setSubmitError(null);
+    audioChunksRef.current = [];
+    setCaptureMode(mode);
+  }
+
+  async function handleStartRecording() {
+    setMicError(null);
+    audioChunksRef.current = [];
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const file = new File([blob], "voice-note.webm", { type: "audio/webm" });
+        setAudioFile(file);
+        setRecordingState("stopped");
+      };
+
+      recorder.start(250);
+      setRecordingState("recording");
+      setRecordingSeconds(0);
+
+      timerRef.current = setInterval(() => {
+        setRecordingSeconds((s) => s + 1);
+      }, 1000);
+    } catch (err) {
+      setMicError(
+        err instanceof Error && err.name === "NotAllowedError"
+          ? "Microphone access was denied. Allow microphone access in your browser settings."
+          : "Could not access the microphone. Please check your device settings.",
+      );
+    }
+  }
+
+  function handleStopRecording() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    mediaRecorderRef.current?.stop();
+    const tracks = (mediaRecorderRef.current?.stream as MediaStream | undefined)?.getTracks();
+    tracks?.forEach((t) => t.stop());
+  }
+
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    setSubmitError(null);
+    if (!file) {
+      setAudioFile(null);
+      return;
+    }
+    if (file.size > MAX_AUDIO_SIZE_BYTES) {
+      setSubmitError(`Audio file must be under ${MAX_AUDIO_SIZE_MB} MB.`);
+      setAudioFile(null);
+      event.target.value = "";
+      return;
+    }
+    const baseMime = file.type.split(";")[0].trim();
+    if (!SUPPORTED_AUDIO_MIME_TYPES.has(baseMime)) {
+      setSubmitError("Unsupported audio format. Use mp3, wav, webm, ogg, flac, aac, or mp4.");
+      setAudioFile(null);
+      event.target.value = "";
+      return;
+    }
+    setAudioFile(file);
+  }
+
+  async function handleSubmit() {
+    if (!audioFile) {
+      setSubmitError(captureMode === "upload" ? "Please select an audio file." : "Please record a voice note first.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const recipeId = await onCreateVoiceRecipe({ audioFile, preferences });
+      setAudioFile(null);
+      setPreferences("");
+      setRecordingState("idle");
+      setRecordingSeconds(0);
+      audioChunksRef.current = [];
+      onRecipeCreated(recipeId);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "Unable to generate a recipe right now.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const hasAudio = audioFile !== null;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col px-6 py-4">
+      <div className="grid gap-4">
+        {/* Capture mode tabs */}
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={captureMode === "upload" ? "default" : "outline"}
+            onClick={() => switchCaptureMode("upload")}
+            disabled={isSubmitting}
+          >
+            <Upload className="size-4" aria-hidden />
+            Upload file
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={captureMode === "record" ? "default" : "outline"}
+            onClick={() => switchCaptureMode("record")}
+            disabled={isSubmitting}
+          >
+            <Mic className="size-4" aria-hidden />
+            Record audio
+          </Button>
+        </div>
+
+        {/* Upload mode */}
+        {captureMode === "upload" ? (
+          <div className="grid gap-1.5">
+            <Label htmlFor="voice-recipe-audio-upload">Audio file</Label>
+            <Input
+              id="voice-recipe-audio-upload"
+              type="file"
+              accept={ACCEPTED_AUDIO_TYPES}
+              disabled={isSubmitting}
+              onChange={handleFileChange}
+            />
+            <p className="text-xs text-muted-foreground">
+              Accepted formats: mp3, wav, webm, ogg, flac, aac, mp4 · Max {MAX_AUDIO_SIZE_MB} MB
+            </p>
+          </div>
+        ) : null}
+
+        {/* Record mode */}
+        {captureMode === "record" ? (
+          <div className="grid gap-3">
+            {micError ? (
+              <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <MicOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+                {micError}
+              </div>
+            ) : null}
+            {recordingState === "idle" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-16 w-full gap-3 rounded-2xl border-2 border-dashed text-base"
+                onClick={() => void handleStartRecording()}
+                disabled={isSubmitting}
+              >
+                <Mic className="size-5" aria-hidden />
+                Tap to start recording
+              </Button>
+            ) : recordingState === "recording" ? (
+              <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-primary/30 bg-primary/5 px-4 py-5">
+                <div className="flex items-center gap-2 text-primary">
+                  <span className="size-2.5 animate-pulse rounded-full bg-red-500" aria-hidden />
+                  <span className="text-sm font-semibold">Recording</span>
+                  <span className="font-mono text-sm">{formatDuration(recordingSeconds)}</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="gap-2"
+                  onClick={handleStopRecording}
+                >
+                  <Square className="size-4" aria-hidden />
+                  Stop recording
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Audio ready indicator */}
+        {hasAudio ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5">
+            <div className="min-w-0 text-sm">
+              <span className="font-medium text-foreground">{audioFile.name}</span>
+              <span className="ml-2 text-muted-foreground">{formatBytes(audioFile.size)}</span>
+            </div>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              aria-label="Remove audio"
+              onClick={() => {
+                setAudioFile(null);
+                if (captureMode === "record") {
+                  setRecordingState("idle");
+                  setRecordingSeconds(0);
+                  audioChunksRef.current = [];
+                }
+                setSubmitError(null);
+              }}
+              disabled={isSubmitting}
+            >
+              <XIcon className="size-4" aria-hidden />
+            </Button>
+          </div>
+        ) : null}
+
+        {/* Preferences */}
+        <div className="grid gap-1.5">
+          <Label htmlFor="voice-recipe-preferences">Additional preferences</Label>
+          <Textarea
+            id="voice-recipe-preferences"
+            rows={3}
+            placeholder="Optional — e.g. high protein, quick weeknight dinner, avoid nuts"
+            value={preferences}
+            disabled={isSubmitting}
+            onChange={(event) => setPreferences(event.target.value)}
+          />
+        </div>
+
+        {submitError ? (
+          <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {submitError}
+          </div>
+        ) : null}
+
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={isSubmitting || !hasAudio}
+          >
+            {isSubmitting ? "Generating recipe…" : "Generate recipe"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RecipeBookDetail({
   recipe,
   inventory,
@@ -723,6 +1056,7 @@ export function RecipeBookDialog({
   swapMealType,
   onSelectRecipe,
   onCreateCustomRecipe,
+  onCreateVoiceRecipe,
   onDeleteRecipe,
 }: RecipeBookDialogProps) {
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>();
@@ -788,7 +1122,9 @@ export function RecipeBookDialog({
       ? `Choose a ${swapMealType ?? "saved"} recipe directly from your recipe book.`
       : view === "detail"
         ? "Review cookability, ingredients, and instructions without leaving the drawer."
-        : "Browse saved recipes, review what you can cook from current inventory, and create custom recipes from selected items.";
+        : view === "voice"
+          ? "Record or upload a voice note and generate a recipe from your spoken idea."
+          : "Browse saved recipes, review what you can cook from current inventory, and create custom recipes from selected items.";
 
   return (
     <Drawer open={open} onOpenChange={handleDrawerOpenChange} direction="left">
@@ -823,6 +1159,15 @@ export function RecipeBookDialog({
               >
                 Create recipe
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={view === "voice" ? "default" : "outline"}
+                onClick={() => setView("voice")}
+              >
+                <Mic className="size-3.5" aria-hidden />
+                Voice note
+              </Button>
             </div>
           ) : null}
         </DrawerHeader>
@@ -840,6 +1185,11 @@ export function RecipeBookDialog({
             <RecipeBookCreate
               inventory={inventory}
               onCreateCustomRecipe={onCreateCustomRecipe}
+              onRecipeCreated={handleRecipeCreated}
+            />
+          ) : view === "voice" && showCreateView ? (
+            <RecipeBookVoiceCreate
+              onCreateVoiceRecipe={onCreateVoiceRecipe}
               onRecipeCreated={handleRecipeCreated}
             />
           ) : (

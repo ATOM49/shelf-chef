@@ -402,6 +402,31 @@ export function FoodPlannerApp() {
     [state.inventory, state.recipes],
   );
 
+  const handleCreateVoiceRecipe = useCallback(
+    async (payload: { audioFile: File; preferences: string }) => {
+      const formData = new FormData();
+      formData.append("audio", payload.audioFile);
+      formData.append("preferences", payload.preferences);
+      formData.append("recipeBook", JSON.stringify(state.recipes));
+
+      const response = await fetch("/api/recipes/generate/voice", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const err = (await response.json()) as { error?: string; detail?: string };
+        throw new Error(err.detail || err.error || `HTTP ${response.status}`);
+      }
+
+      const rawData = await response.json();
+      const data = parseCustomRecipeGenerationApiResponse(rawData);
+      dispatch({ type: "ADD_CUSTOM_RECIPE", recipe: data.recipe });
+      return data.recipe.id;
+    },
+    [state.recipes],
+  );
+
   const handleDeleteCustomRecipe = useCallback((recipeId: string) => {
     dispatch({ type: "REMOVE_CUSTOM_RECIPE", recipeId });
   }, []);
@@ -875,6 +900,7 @@ export function FoodPlannerApp() {
               : undefined
           }
           onCreateCustomRecipe={handleCreateCustomRecipe}
+          onCreateVoiceRecipe={handleCreateVoiceRecipe}
           onDeleteRecipe={handleDeleteCustomRecipe}
         />
         <AlertDialog
