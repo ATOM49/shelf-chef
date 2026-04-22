@@ -181,6 +181,7 @@ function FridgeCanvasInner({
           fadeColorClassName="from-card via-card/90"
           className="pr-2"
           contentClassName="pr-3"
+          hideScrollbar
         >
           {shelfNodes}
         </CanvasShelfViewport>
@@ -224,12 +225,14 @@ function CanvasShelfViewport({
   fadeColorClassName,
   className,
   contentClassName,
+  hideScrollbar = false,
 }: {
   children: ReactNode;
   contentCount: number;
   fadeColorClassName: string;
   className?: string;
   contentClassName?: string;
+  hideScrollbar?: boolean;
 }) {
   const { scrollRootRef, contentRef, canScrollDown, canScrollUp, distributedGap } =
     useCanvasScrollState(contentCount);
@@ -238,7 +241,7 @@ function CanvasShelfViewport({
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>
       <div ref={scrollRootRef} className="h-full">
-        <ScrollArea className="h-full">
+        <ScrollArea className="h-full" hideScrollbar={hideScrollbar}>
           <div
             ref={contentRef}
             className={cn("flex min-h-full flex-col", contentClassName)}
