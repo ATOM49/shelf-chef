@@ -120,6 +120,7 @@ export function FoodPlannerApp() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [plannerApiError, setPlannerApiError] = useState<string | null>(null);
   const [isPlannerPending, setIsPlannerPending] = useState(false);
+  const [cartCopyError, setCartCopyError] = useState<string | null>(null);
   const fridgeInventory = state.inventory.filter(
     (item) => item.storageId === state.fridge.id,
   );
@@ -163,8 +164,9 @@ export function FoodPlannerApp() {
 
       try {
         await navigator.clipboard.writeText(shoppingListText);
+        setCartCopyError(null);
       } catch {
-        return;
+        setCartCopyError("Unable to copy list. Please try again.");
       }
     },
     [canUseClipboard],
@@ -906,7 +908,7 @@ export function FoodPlannerApp() {
                   disabled={!canUseClipboard || requiredCartItems.length === 0}
                 >
                   <Copy className="size-4" aria-hidden />
-                  Copy missing
+                  Copy missing items
                 </Button>
                 <Button
                   type="button"
@@ -917,9 +919,12 @@ export function FoodPlannerApp() {
                   disabled={!canUseClipboard || lowStockCartItems.length === 0}
                 >
                   <Copy className="size-4" aria-hidden />
-                  Copy low stock
+                  Copy low stock items
                 </Button>
               </div>
+              {cartCopyError ? (
+                <p className="mt-2 text-xs text-destructive">{cartCopyError}</p>
+              ) : null}
             </div>
           </DrawerContent>
         </Drawer>
