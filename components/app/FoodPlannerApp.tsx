@@ -88,6 +88,12 @@ type RecipeBookState = {
   swapMealType?: PlannedMeal["mealType"];
 };
 
+const COPY_STATUS_RESET_DELAY_MS = 1800;
+
+function formatCartItemQuantity(quantity: number) {
+  return Number.isInteger(quantity) ? quantity : quantity.toFixed(1);
+}
+
 export function FoodPlannerApp() {
   const [state, dispatch] = useReducer(appReducer, undefined, loadAppState);
   const latestStateRef = useRef(state);
@@ -151,12 +157,10 @@ export function FoodPlannerApp() {
     if (required.length > 0) {
       lines.push("Missing");
       lines.push(
-        ...required.map((item) => {
-          const quantity = Number.isInteger(item.neededQuantity)
-            ? item.neededQuantity
-            : item.neededQuantity.toFixed(1);
-          return `- ${item.displayName} — ${quantity} ${item.unit}`;
-        }),
+        ...required.map(
+          (item) =>
+            `- ${item.displayName} — ${formatCartItemQuantity(item.neededQuantity)} ${item.unit}`,
+        ),
       );
       lines.push("");
     }
@@ -164,12 +168,10 @@ export function FoodPlannerApp() {
     if (lowStock.length > 0) {
       lines.push("Low stock top-ups");
       lines.push(
-        ...lowStock.map((item) => {
-          const quantity = Number.isInteger(item.neededQuantity)
-            ? item.neededQuantity
-            : item.neededQuantity.toFixed(1);
-          return `- ${item.displayName} — ${quantity} ${item.unit}`;
-        }),
+        ...lowStock.map(
+          (item) =>
+            `- ${item.displayName} — ${formatCartItemQuantity(item.neededQuantity)} ${item.unit}`,
+        ),
       );
       lines.push("");
     }
@@ -184,7 +186,10 @@ export function FoodPlannerApp() {
       setCartCopyStatus("failed");
     }
 
-    window.setTimeout(() => setCartCopyStatus("idle"), 1800);
+    window.setTimeout(
+      () => setCartCopyStatus("idle"),
+      COPY_STATUS_RESET_DELAY_MS,
+    );
   }, [cartItemsToCopy, state.planner.groceryCart]);
 
   useLayoutEffect(() => {
