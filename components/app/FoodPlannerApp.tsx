@@ -25,6 +25,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { RecipeBookDialog } from "@/components/planner/RecipeBookDialog";
 import {
   Drawer,
@@ -60,6 +68,7 @@ import type {
 import { clearAppState, loadAppState, saveAppState } from "@/lib/persistence";
 import {
   BookOpen,
+  CircleHelp,
   LoaderCircle,
   PackagePlus,
   ShoppingCart,
@@ -584,6 +593,25 @@ export function FoodPlannerApp() {
             <div className="flex items-center gap-2">
               <span className="text-xl">🍽️</span>
               <h1 className="text-lg font-semibold">ShelfChef</h1>
+              <Popover>
+                <PopoverTrigger
+                  type="button"
+                  aria-label="What ShelfChef helps you do"
+                  className="inline-flex size-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:outline-none"
+                >
+                  <CircleHelp className="size-4" aria-hidden />
+                </PopoverTrigger>
+                <PopoverContent sideOffset={8} className="w-80 p-3">
+                  <PopoverHeader>
+                    <PopoverTitle>What ShelfChef helps you do</PopoverTitle>
+                    <PopoverDescription>
+                      Manage inventory stock, create recipes with ingredients,
+                      and plan your weekly menu so you can better manage your
+                      groceries.
+                    </PopoverDescription>
+                  </PopoverHeader>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="flex items-center gap-2">
               <Button
