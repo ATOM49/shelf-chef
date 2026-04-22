@@ -16,7 +16,7 @@ export type RecipeMealType = (typeof RECIPE_MEAL_TYPES)[number];
 export type PlannedMealType = (typeof PLANNED_MEAL_TYPES)[number];
 export type PlannerWeekDay = (typeof PLANNER_WEEK_DAYS)[number];
 
-export type RecipeSource = "system" | "user-requested" | "user-saved";
+export type RecipeSource = "user-requested" | "user-saved";
 
 export type RecipeIngredient = {
   name: string;

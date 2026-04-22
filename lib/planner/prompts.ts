@@ -16,8 +16,8 @@ function summarizeRecipeBook(recipes: Recipe[]) {
   }
 
   const prioritizedRecipes = [...recipes].sort((left, right) => {
-    const leftPriority = left.source === "user-saved" ? 0 : left.source === "user-requested" ? 1 : 2;
-    const rightPriority = right.source === "user-saved" ? 0 : right.source === "user-requested" ? 1 : 2;
+    const leftPriority = left.source === "user-saved" ? 0 : 1;
+    const rightPriority = right.source === "user-saved" ? 0 : 1;
     return (
       leftPriority - rightPriority ||
       left.mealType.localeCompare(right.mealType, "en-US") ||

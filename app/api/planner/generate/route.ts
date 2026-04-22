@@ -23,7 +23,7 @@ function selectPlannerRecipePool(recipes: Recipe[]) {
   }
 
   const sourcePriority = (recipe: Recipe) =>
-    recipe.source === "user-saved" ? 0 : recipe.source === "user-requested" ? 1 : 2;
+    recipe.source === "user-saved" ? 0 : 1;
   const prioritized = [...recipes].sort(
     (left, right) =>
       sourcePriority(left) - sourcePriority(right) ||
