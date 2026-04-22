@@ -98,7 +98,9 @@ export function FoodPlannerApp() {
   const [state, dispatch] = useReducer(appReducer, undefined, loadAppState);
   const latestStateRef = useRef(state);
   const resetPendingRef = useRef(false);
-  const cartCopyStatusTimeoutRef = useRef<number | undefined>(undefined);
+  const cartCopyStatusTimeoutRef = useRef<
+    ReturnType<typeof setTimeout> | undefined
+  >(undefined);
   const [storageTab, setStorageTab] = useState<StorageType>("fridge");
   const [stockingOpen, setStockingOpen] = useState(false);
   const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
@@ -145,10 +147,14 @@ export function FoodPlannerApp() {
     : false;
   const planActionLabel = "Create plan";
   const cartItemsToCopy = state.planner.groceryCart.filter((item) => !item.checked);
+  const hasUncheckedCartItems = cartItemsToCopy.length > 0;
+  const canUseClipboard =
+    typeof navigator !== "undefined" && !!navigator.clipboard?.writeText;
 
   const handleCopyShoppingList = useCallback(async () => {
-    const listItems =
-      cartItemsToCopy.length > 0 ? cartItemsToCopy : state.planner.groceryCart;
+    const listItems = hasUncheckedCartItems
+      ? cartItemsToCopy
+      : state.planner.groceryCart;
     if (listItems.length === 0) return;
 
     const required = listItems.filter((item) => item.reason === "missing");
@@ -180,7 +186,7 @@ export function FoodPlannerApp() {
     const shoppingListText = lines.join("\n").trim();
 
     try {
-      if (!navigator.clipboard?.writeText) {
+      if (!canUseClipboard) {
         setCartCopyStatus("failed");
         return;
       }
@@ -198,7 +204,7 @@ export function FoodPlannerApp() {
       () => setCartCopyStatus("idle"),
       COPY_STATUS_RESET_DELAY_MS,
     );
-  }, [cartItemsToCopy, state.planner.groceryCart]);
+  }, [canUseClipboard, cartItemsToCopy, hasUncheckedCartItems, state.planner.groceryCart]);
 
   useLayoutEffect(() => {
     latestStateRef.current = state;
@@ -940,13 +946,15 @@ export function FoodPlannerApp() {
                 variant="default"
                 className="w-full"
                 onClick={handleCopyShoppingList}
-                disabled={state.planner.groceryCart.length === 0}
+                disabled={
+                  state.planner.groceryCart.length === 0 || !canUseClipboard
+                }
               >
                 <Copy className="size-4" aria-hidden />
                 {cartCopyStatus === "copied"
                   ? "Copied shopping list"
                   : cartCopyStatus === "failed"
-                    ? "Copy failed"
+                    ? "Unable to copy shopping list"
                     : "Copy shopping list"}
               </Button>
             </div>
