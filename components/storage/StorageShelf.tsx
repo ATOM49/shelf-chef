@@ -17,20 +17,20 @@ const SHELF_STYLES: Record<
   }
 > = {
   fridge: {
-    base: "border-zinc-200 bg-white hover:border-zinc-300",
-    selected: "border-blue-500 bg-blue-50",
-    dropTarget: "border-blue-300 bg-blue-50/80 ring-2 ring-blue-100",
+    base: "border-border bg-card hover:border-muted-foreground/40",
+    selected: "border-primary bg-primary/10",
+    dropTarget: "border-primary/60 bg-primary/15 ring-2 ring-primary/20",
     dragging: "opacity-60",
-    handle: "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600",
-    cell: "border-zinc-300 bg-zinc-50 hover:border-zinc-400 hover:bg-zinc-100",
+    handle: "text-muted-foreground hover:bg-muted hover:text-foreground",
+    cell: "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/45",
   },
   pantry: {
-    base: "border-stone-200 bg-stone-50 hover:border-stone-300",
-    selected: "border-slate-500 bg-slate-50",
-    dropTarget: "border-slate-300 bg-slate-50/80 ring-2 ring-slate-100",
+    base: "border-border bg-card hover:border-muted-foreground/40",
+    selected: "border-secondary bg-secondary/35",
+    dropTarget: "border-secondary/70 bg-secondary/45 ring-2 ring-secondary/45",
     dragging: "opacity-60",
-    handle: "text-stone-400 hover:bg-stone-100 hover:text-stone-600",
-    cell: "border-stone-300 bg-white hover:border-stone-400 hover:bg-stone-50",
+    handle: "text-muted-foreground hover:bg-muted hover:text-foreground",
+    cell: "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/45",
   },
 };
 
@@ -81,11 +81,11 @@ export function StorageShelf({
       onDrop={onDrop}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="min-w-0 text-sm font-medium text-zinc-700">
+        <span className="min-w-0 text-sm font-medium text-foreground">
           {shelf.name}
         </span>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-muted-foreground">
             {shelf.rows} × {shelf.cols}
           </span>
           <button
@@ -125,7 +125,7 @@ export function StorageShelf({
               }}
             >
               {cellItems.length === 0 ? (
-                <span className="text-xs text-zinc-400">Empty</span>
+                <span className="text-xs text-muted-foreground">Empty</span>
               ) : (
                 <div className="flex flex-col gap-1">
                   {cellItems.map((item) => (

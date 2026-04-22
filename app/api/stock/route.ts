@@ -1,14 +1,10 @@
 import type { NextRequest } from "next/server";
+import { isLlmConfigurationError } from "@/lib/ai/structured";
 import { generateStockParseResponse } from "@/lib/stocking/generate";
 import { buildStockParsePrompt } from "@/lib/stocking/prompts";
 import { stockTextRequestSchema } from "@/lib/stocking/schema";
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return Response.json({ error: "GEMINI_API_KEY is not configured on this server." }, { status: 500 });
-  }
-
   let payload: unknown;
   try {
     payload = await req.json();
@@ -24,13 +20,16 @@ export async function POST(req: NextRequest) {
   try {
     const response = await generateStockParseResponse(
       buildStockParsePrompt(parsedRequest.data.input),
-      apiKey,
     );
     return Response.json(response);
   } catch (err) {
+    const status = isLlmConfigurationError(err) ? 500 : 502;
     return Response.json(
-      { error: "LLM call failed", detail: err instanceof Error ? err.message : String(err) },
-      { status: 502 },
+      {
+        error: isLlmConfigurationError(err) ? "LLM configuration error" : "LLM call failed",
+        detail: err instanceof Error ? err.message : String(err),
+      },
+      { status },
     );
   }
 }

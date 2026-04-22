@@ -7,11 +7,14 @@ import {
   useReducer,
   useRef,
   useState,
-  useTransition,
 } from "react";
 import { WeeklyPlanList } from "@/components/planner/WeeklyPlanList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  LOTTIE_ANIMATION_SOURCES,
+  LottieLoadingPanel,
+} from "@/components/ui/lottie-loading-panel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,7 +58,16 @@ import type {
   PreferredDishRequest,
 } from "@/lib/planner/types";
 import { clearAppState, loadAppState, saveAppState } from "@/lib/persistence";
-import { BookOpen, LoaderCircle, ShoppingCart, XIcon } from "lucide-react";
+import {
+  BookOpen,
+  LoaderCircle,
+  PackagePlus,
+  ShoppingCart,
+  SlidersHorizontal,
+  Sparkles,
+  Trash2,
+  XIcon,
+} from "lucide-react";
 
 type MobileTab = "storage" | "planner";
 
@@ -89,9 +101,10 @@ export function FoodPlannerApp() {
     mode: "browse",
   });
   const [mobileTab, setMobileTab] = useState<MobileTab>("storage");
+  const [clearPlanDialogOpen, setClearPlanDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [plannerApiError, setPlannerApiError] = useState<string | null>(null);
-  const [isPlannerPending, startPlannerTransition] = useTransition();
+  const [isPlannerPending, setIsPlannerPending] = useState(false);
   const fridgeInventory = state.inventory.filter(
     (item) => item.storageId === state.fridge.id,
   );
@@ -110,11 +123,7 @@ export function FoodPlannerApp() {
         state.planner.lastGeneratedConfig,
       )
     : false;
-  const planActionLabel = !hasPlan
-    ? "Create plan"
-    : isPlanStale
-      ? "Recreate plan"
-      : "Create plan";
+  const planActionLabel = "Create plan";
 
   useLayoutEffect(() => {
     latestStateRef.current = state;
@@ -217,56 +226,54 @@ export function FoodPlannerApp() {
 
   const handleGeneratePlan = useCallback(() => {
     setPlannerApiError(null);
-    startPlannerTransition(() => {
-      void (async () => {
-        try {
-          const payload: PlannerGenerationRequest = {
-            inventory: state.inventory.map((item) => ({
-              name: item.name,
-              normalizedName: item.normalizedName,
-              quantity: item.quantity,
-              unit: item.unit,
-              category: item.category,
-              expiresAt: item.expiresAt,
-            })),
-            preferences: state.planner.preferences,
-            preferredDishes: state.planner.preferredDishes.map((dish) => ({
-              name: dish.name,
-              mealType: dish.mealType,
-            })),
-            recipeBook: state.recipes,
+    setIsPlannerPending(true);
+    void (async () => {
+      try {
+        const payload: PlannerGenerationRequest = {
+          inventory: state.inventory.map((item) => ({
+            name: item.name,
+            normalizedName: item.normalizedName,
+            quantity: item.quantity,
+            unit: item.unit,
+            category: item.category,
+            expiresAt: item.expiresAt,
+          })),
+          preferences: state.planner.preferences,
+          preferredDishes: state.planner.preferredDishes.map((dish) => ({
+            name: dish.name,
+            mealType: dish.mealType,
+          })),
+          recipeBook: state.recipes,
+        };
+
+        const response = await fetch("/api/planner/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          const err = (await response.json()) as {
+            error?: string;
+            detail?: string;
           };
-
-          const response = await fetch("/api/planner/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          if (!response.ok) {
-            const err = (await response.json()) as {
-              error?: string;
-              detail?: string;
-            };
-            throw new Error(
-              err.detail || err.error || `HTTP ${response.status}`,
-            );
-          }
-
-          const rawData =
-            (await response.json()) as PlannerGenerationApiResponse;
-          const data = parsePlannerGenerationApiResponse(rawData);
-          dispatch({
-            type: "APPLY_GENERATED_PLAN",
-            recipes: data.recipes,
-            mealSlots: data.mealSlots,
-          });
-        } catch (err) {
-          setPlannerApiError(
-            err instanceof Error ? err.message : "Unknown planner error",
-          );
+          throw new Error(err.detail || err.error || `HTTP ${response.status}`);
         }
-      })();
-    });
+
+        const rawData = (await response.json()) as PlannerGenerationApiResponse;
+        const data = parsePlannerGenerationApiResponse(rawData);
+        dispatch({
+          type: "APPLY_GENERATED_PLAN",
+          recipes: data.recipes,
+          mealSlots: data.mealSlots,
+        });
+      } catch (err) {
+        setPlannerApiError(
+          err instanceof Error ? err.message : "Unknown planner error",
+        );
+      } finally {
+        setIsPlannerPending(false);
+      }
+    })();
   }, [
     state.inventory,
     state.planner.preferences,
@@ -390,17 +397,10 @@ export function FoodPlannerApp() {
     dispatch({ type: "REMOVE_CUSTOM_RECIPE", recipeId });
   }, []);
 
-  const handleClearPlan = useCallback(() => {
-    if (
-      !window.confirm(
-        "Clear the weekly plan and shopping cart? Your saved preferences will stay in place.",
-      )
-    ) {
-      return;
-    }
-
+  const handleConfirmClearPlan = useCallback(() => {
     setPlannerApiError(null);
     dispatch({ type: "CLEAR_WEEKLY_PLAN" });
+    setClearPlanDialogOpen(false);
   }, []);
 
   const handleReset = () => {
@@ -421,8 +421,29 @@ export function FoodPlannerApp() {
   };
 
   function renderPlannerMainContent() {
+    const plannerLoadingState = (
+      <LottieLoadingPanel
+        src={LOTTIE_ANIMATION_SOURCES.planner}
+        title={
+          hasPlan ? "Refreshing your weekly plan" : "Building your weekly plan"
+        }
+        description={
+          hasPlan
+            ? "Reworking recipes and meal slots with your latest settings and current inventory."
+            : "Matching recipes to your inventory, applying your preferences, and laying out the week."
+        }
+        statusLabel="Generating plan"
+        className="min-h-[24rem]"
+        panelClassName="max-w-lg"
+        animationClassName="scale-[0.92]"
+      />
+    );
+
     return (
-      <section className="flex min-h-0 w-full flex-1 flex-col rounded-xl border bg-muted/20 p-3">
+      <section
+        aria-busy={isPlannerPending}
+        className="flex min-h-0 w-full flex-1 flex-col rounded-xl border bg-muted/20 p-3"
+      >
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 pb-3">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -449,10 +470,12 @@ export function FoodPlannerApp() {
                 type="button"
                 variant="destructive"
                 size="sm"
-                onClick={handleClearPlan}
+                onClick={() => setClearPlanDialogOpen(true)}
                 disabled={isPlannerPending}
+                aria-label="Clear plan"
               >
-                Clear plan
+                <Trash2 className="size-4" aria-hidden />
+                <span className="hidden sm:inline">Clear plan</span>
               </Button>
             ) : null}
             <Button
@@ -460,18 +483,23 @@ export function FoodPlannerApp() {
               variant="outline"
               onClick={() => setPlannerSettingsOpen(true)}
               disabled={isPlannerPending}
+              aria-label="Customise plan"
             >
-              Customise plan
+              <SlidersHorizontal className="size-4" aria-hidden />
+              <span className="hidden sm:inline">Customise plan</span>
             </Button>
             <Button
               type="button"
               onClick={handleGeneratePlan}
               disabled={isPlannerPending}
+              className="whitespace-nowrap"
+              aria-label="Create plan"
             >
+              <Sparkles className="size-4" aria-hidden />
               {isPlannerPending ? (
                 <>
                   <LoaderCircle className="size-4 animate-spin" aria-hidden />
-                  <span>Creating plan...</span>
+                  <span>{planActionLabel}</span>
                 </>
               ) : (
                 planActionLabel
@@ -481,19 +509,6 @@ export function FoodPlannerApp() {
         </div>
 
         <div className="mt-3 flex flex-col gap-3">
-          {isPlannerPending ? (
-            <div className="flex items-start gap-3 rounded-xl border border-border bg-background/80 px-4 py-3 text-sm text-muted-foreground">
-              <LoaderCircle
-                className="mt-0.5 size-4 shrink-0 animate-spin text-foreground"
-                aria-hidden
-              />
-              <p>
-                Generating your weekly plan. This can take a little time while
-                recipes and meal slots are assembled.
-              </p>
-            </div>
-          ) : null}
-
           {plannerApiError ? (
             <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {plannerApiError}
@@ -502,26 +517,48 @@ export function FoodPlannerApp() {
         </div>
 
         <div className="mt-3 min-h-0 flex-1">
-          <WeeklyPlanList
-            meals={state.planner.weeklyPlan}
-            selectedMealId={state.planner.selectedMealId}
-            onSelectMeal={(mealId) => dispatch({ type: "SELECT_MEAL", mealId })}
-            onSetMealCooked={(mealId, cooked) =>
-              dispatch({ type: "SET_MEAL_COOKED", mealId, cooked })
-            }
-            onMoveMealSlot={(mealId, day, mealType) =>
-              dispatch({
-                type: "MOVE_PLANNED_MEAL_SLOT",
-                mealId,
-                day,
-                mealType,
-              })
-            }
-            onSwapMeal={handleOpenSwapRecipeBook}
-            onDeselectMeal={() =>
-              dispatch({ type: "SELECT_MEAL", mealId: undefined })
-            }
-          />
+          {isPlannerPending && !hasPlan ? (
+            plannerLoadingState
+          ) : (
+            <div className="relative h-full">
+              <WeeklyPlanList
+                meals={state.planner.weeklyPlan}
+                selectedMealId={state.planner.selectedMealId}
+                onSelectMeal={(mealId) =>
+                  dispatch({ type: "SELECT_MEAL", mealId })
+                }
+                onSetMealCooked={(mealId, cooked) =>
+                  dispatch({ type: "SET_MEAL_COOKED", mealId, cooked })
+                }
+                onMoveMealSlot={(mealId, day, mealType) =>
+                  dispatch({
+                    type: "MOVE_PLANNED_MEAL_SLOT",
+                    mealId,
+                    day,
+                    mealType,
+                  })
+                }
+                onSwapMeal={handleOpenSwapRecipeBook}
+                onDeselectMeal={() =>
+                  dispatch({ type: "SELECT_MEAL", mealId: undefined })
+                }
+              />
+
+              {isPlannerPending ? (
+                <div className="absolute inset-0 z-10 rounded-xl bg-background/78 p-3 supports-backdrop-filter:backdrop-blur-xs">
+                  <LottieLoadingPanel
+                    src={LOTTIE_ANIMATION_SOURCES.planner}
+                    title="Refreshing your weekly plan"
+                    description="Keeping your current plan visible while regenerating a new week in the background."
+                    statusLabel="Updating plan"
+                    className="h-full"
+                    panelClassName="max-w-lg"
+                    animationClassName="scale-[0.92]"
+                  />
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
       </section>
     );
@@ -546,7 +583,7 @@ export function FoodPlannerApp() {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xl">🍽️</span>
-              <span className="text-lg font-semibold">ShelfChef</span>
+              <h1 className="text-lg font-semibold">ShelfChef</h1>
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -563,9 +600,10 @@ export function FoodPlannerApp() {
                 variant="outline"
                 onClick={handleOpenRecipeBook}
                 disabled={isPlannerPending}
+                aria-label="Recipe book"
               >
                 <BookOpen className="size-4" aria-hidden />
-                Recipe book
+                <span className="hidden sm:inline">Recipe book</span>
               </Button>
               <Button
                 type="button"
@@ -573,9 +611,10 @@ export function FoodPlannerApp() {
                 size="sm"
                 onClick={() => setCartOpen(true)}
                 className="relative shrink-0"
+                aria-label="Shopping cart"
               >
                 <ShoppingCart className="size-4" aria-hidden />
-                <span>Cart</span>
+                <span className="hidden sm:inline">Cart</span>
                 {uncheckedCartCount > 0 ? (
                   <Badge className="ml-1 min-w-5 justify-center px-1.5">
                     {uncheckedCartCount}
@@ -603,8 +642,10 @@ export function FoodPlannerApp() {
                   size="sm"
                   className="shrink-0"
                   onClick={() => setStockingOpen(true)}
+                  aria-label="Stock items"
                 >
-                  Stock items
+                  <PackagePlus className="size-4" aria-hidden />
+                  <span className="hidden sm:inline">Stock items</span>
                 </Button>
               </div>
               <TabsContent
@@ -671,8 +712,10 @@ export function FoodPlannerApp() {
                           size="sm"
                           className="shrink-0"
                           onClick={() => setStockingOpen(true)}
+                          aria-label="Stock items"
                         >
-                          Stock items
+                          <PackagePlus className="size-4" aria-hidden />
+                          <span className="hidden sm:inline">Stock items</span>
                         </Button>
                       </div>
                     </Tabs>
@@ -806,6 +849,31 @@ export function FoodPlannerApp() {
           onCreateCustomRecipe={handleCreateCustomRecipe}
           onDeleteRecipe={handleDeleteCustomRecipe}
         />
+        <AlertDialog
+          open={clearPlanDialogOpen}
+          onOpenChange={setClearPlanDialogOpen}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear the weekly plan?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will remove your current weekly plan and shopping cart.
+                Your saved preferences will stay in place.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel render={<Button variant="outline" />}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                render={<Button variant="destructive" />}
+                onClick={handleConfirmClearPlan}
+              >
+                Clear plan
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>

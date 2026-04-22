@@ -18,7 +18,6 @@ import type {
 } from "@/lib/planner/types";
 import { revalidatePlannedMeals, validateRecipeAgainstInventory } from "@/lib/planner/validation";
 import { resolveRecipeByDishName } from "@/lib/recipes/resolve";
-import { recipes as systemRecipes } from "@/data/recipes";
 
 export type AppState = {
   fridge: FridgeLayout;
@@ -109,7 +108,7 @@ export function createDefaultAppState(): AppState {
     fridge: createEmptyFridge(),
     pantry: createEmptyPantry(),
     inventory: [],
-    recipes: [...systemRecipes],
+    recipes: [],
     planner: {
       preferences: "",
       preferredDishes: [],

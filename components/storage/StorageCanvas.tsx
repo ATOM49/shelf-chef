@@ -23,7 +23,6 @@ type StorageCanvasProps = {
 };
 
 type StorageCanvasFrameProps = {
-  layout: StorageLayout;
   shelfNodes: ReactNode;
   contentCount: number;
 };
@@ -130,7 +129,6 @@ export function StorageCanvas(props: StorageCanvasProps) {
   if (props.layout.storageType === "pantry") {
     return (
       <PantryCanvas
-        layout={props.layout}
         shelfNodes={content}
         contentCount={contentCount}
       />
@@ -138,7 +136,6 @@ export function StorageCanvas(props: StorageCanvasProps) {
   }
   return (
     <FridgeCanvasInner
-      layout={props.layout}
       shelfNodes={content}
       contentCount={contentCount}
     />
@@ -160,64 +157,62 @@ function StorageEmptyState({
 }
 
 function FridgeCanvasInner({
-  layout,
   shelfNodes,
   contentCount,
 }: StorageCanvasFrameProps) {
   return (
     <div className="flex h-full min-h-0 items-center justify-center">
       <div
-        className="relative flex h-full w-90 max-w-full flex-col overflow-hidden rounded-[32px] border-4 border-zinc-300 bg-zinc-50 p-4 shadow-xl"
+        className="relative flex h-full w-90 max-w-full flex-col overflow-hidden rounded-[32px] border-4 border-border bg-card p-4 shadow-xl"
         // style={{ height: `min(100%, ${layout.height}px)` }}
       >
         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1">
-          <div className="h-20 w-2.5 rounded-full bg-zinc-300 shadow-inner" />
+          <div className="h-20 w-2.5 rounded-full bg-border shadow-inner" />
         </div>
 
         {/* <div className="mb-4 flex items-center justify-between pr-6">
-          <h2 className="text-base font-semibold text-zinc-700">
+          <h2 className="text-base font-semibold text-foreground">
             {layout.name}
           </h2>
         </div> */}
 
         <CanvasShelfViewport
           contentCount={contentCount}
-          fadeColorClassName="from-zinc-50 via-zinc-50/90"
+          fadeColorClassName="from-card via-card/90"
           className="pr-2"
           contentClassName="pr-3"
         >
           {shelfNodes}
         </CanvasShelfViewport>
 
-        <div className="mt-4 h-3 shrink-0 rounded-b-2xl bg-zinc-200 pr-5" />
+        <div className="mt-4 h-3 shrink-0 rounded-b-2xl bg-muted pr-5" />
       </div>
     </div>
   );
 }
 
 function PantryCanvas({
-  layout,
   shelfNodes,
   contentCount,
 }: StorageCanvasFrameProps) {
   return (
     <div className="flex h-full min-h-0 items-center justify-center">
       <div
-        className="relative flex h-full w-90 max-w-full flex-col overflow-hidden rounded-2xl border-2 border-stone-300 bg-white shadow-md"
+        className="relative flex h-full w-90 max-w-full flex-col overflow-hidden rounded-2xl border-2 border-border bg-card shadow-md"
         // style={{ height: `min(100%, ${layout.height}px)` }}
       >
-        <div className="h-3 w-full shrink-0 bg-stone-200" />
+        <div className="h-3 w-full shrink-0 bg-muted" />
 
         <div className="flex min-h-0 flex-1 flex-col p-4">
           <CanvasShelfViewport
             contentCount={contentCount}
-            fadeColorClassName="from-white via-white/90"
+            fadeColorClassName="from-card via-card/90"
           >
             {shelfNodes}
           </CanvasShelfViewport>
         </div>
 
-        <div className="h-2 w-full shrink-0 bg-stone-200" />
+        <div className="h-2 w-full shrink-0 bg-muted" />
       </div>
     </div>
   );

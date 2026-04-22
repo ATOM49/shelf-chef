@@ -194,11 +194,11 @@ const plannerMealSlotExtractionSchema = z.object({
   recipeTitle: maybeStringSchema,
 }).strip();
 
-const recipeGenerationModelResponseSchema = z.object({
+export const recipeGenerationModelResponseSchema = z.object({
   recipes: z.array(recipeExtractionSchema),
 }).strip();
 
-const plannerMealSlotsModelResponseSchema = z.object({
+export const plannerMealSlotsModelResponseSchema = z.object({
   mealSlots: z.array(plannerMealSlotExtractionSchema),
 }).strip();
 

@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { isLlmConfigurationError } from "@/lib/ai/structured";
 import { mergeRecipes } from "@/lib/appState";
 import { generateRecipeResponse } from "@/lib/planner/generate";
 import { buildRecipeGenerationPrompt } from "@/lib/planner/prompts";
@@ -8,11 +9,6 @@ import {
 } from "@/lib/planner/schema";
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return Response.json({ error: "GEMINI_API_KEY is not configured on this server." }, { status: 500 });
-  }
-
   let payload: unknown;
   try {
     payload = await req.json();
@@ -28,7 +24,6 @@ export async function POST(req: NextRequest) {
   try {
     const response = await generateRecipeResponse(
       buildRecipeGenerationPrompt(parsedRequest.data),
-      apiKey,
       parsedRequest.data.preferredDishes,
       parsedRequest.data.inventory,
     );
@@ -38,9 +33,13 @@ export async function POST(req: NextRequest) {
       }),
     );
   } catch (err) {
+    const status = isLlmConfigurationError(err) ? 500 : 502;
     return Response.json(
-      { error: "LLM call failed", detail: err instanceof Error ? err.message : String(err) },
-      { status: 502 },
+      {
+        error: isLlmConfigurationError(err) ? "LLM configuration error" : "LLM call failed",
+        detail: err instanceof Error ? err.message : String(err),
+      },
+      { status },
     );
   }
 }

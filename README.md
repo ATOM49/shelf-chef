@@ -1,3 +1,5 @@
+# Food Planner
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
@@ -15,6 +17,24 @@ bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+For the LLM-backed planner routes, configure a model provider before starting the app:
+
+```bash
+# Shared provider and model for every LLM-backed route
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini-2.5-flash
+
+# Provide one matching API key, or use LLM_API_KEY instead
+GEMINI_API_KEY=your-google-api-key
+# OPENAI_API_KEY=your-openai-api-key
+# ANTHROPIC_API_KEY=your-anthropic-api-key
+
+# Optional Gemini-only web search
+LLM_ENABLE_GOOGLE_SEARCH=true
+```
+
+Supported providers are `gemini`, `openai`, and `anthropic`. You can also encode the provider directly into `LLM_MODEL`, for example `openai:gpt-4.1-mini` or `anthropic:claude-sonnet-4-0`.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

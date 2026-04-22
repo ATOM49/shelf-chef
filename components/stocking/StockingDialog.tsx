@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { LoaderCircle } from "lucide-react";
+import { useState } from "react";
+import { LoaderCircle, XIcon } from "lucide-react";
 import { generateId } from "@/lib/id";
 import type { StockingItemDraft } from "@/lib/appState";
 import {
@@ -19,14 +19,19 @@ import type {
 } from "@/lib/stocking/types";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  LOTTIE_ANIMATION_SOURCES,
+  LottieLoadingPanel,
+} from "@/components/ui/lottie-loading-panel";
 import {
   Select,
   SelectContent,
@@ -60,7 +65,7 @@ export function StockingDialog({
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(
     null,
   );
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
   const handleClose = () => {
     onOpenChange(false);
@@ -73,12 +78,15 @@ export function StockingDialog({
     }, 300);
   };
 
-  const handleDialogOpenChange = (nextOpen: boolean) => {
+  const handleDrawerOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
       onOpenChange(true);
       return;
     }
 
+    if (isPending) {
+      return;
+    }
     handleClose();
   };
 
@@ -89,31 +97,31 @@ export function StockingDialog({
   ) => {
     setApiError(null);
     setPendingAction(nextPendingAction);
-    startTransition(() => {
-      void (async () => {
-        try {
-          const res = await fetch(endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(request),
-          });
-          if (!res.ok) {
-            const err = (await res.json()) as { error?: string };
-            throw new Error(err.error ?? `HTTP ${res.status}`);
-          }
-          const rawData = (await res.json()) as StockApiResponse;
-          const data = parseStockApiResponseForReview(rawData);
-          setStockedItems(
-            data.items.map((item) => ({ ...item, id: generateId() })),
-          );
-          setStep("preview");
-        } catch (err) {
-          setApiError(err instanceof Error ? err.message : "Unknown error");
-        } finally {
-          setPendingAction(null);
+    setIsPending(true);
+    void (async () => {
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        });
+        if (!res.ok) {
+          const err = (await res.json()) as { error?: string };
+          throw new Error(err.error ?? `HTTP ${res.status}`);
         }
-      })();
-    });
+        const rawData = (await res.json()) as StockApiResponse;
+        const data = parseStockApiResponseForReview(rawData);
+        setStockedItems(
+          data.items.map((item) => ({ ...item, id: generateId() })),
+        );
+        setStep("preview");
+      } catch (err) {
+        setApiError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setPendingAction(null);
+        setIsPending(false);
+      }
+    })();
   };
 
   const handleAnalyze = () => {
@@ -156,31 +164,106 @@ export function StockingDialog({
     );
   };
 
+  const pendingState = getStockPendingState(pendingAction);
+
   return (
-    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="w-full min-w-[min(95vw,var(--container-5xl))] max-h-[90svh] overflow-y-auto">
-        {step === "input" ? (
-          <InputStep
-            freeText={freeText}
-            onFreeTextChange={setFreeText}
-            isPending={isPending}
-            pendingAction={pendingAction}
-            apiError={apiError}
-            onAnalyze={handleAnalyze}
-            onSelectPreset={handlePresetSelect}
-            onClose={handleClose}
-          />
-        ) : (
-          <PreviewStep
-            items={stockedItems}
-            onUpdateItem={updateStockedItem}
-            onBack={() => setStep("input")}
-            onCommit={handleCommit}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+    <Drawer
+      open={open}
+      onOpenChange={handleDrawerOpenChange}
+      direction="left"
+      modal={true}
+    >
+      <DrawerContent
+        aria-busy={isPending}
+        className="fixed inset-y-0 left-0 z-60 h-svh w-[min(96vw,76rem)] max-w-[min(96vw,76rem)] rounded-r-xl border-r overflow-y-auto p-0 data-[vaul-drawer-direction=left]:w-[min(96vw,72rem)] data-[vaul-drawer-direction=left]:sm:max-w-[min(96vw,72rem)]"
+      >
+        <div className="relative flex min-h-0 flex-1 flex-col p-6">
+          <div className="absolute right-0 top-0 z-20">
+            <DrawerClose asChild>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Close stocking drawer"
+                disabled={isPending}
+              >
+                <XIcon className="size-4" aria-hidden />
+              </Button>
+            </DrawerClose>
+          </div>
+
+          <div
+            className={
+              isPending
+                ? "pointer-events-none select-none opacity-30"
+                : undefined
+            }
+          >
+            {step === "input" ? (
+              <InputStep
+                freeText={freeText}
+                onFreeTextChange={setFreeText}
+                isPending={isPending}
+                pendingAction={pendingAction}
+                apiError={apiError}
+                onAnalyze={handleAnalyze}
+                onSelectPreset={handlePresetSelect}
+                onClose={handleClose}
+              />
+            ) : (
+              <PreviewStep
+                items={stockedItems}
+                onUpdateItem={updateStockedItem}
+                onBack={() => setStep("input")}
+                onCommit={handleCommit}
+              />
+            )}
+          </div>
+
+          {isPending ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-popover/92 p-4 supports-backdrop-filter:backdrop-blur-sm">
+              <LottieLoadingPanel
+                src={LOTTIE_ANIMATION_SOURCES.stock}
+                title={pendingState.title}
+                description={pendingState.description}
+                statusLabel={pendingState.statusLabel}
+                className="min-h-[28rem]"
+                panelClassName="max-w-xl"
+              />
+            </div>
+          ) : null}
+        </div>
+      </DrawerContent>
+    </Drawer>
   );
+}
+
+function getStockPendingState(pendingAction: PendingAction | null) {
+  if (pendingAction === "text") {
+    return {
+      title: "Reading your stock note",
+      description:
+        "Turning your note into reviewable inventory rows with suggested storage details.",
+      statusLabel: "Analyzing stock note",
+    };
+  }
+
+  if (pendingAction) {
+    const presetLabel = PRESET_METADATA[pendingAction].label;
+
+    return {
+      title: `Generating the ${presetLabel} preset`,
+      description:
+        "Assembling fridge and pantry items for this kitchen preset before the review table opens.",
+      statusLabel: "Generating stock preset",
+    };
+  }
+
+  return {
+    title: "Preparing your stock review",
+    description: "Organizing inventory suggestions for you to review.",
+    statusLabel: "Preparing review",
+  };
 }
 
 // ─── Step 1: Input ────────────────────────────────────────────────────────────
@@ -211,12 +294,12 @@ function InputStep({
 
   return (
     <>
-      <DialogHeader>
-        <DialogTitle>Stock up!</DialogTitle>
-        <DialogDescription>
+      <DrawerHeader className="px-0 pb-2 pt-0">
+        <DrawerTitle>Stock up!</DrawerTitle>
+        <DrawerDescription>
           Add items to your storage inventory.
-        </DialogDescription>
-      </DialogHeader>
+        </DrawerDescription>
+      </DrawerHeader>
 
       <div className="grid gap-6 pt-2">
         <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
@@ -354,14 +437,14 @@ function PreviewStep({
 
   return (
     <>
-      <DialogHeader>
-        <DialogTitle>Review AI-organized stock</DialogTitle>
-        <DialogDescription>
+      <DrawerHeader className="px-0 pb-2 pt-0">
+        <DrawerTitle>Review AI-organized stock</DrawerTitle>
+        <DrawerDescription>
           {flaggedCount > 0
             ? `${flaggedCount} item${flaggedCount !== 1 ? "s" : ""} flagged for review (highlighted in amber). Edit any field before adding to inventory.`
             : "Everything looks ready. Edit any field before adding to inventory."}
-        </DialogDescription>
-      </DialogHeader>
+        </DrawerDescription>
+      </DrawerHeader>
 
       <div className="grid gap-4 pt-2">
         <div className="overflow-x-auto rounded-lg border">

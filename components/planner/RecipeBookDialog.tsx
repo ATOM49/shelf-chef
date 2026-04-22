@@ -6,6 +6,14 @@ import { RecipeIngredientList } from "@/components/planner/RecipeIngredientList"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Drawer,
   DrawerClose,
   DrawerContent,
@@ -516,11 +524,15 @@ function RecipeBookDetail({
   recipe,
   inventory,
   onBack,
+  deleteConfirmOpen,
+  onDeleteConfirmOpenChange,
   onDeleteRecipe,
 }: {
   recipe: Recipe;
   inventory: InventoryItem[];
   onBack: () => void;
+  deleteConfirmOpen: boolean;
+  onDeleteConfirmOpenChange: (open: boolean) => void;
   onDeleteRecipe: (recipeId: string) => void;
 }) {
   const validation = useMemo(
@@ -571,16 +583,48 @@ function RecipeBookDetail({
             </div>
           </div>
           {recipe.source === "user-saved" ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full sm:w-auto"
-              onClick={() => onDeleteRecipe(recipe.id)}
+            <Popover
+              open={deleteConfirmOpen}
+              onOpenChange={onDeleteConfirmOpenChange}
             >
-              <Trash2 className="size-4" aria-hidden />
-              Delete recipe
-            </Button>
+              <PopoverTrigger
+                type="button"
+                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-auto"
+              >
+                <Trash2 className="size-4" aria-hidden />
+                Delete recipe
+              </PopoverTrigger>
+              <PopoverContent align="end" sideOffset={8} className="w-80 p-4">
+                <PopoverHeader>
+                  <PopoverTitle>Delete this recipe?</PopoverTitle>
+                  <PopoverDescription>
+                    This removes the saved recipe from your recipe book. You
+                    can regenerate it later from your inventory.
+                  </PopoverDescription>
+                </PopoverHeader>
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onDeleteConfirmOpenChange(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      onDeleteConfirmOpenChange(false);
+                      onDeleteRecipe(recipe.id);
+                    }}
+                  >
+                    Delete recipe
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
           ) : null}
         </div>
       </div>
@@ -697,6 +741,7 @@ export function RecipeBookDialog({
     sourceFilter: "all",
   });
   const [view, setView] = useState<DialogView>("browse");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const showCreateView = mode === "browse";
   const selectedRecipe = useMemo(
     () => recipes.find((recipe) => recipe.id === selectedRecipeId),
@@ -706,20 +751,28 @@ export function RecipeBookDialog({
   function handleViewRecipe(recipeId: string) {
     setSelectedRecipeId(recipeId);
     setView("detail");
+    setDeleteConfirmOpen(false);
   }
 
   function handleRecipeCreated(recipeId: string) {
     setSelectedRecipeId(recipeId);
     setView("detail");
+    setDeleteConfirmOpen(false);
+  }
+
+  function handleBackToBrowse() {
+    setView("browse");
+    setDeleteConfirmOpen(false);
   }
 
   function handleDeleteRecipe(recipeId: string) {
-    if (!window.confirm("Delete this saved recipe from the recipe book?")) {
+    if (!selectedRecipe || selectedRecipe.id !== recipeId) {
       return;
     }
 
     setSelectedRecipeId(undefined);
     setView("browse");
+    setDeleteConfirmOpen(false);
     onDeleteRecipe(recipeId);
   }
 
@@ -727,6 +780,7 @@ export function RecipeBookDialog({
     if (!nextOpen) {
       setSelectedRecipeId(undefined);
       setView("browse");
+      setDeleteConfirmOpen(false);
     }
 
     onOpenChange(nextOpen);
@@ -786,7 +840,9 @@ export function RecipeBookDialog({
             <RecipeBookDetail
               recipe={selectedRecipe}
               inventory={inventory}
-              onBack={() => setView("browse")}
+              onBack={handleBackToBrowse}
+              deleteConfirmOpen={deleteConfirmOpen}
+              onDeleteConfirmOpenChange={setDeleteConfirmOpen}
               onDeleteRecipe={handleDeleteRecipe}
             />
           ) : view === "create" && showCreateView ? (
