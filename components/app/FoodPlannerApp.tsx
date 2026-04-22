@@ -402,16 +402,40 @@ export function FoodPlannerApp() {
     [state.inventory, state.recipes],
   );
 
-  const handleCreateVoiceRecipe = useCallback(
-    async (payload: { audioFile: File; preferences: string }) => {
+  const handleTranscribeAudio = useCallback(
+    async (payload: { audioFile: File }) => {
       const formData = new FormData();
       formData.append("audio", payload.audioFile);
-      formData.append("preferences", payload.preferences);
-      formData.append("recipeBook", JSON.stringify(state.recipes));
 
-      const response = await fetch("/api/recipes/generate/voice", {
+      const response = await fetch("/api/recipes/transcribe", {
         method: "POST",
         body: formData,
+      });
+
+      if (!response.ok) {
+        const err = (await response.json()) as { error?: string; detail?: string };
+        throw new Error(err.detail || err.error || `HTTP ${response.status}`);
+      }
+
+      const data = (await response.json()) as { transcript?: string };
+      if (!data.transcript) {
+        throw new Error("No transcript returned. Please try again.");
+      }
+      return data.transcript;
+    },
+    [],
+  );
+
+  const handleCreateVoiceRecipe = useCallback(
+    async (payload: { transcript: string; preferences: string }) => {
+      const response = await fetch("/api/recipes/generate/voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transcript: payload.transcript,
+          preferences: payload.preferences,
+          recipeBook: state.recipes,
+        }),
       });
 
       if (!response.ok) {
@@ -900,6 +924,7 @@ export function FoodPlannerApp() {
               : undefined
           }
           onCreateCustomRecipe={handleCreateCustomRecipe}
+          onTranscribeAudio={handleTranscribeAudio}
           onCreateVoiceRecipe={handleCreateVoiceRecipe}
           onDeleteRecipe={handleDeleteCustomRecipe}
         />

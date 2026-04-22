@@ -54,8 +54,9 @@ type RecipeBookDialogProps = {
     preferences: string;
     dishName: string;
   }) => Promise<string>;
+  onTranscribeAudio: (payload: { audioFile: File }) => Promise<string>;
   onCreateVoiceRecipe: (payload: {
-    audioFile: File;
+    transcript: string;
     preferences: string;
   }) => Promise<string>;
   onDeleteRecipe: (recipeId: string) => void;
@@ -531,6 +532,7 @@ const ACCEPTED_AUDIO_TYPES = "audio/mp3,audio/mpeg,audio/wav,audio/webm,audio/og
 
 type VoiceCaptureMode = "upload" | "record";
 type RecordingState = "idle" | "recording" | "stopped";
+type VoiceStep = "capture" | "review" | "generating";
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -545,17 +547,22 @@ function formatBytes(bytes: number) {
 }
 
 function RecipeBookVoiceCreate({
+  onTranscribeAudio,
   onCreateVoiceRecipe,
   onRecipeCreated,
 }: {
-  onCreateVoiceRecipe: (payload: { audioFile: File; preferences: string }) => Promise<string>;
+  onTranscribeAudio: (payload: { audioFile: File }) => Promise<string>;
+  onCreateVoiceRecipe: (payload: { transcript: string; preferences: string }) => Promise<string>;
   onRecipeCreated: (recipeId: string) => void;
 }) {
+  const [voiceStep, setVoiceStep] = useState<VoiceStep>("capture");
   const [captureMode, setCaptureMode] = useState<VoiceCaptureMode>("upload");
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [transcript, setTranscript] = useState("");
   const [preferences, setPreferences] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Recording state
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
@@ -591,7 +598,7 @@ function RecipeBookVoiceCreate({
     setRecordingState("idle");
     setRecordingSeconds(0);
     setMicError(null);
-    setSubmitError(null);
+    setActionError(null);
     audioChunksRef.current = [];
     setCaptureMode(mode);
   }
@@ -648,20 +655,20 @@ function RecipeBookVoiceCreate({
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    setSubmitError(null);
+    setActionError(null);
     if (!file) {
       setAudioFile(null);
       return;
     }
     if (file.size > MAX_AUDIO_SIZE_BYTES) {
-      setSubmitError(`Audio file must be under ${MAX_AUDIO_SIZE_MB} MB.`);
+      setActionError(`Audio file must be under ${MAX_AUDIO_SIZE_MB} MB.`);
       setAudioFile(null);
       event.target.value = "";
       return;
     }
     const baseMime = file.type.split(";")[0].trim();
     if (!SUPPORTED_AUDIO_MIME_TYPES.has(baseMime)) {
-      setSubmitError("Unsupported audio format. Use mp3, wav, webm, ogg, flac, aac, or mp4.");
+      setActionError("Unsupported audio format. Use mp3, wav, webm, ogg, flac, aac, or mp4.");
       setAudioFile(null);
       event.target.value = "";
       return;
@@ -669,37 +676,144 @@ function RecipeBookVoiceCreate({
     setAudioFile(file);
   }
 
-  async function handleSubmit() {
+  async function handleTranscribe() {
     if (!audioFile) {
-      setSubmitError(captureMode === "upload" ? "Please select an audio file." : "Please record a voice note first.");
+      setActionError(captureMode === "upload" ? "Please select an audio file." : "Please record a voice note first.");
       return;
     }
 
-    setIsSubmitting(true);
-    setSubmitError(null);
+    setIsTranscribing(true);
+    setActionError(null);
 
     try {
-      const recipeId = await onCreateVoiceRecipe({ audioFile, preferences });
+      const result = await onTranscribeAudio({ audioFile });
+      setTranscript(result);
+      setVoiceStep("review");
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : "Unable to transcribe audio right now.",
+      );
+    } finally {
+      setIsTranscribing(false);
+    }
+  }
+
+  async function handleGenerate() {
+    setIsGenerating(true);
+    setVoiceStep("generating");
+    setActionError(null);
+
+    try {
+      const recipeId = await onCreateVoiceRecipe({ transcript, preferences });
       setAudioFile(null);
+      setTranscript("");
       setPreferences("");
       setRecordingState("idle");
       setRecordingSeconds(0);
       audioChunksRef.current = [];
+      setVoiceStep("capture");
       onRecipeCreated(recipeId);
     } catch (error) {
-      setSubmitError(
+      setActionError(
         error instanceof Error ? error.message : "Unable to generate a recipe right now.",
       );
+      setVoiceStep("review");
     } finally {
-      setIsSubmitting(false);
+      setIsGenerating(false);
     }
+  }
+
+  function handleBackToCapture() {
+    setVoiceStep("capture");
+    setTranscript("");
+    setActionError(null);
   }
 
   const hasAudio = audioFile !== null;
 
+  // ── Step: transcript review ────────────────────────────────────────────────
+  if (voiceStep === "review" || voiceStep === "generating") {
+    return (
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="grid gap-4 px-6 py-4 pb-8">
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+              Step 2 of 2
+            </p>
+            <h4 className="text-base font-semibold text-foreground">Review transcript</h4>
+            <p className="text-sm text-muted-foreground">
+              This is what we understood from your voice note. Edit it if needed before generating your recipe.
+            </p>
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="voice-transcript">Transcript</Label>
+            <Textarea
+              id="voice-transcript"
+              rows={6}
+              value={transcript}
+              disabled={isGenerating}
+              onChange={(event) => setTranscript(event.target.value)}
+              className="resize-y font-[inherit] text-sm leading-relaxed"
+            />
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="voice-recipe-preferences-review">Additional preferences</Label>
+            <Textarea
+              id="voice-recipe-preferences-review"
+              rows={3}
+              placeholder="Optional — e.g. high protein, quick weeknight dinner, avoid nuts"
+              value={preferences}
+              disabled={isGenerating}
+              onChange={(event) => setPreferences(event.target.value)}
+            />
+          </div>
+
+          {actionError ? (
+            <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {actionError}
+            </div>
+          ) : null}
+
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleBackToCapture}
+              disabled={isGenerating}
+            >
+              <ArrowLeft className="size-4" aria-hidden />
+              Change audio
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleGenerate()}
+              disabled={isGenerating || transcript.trim().length === 0}
+            >
+              {isGenerating ? "Generating recipe…" : "Generate recipe"}
+            </Button>
+          </div>
+        </div>
+      </ScrollArea>
+    );
+  }
+
+  // ── Step: audio capture ────────────────────────────────────────────────────
   return (
     <div className="flex min-h-0 flex-1 flex-col px-6 py-4">
       <div className="grid gap-4">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+            Step 1 of 2
+          </p>
+          <h4 className="text-base font-semibold text-foreground">Capture audio</h4>
+          <p className="text-sm text-muted-foreground">
+            Describe the dish you want to make, then we&apos;ll transcribe it for your review.
+          </p>
+        </div>
+
         {/* Capture mode tabs */}
         <div className="flex gap-2">
           <Button
@@ -707,7 +821,7 @@ function RecipeBookVoiceCreate({
             size="sm"
             variant={captureMode === "upload" ? "default" : "outline"}
             onClick={() => switchCaptureMode("upload")}
-            disabled={isSubmitting}
+            disabled={isTranscribing}
           >
             <Upload className="size-4" aria-hidden />
             Upload file
@@ -717,7 +831,7 @@ function RecipeBookVoiceCreate({
             size="sm"
             variant={captureMode === "record" ? "default" : "outline"}
             onClick={() => switchCaptureMode("record")}
-            disabled={isSubmitting}
+            disabled={isTranscribing}
           >
             <Mic className="size-4" aria-hidden />
             Record audio
@@ -732,7 +846,7 @@ function RecipeBookVoiceCreate({
               id="voice-recipe-audio-upload"
               type="file"
               accept={ACCEPTED_AUDIO_TYPES}
-              disabled={isSubmitting}
+              disabled={isTranscribing}
               onChange={handleFileChange}
             />
             <p className="text-xs text-muted-foreground">
@@ -756,7 +870,7 @@ function RecipeBookVoiceCreate({
                 variant="outline"
                 className="h-16 w-full gap-3 rounded-2xl border-2 border-dashed text-base"
                 onClick={() => void handleStartRecording()}
-                disabled={isSubmitting}
+                disabled={isTranscribing}
               >
                 <Mic className="size-5" aria-hidden />
                 Tap to start recording
@@ -802,41 +916,28 @@ function RecipeBookVoiceCreate({
                   setRecordingSeconds(0);
                   audioChunksRef.current = [];
                 }
-                setSubmitError(null);
+                setActionError(null);
               }}
-              disabled={isSubmitting}
+              disabled={isTranscribing}
             >
               <XIcon className="size-4" aria-hidden />
             </Button>
           </div>
         ) : null}
 
-        {/* Preferences */}
-        <div className="grid gap-1.5">
-          <Label htmlFor="voice-recipe-preferences">Additional preferences</Label>
-          <Textarea
-            id="voice-recipe-preferences"
-            rows={3}
-            placeholder="Optional — e.g. high protein, quick weeknight dinner, avoid nuts"
-            value={preferences}
-            disabled={isSubmitting}
-            onChange={(event) => setPreferences(event.target.value)}
-          />
-        </div>
-
-        {submitError ? (
+        {actionError ? (
           <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {submitError}
+            {actionError}
           </div>
         ) : null}
 
         <div className="flex justify-end">
           <Button
             type="button"
-            onClick={() => void handleSubmit()}
-            disabled={isSubmitting || !hasAudio}
+            onClick={() => void handleTranscribe()}
+            disabled={isTranscribing || !hasAudio}
           >
-            {isSubmitting ? "Generating recipe…" : "Generate recipe"}
+            {isTranscribing ? "Transcribing…" : "Transcribe audio"}
           </Button>
         </div>
       </div>
@@ -1056,6 +1157,7 @@ export function RecipeBookDialog({
   swapMealType,
   onSelectRecipe,
   onCreateCustomRecipe,
+  onTranscribeAudio,
   onCreateVoiceRecipe,
   onDeleteRecipe,
 }: RecipeBookDialogProps) {
@@ -1189,6 +1291,7 @@ export function RecipeBookDialog({
             />
           ) : view === "voice" && showCreateView ? (
             <RecipeBookVoiceCreate
+              onTranscribeAudio={onTranscribeAudio}
               onCreateVoiceRecipe={onCreateVoiceRecipe}
               onRecipeCreated={handleRecipeCreated}
             />
