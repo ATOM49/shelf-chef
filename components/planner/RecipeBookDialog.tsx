@@ -58,7 +58,6 @@ type RecipeBrowseState = {
 
 const SOURCE_FILTERS: RecipeSourceFilter[] = [
   "all",
-  "system",
   "user-requested",
   "user-saved",
 ];
@@ -71,15 +70,7 @@ const MEAL_TYPE_FILTERS: RecipeMealTypeFilter[] = [
 ];
 
 function formatSourceLabel(source: RecipeSource) {
-  if (source === "user-requested") {
-    return "generated";
-  }
-
-  if (source === "user-saved") {
-    return "saved";
-  }
-
-  return "system";
+  return source === "user-saved" ? "saved" : "generated";
 }
 
 function formatMealTypeLabel(mealType: Recipe["mealType"]) {
@@ -157,8 +148,8 @@ function RecipeBookBrowse({
       const rightValidation = validationByRecipeId.get(right.id);
       const leftCookable = leftValidation?.canCook ? 0 : 1;
       const rightCookable = rightValidation?.canCook ? 0 : 1;
-      const leftSource = left.source === "user-saved" ? 0 : left.source === "user-requested" ? 1 : 2;
-      const rightSource = right.source === "user-saved" ? 0 : right.source === "user-requested" ? 1 : 2;
+      const leftSource = left.source === "user-saved" ? 0 : 1;
+      const rightSource = right.source === "user-saved" ? 0 : 1;
 
       return (
         leftCookable - rightCookable ||

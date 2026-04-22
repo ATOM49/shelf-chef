@@ -66,6 +66,10 @@ function revivePlannerConfigSnapshot(
   };
 }
 
+function normalizeRecipeSource(source: unknown): Recipe["source"] {
+  return source === "user-saved" ? "user-saved" : "user-requested";
+}
+
 function migrateLegacyLayout(stored: unknown): AppState | undefined {
   if (!isObject(stored) || !Array.isArray(stored.shelves)) {
     return undefined;
@@ -210,9 +214,17 @@ function reviveAppState(stored: unknown): AppState | undefined {
       };
     });
 
-  // Merge system recipes with any user-saved recipes persisted in storage
+  // Normalize persisted recipes so legacy `system` sources become generated recipes.
   const storedRecipes = Array.isArray(stored.recipes)
-    ? (stored.recipes as Recipe[])
+    ? stored.recipes
+        .filter(isObject)
+        .map(
+          (recipe) =>
+            ({
+              ...recipe,
+              source: normalizeRecipeSource(recipe.source),
+            }) as Recipe,
+        )
     : [];
 
   return {

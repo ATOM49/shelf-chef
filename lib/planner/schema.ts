@@ -114,7 +114,7 @@ const recipeSchema = z.object({
   ingredients: z.array(recipeIngredientSchema).min(1).max(MAX_INGREDIENTS),
   instructions: z.array(z.string().trim().min(1).max(240)).max(MAX_INSTRUCTIONS).optional(),
   referenceUrl: z.string().url().optional(),
-  source: z.enum(["system", "user-requested", "user-saved"]),
+  source: z.enum(["user-requested", "user-saved"]),
 }).strict();
 
 const plannerMealSlotSchema = z.object({
