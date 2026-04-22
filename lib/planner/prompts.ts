@@ -1,7 +1,6 @@
 import { INVENTORY_UNITS } from "@/lib/inventory/types";
 import { buildInventoryUnitHints } from "@/lib/inventory/units";
 import {
-  PLANNED_MEAL_TYPES,
   PLANNER_WEEK_DAYS,
   type CustomRecipeGenerationRequest,
   type PlannerGenerationRequest,
@@ -226,9 +225,8 @@ export function buildWeeklyPlannerPrompt({
 
   const preferenceSummary =
     preferences.trim() || "No additional preferences supplied.";
-  const requiredMealTypes = mealTypes.length > 0 ? mealTypes : PLANNED_MEAL_TYPES;
-  const requiredSlotCount = PLANNER_WEEK_DAYS.length * requiredMealTypes.length;
-  const requiredMealTypesLabel = requiredMealTypes.join(", ");
+  const requiredSlotCount = PLANNER_WEEK_DAYS.length * mealTypes.length;
+  const requiredMealTypesLabel = mealTypes.join(", ");
 
   return `You are a weekly meal planner for a home kitchen app.
 

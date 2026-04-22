@@ -145,7 +145,9 @@ export const plannerGenerateRequestSchema = z.object({
     .array(z.enum(PLANNED_MEAL_TYPES))
     .min(1)
     .max(PLANNED_MEAL_TYPES.length)
-    .refine((mealTypes) => new Set(mealTypes).size === mealTypes.length),
+    .refine((mealTypes) => new Set(mealTypes).size === mealTypes.length, {
+      message: "Meal types must be unique",
+    }),
   recipeBook: z.array(recipeSchema).max(MAX_RECIPE_BOOK_RECIPES),
 }).strict();
 
@@ -579,10 +581,6 @@ function assertCompleteWeeklySchedule(
   mealSlots: PlannerMealSlot[],
   mealTypes: PlannedMealType[],
 ) {
-  if (mealTypes.length === 0) {
-    throw new Error("Planner request must include at least one meal type.");
-  }
-
   const expectedSlots = new Set<string>();
   for (const day of PLANNER_WEEK_DAYS) {
     for (const mealType of mealTypes) {

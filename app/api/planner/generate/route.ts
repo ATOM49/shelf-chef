@@ -13,13 +13,13 @@ import {
   parsePlannerGenerationApiResponse,
   plannerGenerateRequestSchema,
 } from "@/lib/planner/schema";
-import type { Recipe } from "@/lib/planner/types";
+import type { PlannedMealType, Recipe } from "@/lib/planner/types";
 
 const MAX_PLANNER_POOL_SIZE = 72;
 
 function selectPlannerRecipePool(
   recipes: Recipe[],
-  prioritizedMealTypes: PlannerGenerateRequestMealType[],
+  prioritizedMealTypes: PlannedMealType[],
 ) {
   if (recipes.length <= MAX_PLANNER_POOL_SIZE) {
     return recipes;
@@ -72,8 +72,6 @@ function selectPlannerRecipePool(
 
   return pool;
 }
-
-type PlannerGenerateRequestMealType = "breakfast" | "lunch" | "dinner";
 
 export async function POST(req: NextRequest) {
   let payload: unknown;
