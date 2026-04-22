@@ -238,7 +238,7 @@ function CanvasShelfViewport({
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>
       <div ref={scrollRootRef} className="h-full">
-        <ScrollArea className="h-full">
+        <ScrollArea className="h-full" hideScrollbar>
           <div
             ref={contentRef}
             className={cn("flex min-h-full flex-col", contentClassName)}
