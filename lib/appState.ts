@@ -223,11 +223,7 @@ export function getRecipeDedupeKey(recipe: Pick<Recipe, "mealType" | "title">) {
 }
 
 function getRecipeSourcePriority(source: Recipe["source"]) {
-  if (source === "user-saved") {
-    return 2;
-  }
-
-  return 1;
+  return source === "user-saved" ? 2 : 1;
 }
 
 function choosePreferredRecipe(current: Recipe, candidate: Recipe) {
