@@ -60,6 +60,7 @@ import {
   parsePlannerGenerationApiResponse,
 } from "@/lib/planner/schema";
 import type {
+  GroceryCartItem,
   PlannerGenerationApiResponse,
   PlannerGenerationRequest,
   PlannedMeal,
@@ -88,8 +89,6 @@ type RecipeBookState = {
   swapMealType?: PlannedMeal["mealType"];
 };
 
-const COPY_STATUS_RESET_DELAY_MS = 1800;
-
 function formatCartItemQuantity(quantity: number) {
   return Number.isInteger(quantity) ? quantity : quantity.toFixed(1);
 }
@@ -98,9 +97,6 @@ export function FoodPlannerApp() {
   const [state, dispatch] = useReducer(appReducer, undefined, loadAppState);
   const latestStateRef = useRef(state);
   const resetPendingRef = useRef(false);
-  const cartCopyStatusTimeoutRef = useRef<
-    ReturnType<typeof setTimeout> | undefined
-  >(undefined);
   const [storageTab, setStorageTab] = useState<StorageType>("fridge");
   const [stockingOpen, setStockingOpen] = useState(false);
   const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
@@ -124,9 +120,6 @@ export function FoodPlannerApp() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [plannerApiError, setPlannerApiError] = useState<string | null>(null);
   const [isPlannerPending, setIsPlannerPending] = useState(false);
-  const [cartCopyStatus, setCartCopyStatus] = useState<
-    "idle" | "copied" | "failed"
-  >("idle");
   const fridgeInventory = state.inventory.filter(
     (item) => item.storageId === state.fridge.id,
   );
@@ -146,76 +139,36 @@ export function FoodPlannerApp() {
       )
     : false;
   const planActionLabel = "Create plan";
-  const cartItemsToCopy = state.planner.groceryCart.filter((item) => !item.checked);
-  const hasUncheckedCartItems = cartItemsToCopy.length > 0;
+  const requiredCartItems = state.planner.groceryCart.filter(
+    (item) => item.reason === "missing",
+  );
+  const lowStockCartItems = state.planner.groceryCart.filter(
+    (item) => item.reason === "low",
+  );
   const canUseClipboard =
     typeof navigator !== "undefined" && !!navigator.clipboard?.writeText;
 
-  const clearCartCopyStatusTimeout = useCallback(() => {
-    if (cartCopyStatusTimeoutRef.current !== undefined) {
-      window.clearTimeout(cartCopyStatusTimeoutRef.current);
-      cartCopyStatusTimeoutRef.current = undefined;
-    }
-  }, []);
+  const handleCopyCartSection = useCallback(
+    async (items: GroceryCartItem[]) => {
+      if (!canUseClipboard || items.length === 0) return;
 
-  const handleCopyShoppingList = useCallback(async () => {
-    const listItems = hasUncheckedCartItems
-      ? cartItemsToCopy
-      : state.planner.groceryCart;
-    if (listItems.length === 0) return;
-
-    const required = listItems.filter((item) => item.reason === "missing");
-    const lowStock = listItems.filter((item) => item.reason === "low");
-    const lines: string[] = ["Shopping list", ""];
-
-    if (required.length > 0) {
-      lines.push("Missing");
-      lines.push(
-        ...required.map(
+      const uncheckedItems = items.filter((item) => !item.checked);
+      const itemsToCopy = uncheckedItems.length > 0 ? uncheckedItems : items;
+      const shoppingListText = itemsToCopy
+        .map(
           (item) =>
             `- ${item.displayName} — ${formatCartItemQuantity(item.neededQuantity)} ${item.unit}`,
-        ),
-      );
-      lines.push("");
-    }
+        )
+        .join("\n");
 
-    if (lowStock.length > 0) {
-      lines.push("Low stock top-ups");
-      lines.push(
-        ...lowStock.map(
-          (item) =>
-            `- ${item.displayName} — ${formatCartItemQuantity(item.neededQuantity)} ${item.unit}`,
-        ),
-      );
-      lines.push("");
-    }
-
-    const shoppingListText = lines.join("\n").trim();
-
-    try {
-      if (!canUseClipboard) {
-        clearCartCopyStatusTimeout();
-        setCartCopyStatus("failed");
+      try {
+        await navigator.clipboard.writeText(shoppingListText);
+      } catch {
         return;
       }
-      await navigator.clipboard.writeText(shoppingListText);
-      setCartCopyStatus("copied");
-      clearCartCopyStatusTimeout();
-      cartCopyStatusTimeoutRef.current = window.setTimeout(
-        () => setCartCopyStatus("idle"),
-        COPY_STATUS_RESET_DELAY_MS,
-      );
-    } catch {
-      clearCartCopyStatusTimeout();
-      setCartCopyStatus("failed");
-    }
-  }, [
-    canUseClipboard,
-    cartItemsToCopy,
-    clearCartCopyStatusTimeout,
-    hasUncheckedCartItems,
-    state.planner.groceryCart,
-  ]);
+    },
+    [canUseClipboard],
+  );
 
   useLayoutEffect(() => {
     latestStateRef.current = state;
@@ -246,13 +199,6 @@ export function FoodPlannerApp() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
-
-  useEffect(
-    () => () => {
-      clearCartCopyStatusTimeout();
-    },
-    [clearCartCopyStatusTimeout],
-  );
 
   const handleSelectShelf = useCallback((shelfId: string) => {
     setSelectedShelfId(shelfId);
@@ -950,22 +896,30 @@ export function FoodPlannerApp() {
               {groceryCartContent}
             </div>
             <div className="sticky bottom-0 border-t bg-background/95 p-4 backdrop-blur">
-              <Button
-                type="button"
-                variant="default"
-                className="w-full"
-                onClick={handleCopyShoppingList}
-                disabled={
-                  state.planner.groceryCart.length === 0 || !canUseClipboard
-                }
-              >
-                <Copy className="size-4" aria-hidden />
-                {cartCopyStatus === "copied"
-                  ? "Copied shopping list"
-                  : cartCopyStatus === "failed"
-                    ? "Unable to copy shopping list"
-                    : "Copy shopping list"}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => handleCopyCartSection(requiredCartItems)}
+                  disabled={!canUseClipboard || requiredCartItems.length === 0}
+                >
+                  <Copy className="size-4" aria-hidden />
+                  Copy missing
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => handleCopyCartSection(lowStockCartItems)}
+                  disabled={!canUseClipboard || lowStockCartItems.length === 0}
+                >
+                  <Copy className="size-4" aria-hidden />
+                  Copy low stock
+                </Button>
+              </div>
             </div>
           </DrawerContent>
         </Drawer>
