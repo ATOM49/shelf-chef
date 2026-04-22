@@ -151,6 +151,7 @@ export function FoodPlannerApp() {
 
   const handleCopyCartSection = useCallback(
     async (items: GroceryCartItem[]) => {
+      setCartCopyError(null);
       if (!canUseClipboard || items.length === 0) return;
 
       const uncheckedItems = items.filter((item) => !item.checked);
@@ -164,9 +165,10 @@ export function FoodPlannerApp() {
 
       try {
         await navigator.clipboard.writeText(shoppingListText);
-        setCartCopyError(null);
       } catch {
-        setCartCopyError("Unable to copy list. Please try again.");
+        setCartCopyError(
+          "Clipboard access denied. Please check your browser permissions.",
+        );
       }
     },
     [canUseClipboard],
