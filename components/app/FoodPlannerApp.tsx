@@ -151,6 +151,13 @@ export function FoodPlannerApp() {
   const canUseClipboard =
     typeof navigator !== "undefined" && !!navigator.clipboard?.writeText;
 
+  const clearCartCopyStatusTimeout = useCallback(() => {
+    if (cartCopyStatusTimeoutRef.current !== undefined) {
+      window.clearTimeout(cartCopyStatusTimeoutRef.current);
+      cartCopyStatusTimeoutRef.current = undefined;
+    }
+  }, []);
+
   const handleCopyShoppingList = useCallback(async () => {
     const listItems = hasUncheckedCartItems
       ? cartItemsToCopy
@@ -187,24 +194,28 @@ export function FoodPlannerApp() {
 
     try {
       if (!canUseClipboard) {
+        clearCartCopyStatusTimeout();
         setCartCopyStatus("failed");
         return;
       }
       await navigator.clipboard.writeText(shoppingListText);
       setCartCopyStatus("copied");
+      clearCartCopyStatusTimeout();
+      cartCopyStatusTimeoutRef.current = window.setTimeout(
+        () => setCartCopyStatus("idle"),
+        COPY_STATUS_RESET_DELAY_MS,
+      );
     } catch {
+      clearCartCopyStatusTimeout();
       setCartCopyStatus("failed");
     }
-
-    if (cartCopyStatusTimeoutRef.current !== undefined) {
-      window.clearTimeout(cartCopyStatusTimeoutRef.current);
-    }
-
-    cartCopyStatusTimeoutRef.current = window.setTimeout(
-      () => setCartCopyStatus("idle"),
-      COPY_STATUS_RESET_DELAY_MS,
-    );
-  }, [canUseClipboard, cartItemsToCopy, hasUncheckedCartItems, state.planner.groceryCart]);
+  }, [
+    canUseClipboard,
+    cartItemsToCopy,
+    clearCartCopyStatusTimeout,
+    hasUncheckedCartItems,
+    state.planner.groceryCart,
+  ]);
 
   useLayoutEffect(() => {
     latestStateRef.current = state;
@@ -238,11 +249,9 @@ export function FoodPlannerApp() {
 
   useEffect(
     () => () => {
-      if (cartCopyStatusTimeoutRef.current !== undefined) {
-        window.clearTimeout(cartCopyStatusTimeoutRef.current);
-      }
+      clearCartCopyStatusTimeout();
     },
-    [],
+    [clearCartCopyStatusTimeout],
   );
 
   const handleSelectShelf = useCallback((shelfId: string) => {
