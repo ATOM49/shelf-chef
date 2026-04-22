@@ -8,11 +8,12 @@ import { isSupportedUnit } from "@/lib/inventory/units";
 import type { InventoryCategory, InventoryItem } from "@/lib/inventory/types";
 import type { StorageLayout } from "@/lib/fridge/types";
 import type {
+  PlannedMealType,
   PlannerConfigSnapshot,
   PlannerPreferredDishInput,
   Recipe,
 } from "@/lib/planner/types";
-import { RECIPE_MEAL_TYPES } from "@/lib/planner/types";
+import { PLANNED_MEAL_TYPES, RECIPE_MEAL_TYPES } from "@/lib/planner/types";
 
 const APP_STORAGE_KEY = "food-planner-app-state-v2";
 const LEGACY_STORAGE_KEY = "food-planner-fridge-layout";
@@ -58,12 +59,31 @@ function revivePlannerConfigSnapshot(
 
   return {
     preferences: typeof value.preferences === "string" ? value.preferences : "",
+    selectedMealTypes: revivePlannerSelectedMealTypes(value.selectedMealTypes),
     preferredDishes: Array.isArray(value.preferredDishes)
       ? value.preferredDishes
           .map(revivePlannerPreferredDishInput)
           .filter((dish): dish is PlannerPreferredDishInput => Boolean(dish))
       : [],
   };
+}
+
+function revivePlannerSelectedMealTypes(value: unknown): PlannedMealType[] {
+  if (!Array.isArray(value)) {
+    return [...PLANNED_MEAL_TYPES];
+  }
+
+  const selected = new Set<PlannedMealType>(
+    value.filter(
+      (mealType): mealType is PlannedMealType =>
+        typeof mealType === "string" &&
+        PLANNED_MEAL_TYPES.includes(mealType as PlannedMealType),
+    ),
+  );
+  const normalized = PLANNED_MEAL_TYPES.filter((mealType) =>
+    selected.has(mealType),
+  );
+  return normalized.length > 0 ? normalized : [...PLANNED_MEAL_TYPES];
 }
 
 function normalizeRecipeSource(source: unknown): Recipe["source"] {
@@ -162,6 +182,9 @@ function reviveAppState(stored: unknown): AppState | undefined {
       typeof storedPlanner.preferences === "string"
         ? storedPlanner.preferences
         : "",
+    selectedMealTypes: revivePlannerSelectedMealTypes(
+      storedPlanner.selectedMealTypes,
+    ),
     weeklyPlan: Array.isArray(storedPlanner.weeklyPlan)
       ? storedPlanner.weeklyPlan
       : [],

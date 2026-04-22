@@ -141,6 +141,11 @@ export const plannerGenerateRequestSchema = z.object({
   inventory: z.array(plannerInventoryContextItemSchema).max(200),
   preferences: z.string().trim().max(4000),
   preferredDishes: z.array(plannerPreferredDishInputSchema).max(30),
+  mealTypes: z
+    .array(z.enum(PLANNED_MEAL_TYPES))
+    .min(1)
+    .max(PLANNED_MEAL_TYPES.length)
+    .refine((mealTypes) => new Set(mealTypes).size === mealTypes.length),
   recipeBook: z.array(recipeSchema).max(MAX_RECIPE_BOOK_RECIPES),
 }).strict();
 
@@ -157,7 +162,10 @@ export const recipeGenerationApiResponseSchema = z.object({
 
 export const plannerGenerationApiResponseSchema = z.object({
   recipes: z.array(recipeSchema).min(1).max(MAX_RECIPE_BOOK_RECIPES),
-  mealSlots: z.array(plannerMealSlotSchema).length(PLANNER_WEEK_DAYS.length * PLANNED_MEAL_TYPES.length),
+  mealSlots: z
+    .array(plannerMealSlotSchema)
+    .min(PLANNER_WEEK_DAYS.length)
+    .max(PLANNER_WEEK_DAYS.length * PLANNED_MEAL_TYPES.length),
 }).strict();
 
 export const customRecipeGenerationApiResponseSchema = z.object({
@@ -270,14 +278,15 @@ export function parseRecipeGenerationModelResponse(
 export function parsePlannerMealSlotsModelResponse(
   payload: unknown,
   recipes: Recipe[],
+  mealTypes: PlannedMealType[],
 ): { mealSlots: PlannerMealSlot[] } {
   const parsed = plannerMealSlotsModelResponseSchema.safeParse(fillMissingMealSlotFields(payload));
   if (!parsed.success) {
     throw new Error("AI returned an invalid weekly schedule. Try again.");
   }
 
-  const mealSlots = normalizeMealSlots(parsed.data.mealSlots, recipes);
-  assertCompleteWeeklySchedule(mealSlots);
+  const mealSlots = normalizeMealSlots(parsed.data.mealSlots, recipes, mealTypes);
+  assertCompleteWeeklySchedule(mealSlots, mealTypes);
   return { mealSlots };
 }
 
@@ -500,15 +509,17 @@ function alignIngredientToInventoryUnitHint(
 function normalizeMealSlots(
   slots: Array<z.infer<typeof plannerMealSlotExtractionSchema>>,
   recipes: Recipe[],
+  mealTypes: PlannedMealType[],
 ) {
   const normalizedSlots: PlannerMealSlot[] = [];
   const seen = new Set<string>();
+  const allowedMealTypes = new Set<PlannedMealType>(mealTypes);
 
   for (const slot of slots) {
     const day = normalizeWeekDay(slot.day);
     const mealType = normalizePlannedMealType(slot.mealType);
     const recipe = resolveMealSlotRecipe(slot, recipes);
-    if (!day || !mealType || !recipe) {
+    if (!day || !mealType || !allowedMealTypes.has(mealType) || !recipe) {
       continue;
     }
 
@@ -564,10 +575,17 @@ function resolveMealSlotRecipe(
   return resolveRecipeByDishName(recipeHint, recipes);
 }
 
-function assertCompleteWeeklySchedule(mealSlots: PlannerMealSlot[]) {
+function assertCompleteWeeklySchedule(
+  mealSlots: PlannerMealSlot[],
+  mealTypes: PlannedMealType[],
+) {
+  if (mealTypes.length === 0) {
+    throw new Error("Planner request must include at least one meal type.");
+  }
+
   const expectedSlots = new Set<string>();
   for (const day of PLANNER_WEEK_DAYS) {
-    for (const mealType of PLANNED_MEAL_TYPES) {
+    for (const mealType of mealTypes) {
       expectedSlots.add(`${day}:${mealType}`);
     }
   }

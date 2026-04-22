@@ -17,7 +17,10 @@ import type { Recipe } from "@/lib/planner/types";
 
 const MAX_PLANNER_POOL_SIZE = 72;
 
-function selectPlannerRecipePool(recipes: Recipe[]) {
+function selectPlannerRecipePool(
+  recipes: Recipe[],
+  prioritizedMealTypes: PlannerGenerateRequestMealType[],
+) {
   if (recipes.length <= MAX_PLANNER_POOL_SIZE) {
     return recipes;
   }
@@ -32,9 +35,14 @@ function selectPlannerRecipePool(recipes: Recipe[]) {
   );
   const pool: Recipe[] = [];
   const seenIds = new Set<string>();
-  const mealTypes: Array<Recipe["mealType"]> = ["breakfast", "lunch", "dinner"];
+  const orderedMealTypes: Array<Recipe["mealType"]> = [
+    ...prioritizedMealTypes,
+    ...(["breakfast", "lunch", "dinner"] as const).filter(
+      (mealType) => !prioritizedMealTypes.includes(mealType),
+    ),
+  ];
 
-  for (const mealType of mealTypes) {
+  for (const mealType of orderedMealTypes) {
     for (const recipe of prioritized) {
       if (recipe.mealType !== mealType || seenIds.has(recipe.id)) {
         continue;
@@ -65,6 +73,8 @@ function selectPlannerRecipePool(recipes: Recipe[]) {
   return pool;
 }
 
+type PlannerGenerateRequestMealType = "breakfast" | "lunch" | "dinner";
+
 export async function POST(req: NextRequest) {
   let payload: unknown;
   try {
@@ -88,14 +98,19 @@ export async function POST(req: NextRequest) {
       parsedRequest.data.recipeBook,
       recipesResponse.recipes,
     );
-    const plannerRecipePool = selectPlannerRecipePool(mergedRecipeBook);
+    const plannerRecipePool = selectPlannerRecipePool(
+      mergedRecipeBook,
+      parsedRequest.data.mealTypes,
+    );
     const plannerResponse = await generateWeeklyPlannerResponse(
       buildWeeklyPlannerPrompt({
         preferences: parsedRequest.data.preferences,
         preferredDishes: parsedRequest.data.preferredDishes,
+        mealTypes: parsedRequest.data.mealTypes,
         recipes: plannerRecipePool,
       }),
       plannerRecipePool,
+      parsedRequest.data.mealTypes,
     );
 
     return Response.json(

@@ -9,6 +9,7 @@ import { convertQuantity } from "@/lib/inventory/units";
 import { buildGeneratedWeeklyPlan } from "@/lib/planner/generatePlan";
 import type {
   PlannedMeal,
+  PlannedMealType,
   PlannerConfigSnapshot,
   PlannerMealSlot,
   PlannerPreferredDishInput,
@@ -16,6 +17,7 @@ import type {
   PreferredDishRequest,
   Recipe,
 } from "@/lib/planner/types";
+import { PLANNED_MEAL_TYPES } from "@/lib/planner/types";
 import { revalidatePlannedMeals, validateRecipeAgainstInventory } from "@/lib/planner/validation";
 import { resolveRecipeByDishName } from "@/lib/recipes/resolve";
 
@@ -64,6 +66,7 @@ export type AppAction =
   | { type: "UPDATE_INVENTORY_ITEM"; itemId: string; patch: Partial<InventoryDraft> }
   | { type: "REMOVE_INVENTORY_ITEM"; itemId: string }
   | { type: "SET_PREFERENCES"; preferences: string }
+  | { type: "SET_PLANNER_MEAL_TYPES"; mealTypes: PlannedMealType[] }
   | { type: "ADD_PREFERRED_DISH"; name: string; mealType?: PreferredDishRequest["mealType"] }
   | {
       type: "SET_PREFERRED_DISHES";
@@ -112,6 +115,7 @@ export function createDefaultAppState(): AppState {
     planner: {
       preferences: "",
       preferredDishes: [],
+      selectedMealTypes: [...PLANNED_MEAL_TYPES],
       weeklyPlan: [],
       groceryCart: [],
       selectedMealId: undefined,
@@ -133,14 +137,35 @@ function toPlannerPreferredDishInput(
   }));
 }
 
+function normalizePlannerMealTypes(
+  mealTypes: PlannedMealType[] | undefined,
+): PlannedMealType[] {
+  if (!mealTypes || mealTypes.length === 0) {
+    return [...PLANNED_MEAL_TYPES];
+  }
+
+  const selected = new Set<PlannedMealType>(
+    mealTypes.filter((mealType): mealType is PlannedMealType =>
+      PLANNED_MEAL_TYPES.includes(mealType),
+    ),
+  );
+
+  const normalized = PLANNED_MEAL_TYPES.filter((mealType) =>
+    selected.has(mealType),
+  );
+  return normalized.length > 0 ? normalized : [...PLANNED_MEAL_TYPES];
+}
+
 export function createPlannerConfigSnapshot(
   planner: {
     preferences: string;
+    selectedMealTypes: PlannedMealType[];
     preferredDishes: Array<Pick<PreferredDishRequest, "name" | "mealType">>;
   },
 ): PlannerConfigSnapshot {
   return {
     preferences: normalizePlannerPreferenceText(planner.preferences),
+    selectedMealTypes: normalizePlannerMealTypes(planner.selectedMealTypes),
     preferredDishes: toPlannerPreferredDishInput(planner.preferredDishes),
   };
 }
@@ -156,6 +181,17 @@ export function arePlannerConfigsEqual(
   if (
     normalizePlannerPreferenceText(left.preferences) !==
     normalizePlannerPreferenceText(right.preferences)
+  ) {
+    return false;
+  }
+
+  const leftMealTypes = normalizePlannerMealTypes(left.selectedMealTypes);
+  const rightMealTypes = normalizePlannerMealTypes(right.selectedMealTypes);
+  if (leftMealTypes.length !== rightMealTypes.length) {
+    return false;
+  }
+  if (
+    leftMealTypes.some((mealType, index) => mealType !== rightMealTypes[index])
   ) {
     return false;
   }
@@ -452,6 +488,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         planner: {
           ...state.planner,
           preferences: action.preferences,
+        },
+      };
+    }
+
+    case "SET_PLANNER_MEAL_TYPES": {
+      return {
+        ...state,
+        planner: {
+          ...state.planner,
+          selectedMealTypes: normalizePlannerMealTypes(action.mealTypes),
         },
       };
     }

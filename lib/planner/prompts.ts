@@ -196,10 +196,12 @@ ${inventoryLines}`;
 export function buildWeeklyPlannerPrompt({
   preferences,
   preferredDishes,
+  mealTypes,
   recipes,
 }: {
   preferences: string;
   preferredDishes: PlannerGenerationRequest["preferredDishes"];
+  mealTypes: PlannerGenerationRequest["mealTypes"];
   recipes: Recipe[];
 }) {
   const preferredDishLines =
@@ -224,6 +226,9 @@ export function buildWeeklyPlannerPrompt({
 
   const preferenceSummary =
     preferences.trim() || "No additional preferences supplied.";
+  const requiredMealTypes = mealTypes.length > 0 ? mealTypes : PLANNED_MEAL_TYPES;
+  const requiredSlotCount = PLANNER_WEEK_DAYS.length * requiredMealTypes.length;
+  const requiredMealTypesLabel = requiredMealTypes.join(", ");
 
   return `You are a weekly meal planner for a home kitchen app.
 
@@ -231,9 +236,9 @@ Create a 7-day plan using only the provided recipe ids.
 
 Requirements:
 - Return JSON only with a top-level mealSlots array.
-- Produce exactly ${PLANNER_WEEK_DAYS.length * PLANNED_MEAL_TYPES.length} slots.
+- Produce exactly ${requiredSlotCount} slots.
 - Cover every day from Monday to Sunday.
-- For each day include exactly one breakfast, one lunch, and one dinner.
+- For each day include exactly one slot for each selected meal type (${requiredMealTypesLabel}).
 - Use only recipe ids from the catalog below.
 - Prefer variety across the week.
 - Include preferred dishes when suitable.
@@ -247,7 +252,7 @@ Preferred dishes:
 ${preferredDishLines}
 
 Allowed days: ${PLANNER_WEEK_DAYS.join(", ")}
-Allowed meal types: ${PLANNED_MEAL_TYPES.join(", ")}
+Allowed meal types: ${requiredMealTypesLabel}
 
 Recipe catalog:
 ${recipeCatalog}`;
