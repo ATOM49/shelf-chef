@@ -906,6 +906,7 @@ export function FoodPlannerApp() {
                   variant="outline"
                   size="sm"
                   className="flex-1"
+                  aria-label="Copy missing items to clipboard"
                   onClick={() => handleCopyCartSection(requiredCartItems)}
                   disabled={!canUseClipboard || requiredCartItems.length === 0}
                 >
@@ -917,6 +918,7 @@ export function FoodPlannerApp() {
                   variant="outline"
                   size="sm"
                   className="flex-1"
+                  aria-label="Copy low stock items to clipboard"
                   onClick={() => handleCopyCartSection(lowStockCartItems)}
                   disabled={!canUseClipboard || lowStockCartItems.length === 0}
                 >
