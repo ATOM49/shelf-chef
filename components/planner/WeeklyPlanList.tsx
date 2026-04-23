@@ -21,6 +21,7 @@ import {
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useDraggable,
   useDroppable,
   useSensor,
@@ -69,6 +70,7 @@ export function WeeklyPlanList({
   onSetMealCooked,
   onMoveMealSlot,
   onSwapMeal,
+  onRemoveMeal,
   onDeselectMeal,
 }: {
   meals: PlannedMeal[];
@@ -81,6 +83,7 @@ export function WeeklyPlanList({
     mealType: PlannedMeal["mealType"],
   ) => void;
   onSwapMeal: (mealId: string) => void;
+  onRemoveMeal: (mealId: string) => void;
   onDeselectMeal: () => void;
 }) {
   const [activeMealId, setActiveMealId] = useState<string>();
@@ -89,6 +92,7 @@ export function WeeklyPlanList({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
@@ -234,6 +238,7 @@ export function WeeklyPlanList({
                   : undefined
               }
               onSwap={selectedMeal ? () => onSwapMeal(selectedMeal.id) : undefined}
+              onRemove={selectedMeal ? () => { onRemoveMeal(selectedMeal.id); onDeselectMeal(); } : undefined}
             />
           </div>
         </DrawerContent>

@@ -402,6 +402,29 @@ export function FoodPlannerApp() {
     [state.inventory, state.recipes],
   );
 
+  const handleGenerateAndSwap = useCallback(
+    async (dishName: string) => {
+      if (!recipeBookState.mealId) return;
+      const mealId = recipeBookState.mealId;
+
+      const allInventoryIds = state.inventory.map((item) => item.id);
+      const recipeId = await handleCreateCustomRecipe({
+        inventoryItemIds: allInventoryIds,
+        preferences: state.planner.preferences,
+        dishName,
+      });
+
+      dispatch({ type: "REPLACE_PLANNED_MEAL", mealId, recipeId });
+      setRecipeBookState({ open: false, mode: "browse" });
+    },
+    [
+      recipeBookState.mealId,
+      state.inventory,
+      state.planner.preferences,
+      handleCreateCustomRecipe,
+    ],
+  );
+
   const handleDeleteCustomRecipe = useCallback((recipeId: string) => {
     dispatch({ type: "REMOVE_CUSTOM_RECIPE", recipeId });
   }, []);
@@ -548,6 +571,9 @@ export function FoodPlannerApp() {
                   })
                 }
                 onSwapMeal={handleOpenSwapRecipeBook}
+                onRemoveMeal={(mealId) =>
+                  dispatch({ type: "REMOVE_PLANNED_MEAL", mealId })
+                }
                 onDeselectMeal={() =>
                   dispatch({ type: "SELECT_MEAL", mealId: undefined })
                 }
@@ -873,6 +899,9 @@ export function FoodPlannerApp() {
             recipeBookState.mode === "swap"
               ? handleSwapRecipeSelection
               : undefined
+          }
+          onGenerateAndSwap={
+            recipeBookState.mode === "swap" ? handleGenerateAndSwap : undefined
           }
           onCreateCustomRecipe={handleCreateCustomRecipe}
           onDeleteRecipe={handleDeleteCustomRecipe}

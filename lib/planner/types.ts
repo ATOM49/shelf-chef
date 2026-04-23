@@ -31,6 +31,7 @@ export type Recipe = {
   title: string;
   mealType: RecipeMealType;
   cuisine?: string;
+  servings?: number;
   tags: string[];
   ingredients: RecipeIngredient[];
   instructions?: string[];

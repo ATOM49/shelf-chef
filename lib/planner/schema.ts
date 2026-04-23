@@ -110,10 +110,11 @@ const recipeSchema = z.object({
   title: z.string().trim().min(1).max(160),
   mealType: z.enum(RECIPE_MEAL_TYPES),
   cuisine: z.string().trim().min(1).max(80).optional(),
+  servings: z.number().int().positive().max(100).optional(),
   tags: z.array(z.string().trim().min(1).max(40)).max(MAX_TAGS),
   ingredients: z.array(recipeIngredientSchema).min(1).max(MAX_INGREDIENTS),
   instructions: z.array(z.string().trim().min(1).max(240)).max(MAX_INSTRUCTIONS).optional(),
-  referenceUrl: z.string().url().optional(),
+  referenceUrl: z.string().url().startsWith("https://").optional(),
   source: z.enum(["user-requested", "user-saved"]),
 }).strict();
 
@@ -145,7 +146,7 @@ export const plannerGenerateRequestSchema = z.object({
 }).strict();
 
 export const customRecipeGenerateRequestSchema = z.object({
-  inventory: z.array(plannerInventoryContextItemSchema).min(1).max(60),
+  inventory: z.array(plannerInventoryContextItemSchema).min(0).max(60),
   preferences: z.string().trim().max(4000),
   dishName: z.string().trim().min(1).max(120).optional(),
   recipeBook: z.array(recipeSchema).max(MAX_RECIPE_BOOK_RECIPES),
@@ -181,6 +182,7 @@ const recipeExtractionSchema = z.object({
   title: maybeStringSchema,
   mealType: maybeStringSchema,
   cuisine: maybeStringSchema,
+  servings: maybeNumberSchema,
   tags: maybeStringListSchema,
   ingredients: z.array(recipeIngredientExtractionSchema).nullable().optional(),
   instructions: maybeStringListSchema,
@@ -386,12 +388,14 @@ function normalizeRecipe(
   const cuisine = normalizeText(recipe.cuisine);
   const instructions = normalizeInstructionList(recipe.instructions);
   const referenceUrl = normalizeReferenceUrl(recipe.referenceUrl);
+  const servings = normalizeServings(recipe.servings);
 
   const normalized = recipeSchema.safeParse({
     id: buildRecipeId(title, mealType),
     title,
     mealType,
     cuisine,
+    servings,
     tags,
     ingredients,
     instructions: instructions.length > 0 ? instructions : undefined,
@@ -718,10 +722,17 @@ function normalizeStringList(
 
 function normalizeReferenceUrl(value: unknown) {
   const normalized = normalizeText(value);
-  if (!normalized || !URL_PATTERN.test(normalized)) {
+  if (!normalized || !normalized.startsWith("https://") || !URL_PATTERN.test(normalized)) {
     return undefined;
   }
   return normalized;
+}
+
+function normalizeServings(value: unknown) {
+  const qty = normalizeQuantity(value);
+  if (qty == null) return undefined;
+  const rounded = Math.round(qty);
+  return rounded >= 1 && rounded <= 100 ? rounded : undefined;
 }
 
 function inferMealTypeFromPreferredDishes(
