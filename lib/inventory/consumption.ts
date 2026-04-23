@@ -17,13 +17,12 @@ export function applyMealConsumption(inventory: InventoryItem[], plannedMeal: Pl
       return item;
     }
 
-    const usedQuantity = matchingIngredients.reduce((total, match) => {
-      // For "low" matches, consume everything available; for "enough", consume what is needed
-      if (match.status === "low") {
-        return total + item.quantity;
-      }
-      return total + match.resolvedNeededQuantity;
-    }, 0);
+    // If any match is "low" (not enough), deplete all available stock for this item.
+    // Otherwise consume only what each "enough" match needs.
+    const hasLowMatch = matchingIngredients.some((match) => match.status === "low");
+    const usedQuantity = hasLowMatch
+      ? item.quantity
+      : matchingIngredients.reduce((total, match) => total + match.resolvedNeededQuantity, 0);
 
     return {
       ...item,

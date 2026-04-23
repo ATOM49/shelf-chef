@@ -22,7 +22,7 @@ export function GroceryCartPanel({ items, onToggle }: Props) {
     <section className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-4">
       <div>
         <h3 className="text-sm font-semibold text-foreground">Grocery cart</h3>
-        <p className="text-xs text-muted-foreground">Check off items as you buy them — they&apos;ll be added to your pantry automatically.</p>
+        <p className="text-xs text-muted-foreground">Check off items as you buy them — they&apos;ll be added to the Groceries shelf in your pantry.</p>
       </div>
 
       {required.length > 0 && (

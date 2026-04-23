@@ -135,6 +135,7 @@ function RecipeBookBrowse({
     setGenerateError(null);
     try {
       await onGenerateAndSwap(name);
+      setGenerateDishName("");
     } catch (err) {
       setGenerateError(
         err instanceof Error ? err.message : "Unable to generate recipe right now.",
