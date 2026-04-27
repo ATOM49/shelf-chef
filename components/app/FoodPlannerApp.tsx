@@ -618,8 +618,12 @@ export function FoodPlannerApp() {
       <GroceryCartPanel
         items={state.planner.groceryCart}
         onToggle={(id) => dispatch({ type: "TOGGLE_GROCERY_ITEM", itemId: id })}
-        onCopyMissing={() => void handleCopyCartSection(requiredCartItems)}
-        onCopyLowStock={() => void handleCopyCartSection(lowStockCartItems)}
+        onCopyMissing={() => {
+          handleCopyCartSection(requiredCartItems).catch(() => undefined);
+        }}
+        onCopyLowStock={() => {
+          handleCopyCartSection(lowStockCartItems).catch(() => undefined);
+        }}
         canUseClipboard={canUseClipboard}
       />
     ) : (
@@ -906,7 +910,11 @@ export function FoodPlannerApp() {
               <Button
                 type="button"
                 className="w-full"
-                onClick={() => void handleCopyCartSection(state.planner.groceryCart)}
+                onClick={() => {
+                  handleCopyCartSection(state.planner.groceryCart).catch(
+                    () => undefined,
+                  );
+                }}
                 disabled={state.planner.groceryCart.length === 0 || !canUseClipboard}
               >
                 <Copy className="size-4" aria-hidden />
