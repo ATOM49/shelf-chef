@@ -1,5 +1,5 @@
 import { normalizeIngredientName } from "@/lib/inventory/normalize";
-import { isStaple } from "@/lib/inventory/staples";
+import { isStapleOrCustom } from "@/lib/inventory/staples";
 import type { InventoryItem, InventoryUnit } from "@/lib/inventory/types";
 import {
   convertQuantity,
@@ -98,7 +98,11 @@ function summarizeNamedMatches(
   };
 }
 
-export function validateRecipeAgainstInventory(recipe: Recipe, inventory: InventoryItem[]): MealValidation {
+export function validateRecipeAgainstInventory(
+  recipe: Recipe,
+  inventory: InventoryItem[],
+  customStapleNames: readonly string[] = [],
+): MealValidation {
   const matches: IngredientMatch[] = recipe.ingredients.map((ingredient) => {
     const normalizedName = normalizeIngredientName(ingredient.normalizedName || ingredient.name);
     const fallbackUnit = getCanonicalUnitForGroup(getUnitGroup(ingredient.unit));
@@ -118,7 +122,7 @@ export function validateRecipeAgainstInventory(recipe: Recipe, inventory: Invent
     if (!item || !resolvedNeeded) {
       const availableSummary = summarizeNamedMatches(namedMatches, normalizedName, ingredient.unit);
 
-      if (namedMatches.length === 0 && !hasUnitMismatch && isStaple(normalizedName)) {
+      if (namedMatches.length === 0 && !hasUnitMismatch && isStapleOrCustom(normalizedName, customStapleNames)) {
         return {
           ingredientName: ingredient.name,
           normalizedName,
@@ -197,9 +201,13 @@ export function validateRecipeAgainstInventory(recipe: Recipe, inventory: Invent
 export function revalidatePlannedMeals(
   meals: import("@/lib/planner/types").PlannedMeal[],
   inventory: InventoryItem[],
+  customStapleNames: readonly string[] = [],
 ): import("@/lib/planner/types").PlannedMeal[] {
   return meals.map((meal) => {
     if (meal.status === "completed") return meal;
-    return { ...meal, validation: validateRecipeAgainstInventory(meal.recipe, inventory) };
+    return {
+      ...meal,
+      validation: validateRecipeAgainstInventory(meal.recipe, inventory, customStapleNames),
+    };
   });
 }

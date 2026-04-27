@@ -306,8 +306,9 @@ function InputStep({
         <p className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">Tip:</span> Common
           kitchen staples — water, salt, oil, pepper, and sugar — are always
-          assumed to be in stock. You don&apos;t need to track them here for
-          recipe validation to work correctly.
+          assumed to be in stock. Visit the{" "}
+          <span className="font-medium text-foreground">🧂 Staples</span> tab
+          to see the full list or add your own (e.g. cumin, turmeric).
         </p>
 
         <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">

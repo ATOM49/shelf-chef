@@ -21,6 +21,7 @@ type PlannerInput = {
   preferences: string;
   recipes: Recipe[];
   preferredDishes?: PreferredDishRequest[];
+  customStapleNames?: readonly string[];
 };
 
 type PlannerOutput = {
@@ -41,9 +42,10 @@ function scoreRecipe(
   inventory: InventoryItem[],
   preferences: string,
   isPinned: boolean,
+  customStapleNames: readonly string[] = [],
 ) {
   const parsed = parsePreferences(preferences);
-  const validation = validateRecipeAgainstInventory(recipe, inventory);
+  const validation = validateRecipeAgainstInventory(recipe, inventory, customStapleNames);
   let score = isPinned ? 1000 : 0;
 
   for (const match of validation.matches) {
@@ -113,6 +115,7 @@ export function generateWeeklyPlan({
   preferences,
   recipes,
   preferredDishes = [],
+  customStapleNames = [],
 }: PlannerInput): PlannerOutput {
   const pinnedMap = buildPinnedMap(preferredDishes, recipes);
 
@@ -137,6 +140,7 @@ export function generateWeeklyPlan({
           inventory,
           preferences,
           pinnedIds.has(recipe.id),
+          customStapleNames,
         );
         return { recipe, validation, score };
       })
@@ -180,7 +184,7 @@ export function generateWeeklyPlan({
       mealTypeOrder[a.mealType] - mealTypeOrder[b.mealType],
   );
 
-  const groceryCart = buildGroceryCartFromMeals(meals, inventory);
+  const groceryCart = buildGroceryCartFromMeals(meals, inventory, customStapleNames);
 
   return { meals, groceryCart };
 }
@@ -198,7 +202,9 @@ export function buildGeneratedWeeklyPlan(params: {
   inventory: InventoryItem[];
   recipes: Recipe[];
   mealSlots: PlannerMealSlot[];
+  customStapleNames?: readonly string[];
 }): PlannerOutput {
+  const resolvedCustomStapleNames = params.customStapleNames ?? [];
   const recipeMap = new Map(params.recipes.map((recipe) => [recipe.id, recipe]));
   const meals: PlannedMeal[] = [];
 
@@ -214,7 +220,7 @@ export function buildGeneratedWeeklyPlan(params: {
       mealType: mealSlot.mealType,
       recipe,
       status: "planned",
-      validation: validateRecipeAgainstInventory(recipe, params.inventory),
+      validation: validateRecipeAgainstInventory(recipe, params.inventory, resolvedCustomStapleNames),
     });
   }
 
@@ -232,7 +238,7 @@ export function buildGeneratedWeeklyPlan(params: {
 
   return {
     meals,
-    groceryCart: buildGroceryCartFromMeals(meals, params.inventory),
+    groceryCart: buildGroceryCartFromMeals(meals, params.inventory, resolvedCustomStapleNames),
   };
 }
 

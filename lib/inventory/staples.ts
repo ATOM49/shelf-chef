@@ -1,13 +1,20 @@
 import { normalizeIngredientName } from "@/lib/inventory/normalize";
 
 /**
- * Normalized names of ingredients that are assumed to be present in any
- * household kitchen and should never be flagged as "missing" during meal
- * validation or added to the grocery cart unless they are explicitly tracked
- * in inventory (and running low).
- *
- * The list is intentionally narrow — only items that virtually every cook
- * keeps on hand without actively restocking.
+ * Default kitchen staples shown in the Staples panel.
+ * These are the raw display names — normalized before lookup.
+ */
+export const DEFAULT_STAPLE_DISPLAY_NAMES: readonly string[] = [
+  "Water",
+  "Salt",
+  "Oil",
+  "Pepper",
+  "Sugar",
+];
+
+/**
+ * Normalized names of the default staple ingredients that are assumed to be
+ * present in any household kitchen.  The set is intentionally narrow.
  */
 const STAPLE_INGREDIENTS: ReadonlySet<string> = new Set([
   "water",
@@ -33,4 +40,19 @@ const STAPLE_INGREDIENTS: ReadonlySet<string> = new Set([
 export function isStaple(ingredientName: string): boolean {
   const key = normalizeIngredientName(ingredientName);
   return STAPLE_INGREDIENTS.has(key);
+}
+
+/**
+ * Returns true when the ingredient is either a built-in staple OR appears in
+ * the user's custom staple list (raw names, compared after normalization).
+ */
+export function isStapleOrCustom(
+  ingredientName: string,
+  customStapleNames: readonly string[],
+): boolean {
+  const key = normalizeIngredientName(ingredientName);
+  if (STAPLE_INGREDIENTS.has(key)) return true;
+  return customStapleNames.some(
+    (name) => normalizeIngredientName(name) === key,
+  );
 }
