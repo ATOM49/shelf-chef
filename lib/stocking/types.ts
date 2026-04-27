@@ -20,10 +20,12 @@ export type StockedItem = StockReviewItem & {
 
 export type StockTextRequest = {
   input: string;
+  stapleNames?: string[];
 };
 
 export type StockPresetRequest = {
   presetId: PresetId;
+  stapleNames?: string[];
 };
 
 export type StockApiResponse = {

@@ -254,6 +254,9 @@ function reviveAppState(stored: unknown): AppState | undefined {
     ...(stored as AppState),
     fridge,
     pantry,
+    customStapleNames: Array.isArray(stored.customStapleNames)
+      ? (stored.customStapleNames as unknown[]).filter((n): n is string => typeof n === "string")
+      : [],
     inventory,
     recipes: storedRecipes,
     planner,

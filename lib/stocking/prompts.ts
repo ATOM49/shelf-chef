@@ -1,8 +1,14 @@
 import { buildPresetGenerationPrompt, PRESET_METADATA, type PresetId } from "@/lib/inventory/presets";
 import { INVENTORY_CATEGORIES, INVENTORY_UNITS } from "@/lib/inventory/types";
 
-export function buildStockParsePrompt(input: string): string {
+function buildStapleExclusionClause(stapleNames: string[]): string {
+  if (stapleNames.length === 0) return "";
+  return `\nDo not include the following items - they are always assumed to be in stock and tracking them is unnecessary:\n${stapleNames.join(", ")}\n`;
+}
+
+export function buildStockParsePrompt(input: string, stapleNames: string[] = []): string {
   const today = new Date().toISOString().split("T")[0];
+  const exclusionClause = buildStapleExclusionClause(stapleNames);
 
   return `You are a smart kitchen inventory assistant. Parse the raw input below into distinct food inventory items, then fill in all missing details so each one can be stored in a kitchen inventory system.
 
@@ -10,7 +16,7 @@ Today's date: ${today}
 
 Allowed units: ${INVENTORY_UNITS.join(", ")}
 Allowed categories: ${INVENTORY_CATEGORIES.join(", ")}
-
+${exclusionClause}
 This input comes from a user's stocking note. It may be a sentence, a messy list, comma-separated phrases, or one item per line. Parse it into distinct food items before enriching them.
 
 Storage type rules:
@@ -46,10 +52,11 @@ ${input.trim()}
 Return JSON with one enriched item object per parsed food item.`;
 }
 
-export function buildPresetStockPrompt(presetId: PresetId): string {
+export function buildPresetStockPrompt(presetId: PresetId, stapleNames: string[] = []): string {
   const today = new Date().toISOString().split("T")[0];
   const meta = PRESET_METADATA[presetId];
   const presetBrief = buildPresetGenerationPrompt(presetId);
+  const exclusionClause = buildStapleExclusionClause(stapleNames);
 
   return `You are a smart kitchen inventory assistant. Generate a realistic starter inventory for a typical urban Indian household based on the preset brief below, then return review-ready items for the inventory table.
 
@@ -57,7 +64,7 @@ Today's date: ${today}
 
 Allowed units: ${INVENTORY_UNITS.join(", ")}
 Allowed categories: ${INVENTORY_CATEGORIES.join(", ")}
-
+${exclusionClause}
 Preset label: ${meta.label}
 Preset brief:
 ${presetBrief}

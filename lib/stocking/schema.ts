@@ -95,10 +95,12 @@ export const stockApiResponseSchema = z.object({
 
 export const stockTextRequestSchema = z.object({
   input: z.string().trim().min(1).max(4000),
+  stapleNames: z.array(z.string().trim()).optional(),
 }).strict();
 
 export const stockPresetRequestSchema = z.object({
   presetId: z.enum(PRESET_ORDER),
+  stapleNames: z.array(z.string().trim()).optional(),
 }).strict();
 
 export const stockApiResponseJsonSchema = z.toJSONSchema(stockApiResponseSchema, {

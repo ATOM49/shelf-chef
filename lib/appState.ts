@@ -24,6 +24,8 @@ import { resolveRecipeByDishName } from "@/lib/recipes/resolve";
 export type AppState = {
   fridge: FridgeLayout;
   pantry: StorageLayout;
+  /** User-defined staple ingredient names (beyond the built-in hardcoded set). */
+  customStapleNames: string[];
   inventory: InventoryItem[];
   recipes: Recipe[];
   planner: PlannerState;
@@ -65,6 +67,8 @@ export type AppAction =
   | { type: "ADD_INVENTORY_ITEM"; item: InventoryDraft }
   | { type: "UPDATE_INVENTORY_ITEM"; itemId: string; patch: Partial<InventoryDraft> }
   | { type: "REMOVE_INVENTORY_ITEM"; itemId: string }
+  | { type: "ADD_CUSTOM_STAPLES"; names: string[] }
+  | { type: "REMOVE_CUSTOM_STAPLE"; name: string }
   | { type: "SET_PREFERENCES"; preferences: string }
   | { type: "SET_PLANNER_MEAL_TYPES"; mealTypes: PlannedMealType[] }
   | { type: "ADD_PREFERRED_DISH"; name: string; mealType?: PreferredDishRequest["mealType"] }
@@ -112,6 +116,7 @@ export function createDefaultAppState(): AppState {
   return {
     fridge: createEmptyFridge(),
     pantry: createEmptyPantry(),
+    customStapleNames: [],
     inventory: [],
     recipes: [],
     planner: {
@@ -484,6 +489,25 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    case "ADD_CUSTOM_STAPLES": {
+      const existing = new Set(state.customStapleNames.map((n) => n.trim().toLowerCase()));
+      const toAdd = action.names
+        .map((n) => n.trim())
+        .filter((n) => n.length > 0 && !existing.has(n.toLowerCase()));
+      if (toAdd.length === 0) return state;
+      return { ...state, customStapleNames: [...state.customStapleNames, ...toAdd] };
+    }
+
+    case "REMOVE_CUSTOM_STAPLE": {
+      const lower = action.name.trim().toLowerCase();
+      return {
+        ...state,
+        customStapleNames: state.customStapleNames.filter(
+          (n) => n.trim().toLowerCase() !== lower,
+        ),
+      };
+    }
+
     case "SET_PREFERENCES": {
       return {
         ...state,
@@ -559,6 +583,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         inventory: state.inventory,
         recipes: nextRecipes,
         mealSlots: action.mealSlots,
+        customStapleNames: state.customStapleNames,
       });
 
       return {
@@ -592,13 +617,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const resolved = state.recipes.find((recipe) => recipe.id === action.recipeId) ?? null;
       if (!resolved) return state;
 
-      const validation = validateRecipeAgainstInventory(resolved, state.inventory);
+      const validation = validateRecipeAgainstInventory(resolved, state.inventory, state.customStapleNames);
       const nextPlan = state.planner.weeklyPlan.map((meal) =>
         meal.id === action.mealId
           ? { ...meal, recipe: resolved, validation }
           : meal,
       );
-      const groceryCart = buildGroceryCartFromMeals(nextPlan, state.inventory);
+      const groceryCart = buildGroceryCartFromMeals(nextPlan, state.inventory, state.customStapleNames);
 
       return {
         ...state,
@@ -639,8 +664,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             : plannedMeal,
         ),
         nextInventory,
+        state.customStapleNames,
       );
-      const groceryCart = buildGroceryCartFromMeals(nextPlan, nextInventory);
+      const groceryCart = buildGroceryCartFromMeals(nextPlan, nextInventory, state.customStapleNames);
 
       return {
         ...state,
@@ -689,7 +715,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const nextPlan = state.planner.weeklyPlan.filter(
         (plannedMeal) => plannedMeal.id !== action.mealId,
       );
-      const groceryCart = buildGroceryCartFromMeals(nextPlan, state.inventory);
+      const groceryCart = buildGroceryCartFromMeals(nextPlan, state.inventory, state.customStapleNames);
       return {
         ...state,
         planner: {

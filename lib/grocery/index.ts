@@ -1,4 +1,5 @@
 import { generateId } from "@/lib/id";
+import { isStapleOrCustom } from "@/lib/inventory/staples";
 import { normalizeIngredientName } from "@/lib/inventory/normalize";
 import type { InventoryItem, InventoryUnit } from "@/lib/inventory/types";
 import {
@@ -58,6 +59,7 @@ function resolveCartDisplayUnit(
 export function buildGroceryCartFromMeals(
   meals: PlannedMeal[],
   inventory: InventoryItem[],
+  customStapleNames: readonly string[] = [],
 ): GroceryCartItem[] {
   const needsMap = new Map<string, AggregatedNeed>();
   const inventoryByName = new Map<string, InventoryItem[]>();
@@ -76,6 +78,8 @@ export function buildGroceryCartFromMeals(
       const normalizedName = normalizeIngredientName(
         ingredient.normalizedName || ingredient.name,
       );
+
+      if (isStapleOrCustom(normalizedName, customStapleNames)) continue;
       const existing = needsMap.get(normalizedName);
       const matchingInventory = inventoryByName.get(normalizedName) ?? [];
       const resolvedDisplay = existing
