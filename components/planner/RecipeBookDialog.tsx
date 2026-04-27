@@ -1,18 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MealValidationSummary } from "@/components/planner/MealValidationSummary";
-import { RecipeIngredientList } from "@/components/planner/RecipeIngredientList";
+import { RecipeDetailPanel } from "@/components/planner/RecipeDetailPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Drawer,
   DrawerClose,
@@ -26,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, ExternalLink, Trash2, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 import type { InventoryItem } from "@/lib/inventory/types";
 import type { PlannedMealType, Recipe, RecipeSource } from "@/lib/planner/types";
 import { validateRecipeAgainstInventory } from "@/lib/planner/validation";
@@ -571,199 +562,28 @@ function RecipeBookDetail({
   recipe,
   inventory,
   onBack,
-  deleteConfirmOpen,
-  onDeleteConfirmOpenChange,
   onDeleteRecipe,
 }: {
   recipe: Recipe;
   inventory: InventoryItem[];
   onBack: () => void;
-  deleteConfirmOpen: boolean;
-  onDeleteConfirmOpenChange: (open: boolean) => void;
   onDeleteRecipe: (recipeId: string) => void;
 }) {
   const validation = useMemo(
     () => validateRecipeAgainstInventory(recipe, inventory),
     [inventory, recipe],
   );
-  const detailStats = [
-    { label: "Ingredients", value: String(recipe.ingredients.length) },
-    { label: "Steps", value: String(recipe.instructions?.length ?? 0) },
-    { label: "Tags", value: String(recipe.tags.length) },
-  ];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b bg-muted/20 px-4 py-4 sm:px-6 sm:py-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-4">
-            <Button type="button" variant="ghost" size="sm" className="-ml-3 w-fit" onClick={onBack}>
-              <ArrowLeft className="size-4" aria-hidden />
-              Back to recipes
-            </Button>
-            <div className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="outline">{formatMealTypeLabel(recipe.mealType)}</Badge>
-                <Badge variant="secondary">{formatSourceLabel(recipe.source)}</Badge>
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-2xl font-semibold leading-tight text-foreground sm:text-3xl">
-                  {recipe.title}
-                </h3>
-                <p className="text-sm leading-6 text-muted-foreground sm:text-[15px]">
-                  {recipe.cuisine ? `${recipe.cuisine} cuisine` : "Kitchen staple"}
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-2 sm:max-w-sm">
-                {detailStats.map((stat) => (
-                  <div
-                    key={`${recipe.id}-${stat.label}`}
-                    className="rounded-xl border bg-background/80 px-3 py-2"
-                  >
-                    <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                      {stat.label}
-                    </div>
-                    <div className="mt-1 text-base font-semibold text-foreground">{stat.value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          {recipe.source === "user-saved" ? (
-            <Popover
-              open={deleteConfirmOpen}
-              onOpenChange={onDeleteConfirmOpenChange}
-            >
-              <PopoverTrigger
-                type="button"
-                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-auto"
-              >
-                <Trash2 className="size-4" aria-hidden />
-                Delete recipe
-              </PopoverTrigger>
-              <PopoverContent align="end" sideOffset={8} className="w-80 p-4">
-                <PopoverHeader>
-                  <PopoverTitle>Delete this recipe?</PopoverTitle>
-                  <PopoverDescription>
-                    This removes the saved recipe from your recipe book. You
-                    can regenerate it later from your inventory.
-                  </PopoverDescription>
-                </PopoverHeader>
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onDeleteConfirmOpenChange(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => {
-                      onDeleteConfirmOpenChange(false);
-                      onDeleteRecipe(recipe.id);
-                    }}
-                  >
-                    Delete recipe
-                  </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
-          ) : null}
-        </div>
-      </div>
       <ScrollArea className="min-h-0 flex-1 px-4 py-4 sm:px-6 sm:py-5">
-        <div className="grid gap-4 pb-5 sm:gap-5">
-          <section className="rounded-2xl border bg-background/80 p-4 sm:p-5">
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                Cookability
-              </p>
-              <h4 className="text-base font-semibold text-foreground">Inventory check</h4>
-            </div>
-            <div className="mt-3">
-              <MealValidationSummary validation={validation} />
-            </div>
-          </section>
-
-          {recipe.tags.length > 0 ? (
-            <section className="rounded-2xl border bg-background/80 p-4 sm:p-5">
-              <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                  Tags
-                </p>
-                <h4 className="text-base font-semibold text-foreground">Recipe notes</h4>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2.5">
-                {recipe.tags.map((tag) => (
-                  <Badge key={`${recipe.id}-${tag}`} variant="outline">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          <section className="rounded-2xl border bg-background/80 p-4 sm:p-5">
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                Ingredients
-              </p>
-              <h4 className="text-base font-semibold text-foreground">What you need</h4>
-            </div>
-            <div className="mt-3">
-              <RecipeIngredientList ingredients={recipe.ingredients} matches={validation.matches} />
-            </div>
-          </section>
-
-          {recipe.instructions && recipe.instructions.length > 0 ? (
-            <section className="rounded-2xl border bg-background/80 p-4 sm:p-5">
-              <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                  Method
-                </p>
-                <h4 className="text-base font-semibold text-foreground">Cooking steps</h4>
-              </div>
-              <ol className="mt-3 grid gap-2.5 text-sm text-muted-foreground sm:gap-3">
-                {recipe.instructions.map((instruction, index) => (
-                  <li
-                    key={`${recipe.id}-step-${index}`}
-                    className="grid grid-cols-[auto_1fr] gap-3 rounded-xl border bg-muted/20 px-3 py-3 sm:px-4"
-                  >
-                    <span className="flex size-7 items-center justify-center rounded-full bg-background text-xs font-semibold text-foreground">
-                      {index + 1}
-                    </span>
-                    <span className="pt-0.5 leading-6">{instruction}</span>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          ) : null}
-
-          {recipe.referenceUrl ? (
-            <section className="rounded-2xl border bg-background/80 p-4 sm:p-5">
-              <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                  Source
-                </p>
-                <h4 className="text-base font-semibold text-foreground">Original recipe</h4>
-              </div>
-              <div className="mt-3">
-                <a
-                  href={recipe.referenceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted sm:w-auto"
-                >
-                  <ExternalLink className="size-4" aria-hidden />
-                  Open recipe source
-                </a>
-              </div>
-            </section>
-          ) : null}
+        <div className="pb-5">
+          <RecipeDetailPanel
+            recipe={recipe}
+            validation={validation}
+            onBack={onBack}
+            onDelete={onDeleteRecipe}
+          />
         </div>
       </ScrollArea>
     </div>
@@ -789,7 +609,6 @@ export function RecipeBookDialog({
     sourceFilter: "all",
   });
   const [view, setView] = useState<DialogView>("browse");
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const showCreateView = mode === "browse";
   const selectedRecipe = useMemo(
     () => recipes.find((recipe) => recipe.id === selectedRecipeId),
@@ -799,18 +618,15 @@ export function RecipeBookDialog({
   function handleViewRecipe(recipeId: string) {
     setSelectedRecipeId(recipeId);
     setView("detail");
-    setDeleteConfirmOpen(false);
   }
 
   function handleRecipeCreated(recipeId: string) {
     setSelectedRecipeId(recipeId);
     setView("detail");
-    setDeleteConfirmOpen(false);
   }
 
   function handleBackToBrowse() {
     setView("browse");
-    setDeleteConfirmOpen(false);
   }
 
   function handleDeleteRecipe(recipeId: string) {
@@ -820,7 +636,6 @@ export function RecipeBookDialog({
 
     setSelectedRecipeId(undefined);
     setView("browse");
-    setDeleteConfirmOpen(false);
     onDeleteRecipe(recipeId);
   }
 
@@ -828,7 +643,6 @@ export function RecipeBookDialog({
     if (!nextOpen) {
       setSelectedRecipeId(undefined);
       setView("browse");
-      setDeleteConfirmOpen(false);
     }
 
     onOpenChange(nextOpen);
@@ -889,8 +703,6 @@ export function RecipeBookDialog({
               recipe={selectedRecipe}
               inventory={inventory}
               onBack={handleBackToBrowse}
-              deleteConfirmOpen={deleteConfirmOpen}
-              onDeleteConfirmOpenChange={setDeleteConfirmOpen}
               onDeleteRecipe={handleDeleteRecipe}
             />
           ) : view === "create" && showCreateView ? (
