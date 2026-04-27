@@ -64,6 +64,8 @@ import type {
   PlannerGenerationApiResponse,
   PlannerGenerationRequest,
   PlannedMeal,
+  PlannedMealType,
+  PlannerWeekDay,
   PreferredDishRequest,
 } from "@/lib/planner/types";
 import { clearAppState, loadAppState, saveAppState } from "@/lib/persistence";
@@ -87,6 +89,8 @@ type RecipeBookState = {
   mode: "browse" | "swap";
   mealId?: string;
   swapMealType?: PlannedMeal["mealType"];
+  fillDay?: string;
+  fillMealType?: PlannedMeal["mealType"];
 };
 
 function formatCartItemQuantity(quantity: number) {
@@ -368,6 +372,19 @@ export function FoodPlannerApp() {
     [state.planner.weeklyPlan],
   );
 
+  const handleAddMealToSlot = useCallback(
+    (day: PlannerWeekDay, mealType: PlannedMealType) => {
+      setRecipeBookState({
+        open: true,
+        mode: "swap",
+        swapMealType: mealType,
+        fillDay: day,
+        fillMealType: mealType,
+      });
+    },
+    [],
+  );
+
   const handleRecipeBookOpenChange = useCallback((open: boolean) => {
     setRecipeBookState((current) =>
       open
@@ -381,18 +398,25 @@ export function FoodPlannerApp() {
 
   const handleSwapRecipeSelection = useCallback(
     (recipeId: string) => {
-      if (!recipeBookState.mealId) {
+      if (recipeBookState.mealId) {
+        dispatch({
+          type: "REPLACE_PLANNED_MEAL",
+          mealId: recipeBookState.mealId,
+          recipeId,
+        });
+      } else if (recipeBookState.fillDay && recipeBookState.fillMealType) {
+        dispatch({
+          type: "ADD_MEAL_TO_SLOT",
+          day: recipeBookState.fillDay,
+          mealType: recipeBookState.fillMealType,
+          recipeId,
+        });
+      } else {
         return;
       }
-
-      dispatch({
-        type: "REPLACE_PLANNED_MEAL",
-        mealId: recipeBookState.mealId,
-        recipeId,
-      });
       setRecipeBookState({ open: false, mode: "browse" });
     },
-    [recipeBookState.mealId],
+    [recipeBookState.mealId, recipeBookState.fillDay, recipeBookState.fillMealType],
   );
 
   const handleCreateCustomRecipe = useCallback(
@@ -442,9 +466,6 @@ export function FoodPlannerApp() {
 
   const handleGenerateAndSwap = useCallback(
     async (dishName: string) => {
-      if (!recipeBookState.mealId) return;
-      const mealId = recipeBookState.mealId;
-
       const allInventoryIds = state.inventory.map((item) => item.id);
       const recipeId = await handleCreateCustomRecipe({
         inventoryItemIds: allInventoryIds,
@@ -452,11 +473,24 @@ export function FoodPlannerApp() {
         dishName,
       });
 
-      dispatch({ type: "REPLACE_PLANNED_MEAL", mealId, recipeId });
+      if (recipeBookState.mealId) {
+        dispatch({ type: "REPLACE_PLANNED_MEAL", mealId: recipeBookState.mealId, recipeId });
+      } else if (recipeBookState.fillDay && recipeBookState.fillMealType) {
+        dispatch({
+          type: "ADD_MEAL_TO_SLOT",
+          day: recipeBookState.fillDay,
+          mealType: recipeBookState.fillMealType,
+          recipeId,
+        });
+      } else {
+        return;
+      }
       setRecipeBookState({ open: false, mode: "browse" });
     },
     [
       recipeBookState.mealId,
+      recipeBookState.fillDay,
+      recipeBookState.fillMealType,
       state.inventory,
       state.planner.preferences,
       handleCreateCustomRecipe,
@@ -612,6 +646,7 @@ export function FoodPlannerApp() {
                 onRemoveMeal={(mealId) =>
                   dispatch({ type: "REMOVE_PLANNED_MEAL", mealId })
                 }
+                onAddMealToSlot={handleAddMealToSlot}
                 onDeselectMeal={() =>
                   dispatch({ type: "SELECT_MEAL", mealId: undefined })
                 }

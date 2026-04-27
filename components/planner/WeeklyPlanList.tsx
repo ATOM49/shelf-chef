@@ -71,6 +71,7 @@ export function WeeklyPlanList({
   onMoveMealSlot,
   onSwapMeal,
   onRemoveMeal,
+  onAddMealToSlot,
   onDeselectMeal,
 }: {
   meals: PlannedMeal[];
@@ -84,6 +85,7 @@ export function WeeklyPlanList({
   ) => void;
   onSwapMeal: (mealId: string) => void;
   onRemoveMeal: (mealId: string) => void;
+  onAddMealToSlot?: (day: PlannerWeekDay, mealType: PlannedMealType) => void;
   onDeselectMeal: () => void;
 }) {
   const [activeMealId, setActiveMealId] = useState<string>();
@@ -189,6 +191,7 @@ export function WeeklyPlanList({
                       selectedMealId={selectedMealId}
                       onSelectMeal={onSelectMeal}
                       onSwapMeal={onSwapMeal}
+                      onAddMealToSlot={onAddMealToSlot}
                     />
                   ))}
                 </Fragment>
@@ -252,11 +255,13 @@ function MealSlot({
   selectedMealId,
   onSelectMeal,
   onSwapMeal,
+  onAddMealToSlot,
 }: {
   slot: Slot;
   selectedMealId?: string;
   onSelectMeal: (mealId: string) => void;
   onSwapMeal: (mealId: string) => void;
+  onAddMealToSlot?: (day: PlannerWeekDay, mealType: PlannedMealType) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `slot-${slot.id}`,
@@ -277,9 +282,18 @@ function MealSlot({
         />
       ) : (
         <div
-          className={`flex h-full min-h-32 items-center justify-center rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground ${isOver ? "bg-muted" : "bg-background/50"}`}
+          className={`flex h-full min-h-32 flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground ${isOver ? "bg-muted" : "bg-background/50"}`}
         >
-          Drop meal here
+          <span>Drop meal here</span>
+          {onAddMealToSlot ? (
+            <button
+              type="button"
+              className="rounded border border-border bg-background px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+              onClick={() => onAddMealToSlot(slot.day, slot.mealType)}
+            >
+              Add meal
+            </button>
+          ) : null}
         </div>
       )}
     </div>
