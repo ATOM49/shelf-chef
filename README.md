@@ -1,6 +1,7 @@
 # Food Planner
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+ShelfChef is a Next.js App Router application for pantry tracking, meal planning,
+and MCP-based provider integrations.
 
 ## Getting Started
 
@@ -17,6 +18,22 @@ bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+## Authentication
+
+- The main application at `/` now requires an authenticated user session.
+- Unauthenticated visitors are redirected to the built-in Auth.js sign-in page.
+- After signing in, users return to the protected route they originally requested.
+
+Configure the app-level auth providers before starting the app:
+
+```bash
+AUTH_SECRET=your-auth-secret
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+```
 
 For the LLM-backed planner routes, configure a model provider before starting the app:
 
@@ -36,9 +53,22 @@ LLM_ENABLE_GOOGLE_SEARCH=true
 
 Supported providers are `gemini`, `openai`, and `anthropic`. You can also encode the provider directly into `LLM_MODEL`, for example `openai:gpt-4.1-mini` or `anthropic:claude-sonnet-4-0`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## MCP Playground
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+After signing in, you can test MCP OAuth provider connections at `/playground/mcp`.
+The playground is separate from the main planner UI and uses the existing MCP
+integration routes for connect, disconnect, and tool invocation.
+
+Configure MCP provider credentials with the matching environment variables:
+
+```bash
+MCP_NOTION_MCP_CLIENT_ID=your-notion-client-id
+MCP_NOTION_MCP_CLIENT_SECRET=your-notion-client-secret
+MCP_GITHUB_MCP_CLIENT_ID=your-github-client-id
+MCP_GITHUB_MCP_CLIENT_SECRET=your-github-client-secret
+```
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) for local and hosted fonts.
 
 ## Learn More
 
