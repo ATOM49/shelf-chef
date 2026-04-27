@@ -3,6 +3,10 @@
 import type { IngredientMatch, RecipeIngredient } from "@/lib/planner/types";
 
 function buildAvailabilityLabel(match: IngredientMatch) {
+  if (match.status === "staple") {
+    return "assumed available · kitchen staple";
+  }
+
   const status = match.status.replace("_", " ");
   const recipeMeasurement = `${match.neededQuantity} ${match.neededUnit}`;
   const resolvedMeasurement = `${match.resolvedNeededQuantity} ${match.resolvedNeededUnit}`;
@@ -37,7 +41,7 @@ export function RecipeIngredientList({
       {ingredients.map((ingredient) => {
         const match = matches.find((candidate) => candidate.normalizedName === ingredient.normalizedName);
         const statusTone =
-          match?.status === "enough"
+          match?.status === "enough" || match?.status === "staple"
             ? "text-green-700"
             : match?.status === "low"
               ? "text-yellow-700"

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -10,7 +11,7 @@ import {
 } from "react";
 import { WeeklyPlanList } from "@/components/planner/WeeklyPlanList";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   LOTTIE_ANIMATION_SOURCES,
   LottieLoadingPanel,
@@ -45,6 +46,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StorageCanvas } from "@/components/storage/StorageCanvas";
 import { StorageEditorPanel } from "@/components/storage/StorageEditorPanel";
+import { StaplesPanel } from "@/components/storage/StaplesPanel";
 import { GroceryCartPanel } from "@/components/planner/GroceryCartPanel";
 import { PlannerSidebar } from "@/components/planner/PlannerSidebar";
 import { StockingDialog } from "@/components/stocking/StockingDialog";
@@ -54,7 +56,6 @@ import {
   createPlannerConfigSnapshot,
 } from "@/lib/appState";
 import type { StockingItemDraft } from "@/lib/appState";
-import type { StorageType } from "@/lib/fridge/types";
 import {
   parseCustomRecipeGenerationApiResponse,
   parsePlannerGenerationApiResponse,
@@ -63,7 +64,6 @@ import type {
   GroceryCartItem,
   PlannerGenerationApiResponse,
   PlannerGenerationRequest,
-  PlannedMeal,
   PlannedMealType,
   PlannerWeekDay,
   PreferredDishRequest,
@@ -75,6 +75,7 @@ import {
   CircleHelp,
   Copy,
   LoaderCircle,
+  LogOut,
   PackagePlus,
   ShoppingCart,
   SlidersHorizontal,
@@ -84,6 +85,7 @@ import {
 } from "lucide-react";
 
 type MobileTab = "storage" | "planner";
+type StorageTab = "fridge" | "pantry" | "staples";
 
 type RecipeBookState = {
   open: boolean;
@@ -113,7 +115,7 @@ export function FoodPlannerApp() {
 
   // True while we're waiting for session status + initial DB state load
   const [isInitializing, setIsInitializing] = useState(true);
-  const [storageTab, setStorageTab] = useState<StorageType>("fridge");
+  const [storageTab, setStorageTab] = useState<StorageTab>("fridge");
   const [stockingOpen, setStockingOpen] = useState(false);
   const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
   const [selectedCell, setSelectedCell] = useState<
@@ -372,6 +374,7 @@ export function FoodPlannerApp() {
             name: dish.name,
             mealType: dish.mealType,
           })),
+          mealTypes: state.planner.selectedMealTypes,
           recipeBook: state.recipes,
         };
 
@@ -406,6 +409,7 @@ export function FoodPlannerApp() {
   }, [
     state.inventory,
     state.planner.preferences,
+    state.planner.selectedMealTypes,
     state.planner.preferredDishes,
     state.recipes,
   ]);
@@ -413,11 +417,16 @@ export function FoodPlannerApp() {
   const handleSavePlannerSettings = useCallback(
     (payload: {
       preferences: string;
+      selectedMealTypes: Array<PlannedMeal["mealType"]>;
       preferredDishes: Array<
         Pick<PreferredDishRequest, "id" | "name" | "mealType">
       >;
     }) => {
       dispatch({ type: "SET_PREFERENCES", preferences: payload.preferences });
+      dispatch({
+        type: "SET_PLANNER_MEAL_TYPES",
+        mealTypes: payload.selectedMealTypes,
+      });
       dispatch({
         type: "SET_PREFERRED_DISHES",
         preferredDishes: payload.preferredDishes,
@@ -712,6 +721,7 @@ export function FoodPlannerApp() {
             <div className="relative h-full">
               <WeeklyPlanList
                 meals={state.planner.weeklyPlan}
+                visibleMealTypes={state.planner.selectedMealTypes}
                 selectedMealId={state.planner.selectedMealId}
                 onSelectMeal={(mealId) =>
                   dispatch({ type: "SELECT_MEAL", mealId })
@@ -852,6 +862,17 @@ export function FoodPlannerApp() {
                   </Badge>
                 ) : null}
               </Button>
+              <Link
+                href="/signout"
+                className={buttonVariants({
+                  variant: "ghost",
+                  size: "sm",
+                  className: "shrink-0 text-muted-foreground",
+                })}
+              >
+                <LogOut className="size-3.5" aria-hidden />
+                <span className="hidden sm:inline">Sign out</span>
+              </Link>
             </div>
           </div>
         </header>
@@ -860,13 +881,14 @@ export function FoodPlannerApp() {
           <div className="hidden min-h-0 w-96 shrink-0 flex-col rounded-xl border bg-card p-3 md:flex">
             <Tabs
               value={storageTab}
-              onValueChange={(v) => setStorageTab(v as StorageType)}
+              onValueChange={(v) => setStorageTab(v as StorageTab)}
               className="flex min-h-0 flex-1 flex-col"
             >
               <div className="mb-3 flex items-center gap-2">
-                <TabsList className="grid flex-1 grid-cols-2 shrink-0">
+                <TabsList className="grid flex-1 grid-cols-3 shrink-0">
                   <TabsTrigger value="fridge">🧊 Fridge</TabsTrigger>
                   <TabsTrigger value="pantry">🗄️ Pantry</TabsTrigger>
+                  <TabsTrigger value="staples">🧂 Staples</TabsTrigger>
                 </TabsList>
                 <Button
                   type="button"
@@ -905,6 +927,20 @@ export function FoodPlannerApp() {
                   onReorderShelves={handleReorderPantryShelves}
                 />
               </TabsContent>
+              <TabsContent
+                value="staples"
+                className="mt-2 min-h-0 flex-1 overflow-y-auto"
+              >
+                <StaplesPanel
+                  customStapleNames={state.customStapleNames}
+                  onAddStaples={(names) =>
+                    dispatch({ type: "ADD_CUSTOM_STAPLES", names })
+                  }
+                  onRemoveStaple={(name) =>
+                    dispatch({ type: "REMOVE_CUSTOM_STAPLE", name })
+                  }
+                />
+              </TabsContent>
             </Tabs>
           </div>
 
@@ -930,13 +966,14 @@ export function FoodPlannerApp() {
                   <div className="flex h-full min-h-0 flex-col gap-3">
                     <Tabs
                       value={storageTab}
-                      onValueChange={(v) => setStorageTab(v as StorageType)}
+                      onValueChange={(v) => setStorageTab(v as StorageTab)}
                       className="shrink-0 gap-3"
                     >
                       <div className="flex items-center gap-2">
-                        <TabsList className="grid flex-1 grid-cols-2">
+                        <TabsList className="grid flex-1 grid-cols-3">
                           <TabsTrigger value="fridge">🧊 Fridge</TabsTrigger>
                           <TabsTrigger value="pantry">🗄️ Pantry</TabsTrigger>
+                          <TabsTrigger value="staples">🧂 Staples</TabsTrigger>
                         </TabsList>
                         <Button
                           type="button"
@@ -950,7 +987,7 @@ export function FoodPlannerApp() {
                         </Button>
                       </div>
                     </Tabs>
-                    <div className="min-h-0 flex-1">
+                    <div className="min-h-0 flex-1 overflow-y-auto">
                       {storageTab === "fridge" ? (
                         <StorageCanvas
                           layout={state.fridge}
@@ -960,7 +997,7 @@ export function FoodPlannerApp() {
                           onSelectCell={handleSelectCell}
                           onReorderShelves={handleReorderFridgeShelves}
                         />
-                      ) : (
+                      ) : storageTab === "pantry" ? (
                         <StorageCanvas
                           layout={state.pantry}
                           inventory={pantryInventory}
@@ -968,6 +1005,16 @@ export function FoodPlannerApp() {
                           onSelectShelf={handleSelectPantryShelf}
                           onSelectCell={handleSelectPantryCell}
                           onReorderShelves={handleReorderPantryShelves}
+                        />
+                      ) : (
+                        <StaplesPanel
+                          customStapleNames={state.customStapleNames}
+                          onAddStaples={(names) =>
+                            dispatch({ type: "ADD_CUSTOM_STAPLES", names })
+                          }
+                          onRemoveStaple={(name) =>
+                            dispatch({ type: "REMOVE_CUSTOM_STAPLE", name })
+                          }
                         />
                       )}
                     </div>
@@ -1010,6 +1057,7 @@ export function FoodPlannerApp() {
           open={stockingOpen}
           onOpenChange={setStockingOpen}
           onCommit={handleCommitStock}
+          customStapleNames={state.customStapleNames}
         />
         <Drawer
           direction="bottom"
@@ -1034,8 +1082,9 @@ export function FoodPlannerApp() {
             <PlannerSidebar
               key={`${plannerSettingsOpen ? "open" : "closed"}::${state.planner.preferences}::${state.planner.preferredDishes
                 .map((dish) => `${dish.id}:${dish.name}:${dish.mealType ?? ""}`)
-                .join("|")}`}
+                .join("|")}::${state.planner.selectedMealTypes.join(",")}`}
               savedPreferences={state.planner.preferences}
+              savedSelectedMealTypes={state.planner.selectedMealTypes}
               savedPreferredDishes={state.planner.preferredDishes}
               onSave={handleSavePlannerSettings}
               onCancel={() => setPlannerSettingsOpen(false)}

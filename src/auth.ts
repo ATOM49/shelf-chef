@@ -4,18 +4,29 @@ import GitHub from "next-auth/providers/github";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/db";
 
+const providers = [
+  Google({
+    clientId: process.env.GOOGLE_CLIENT_ID!,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+  }),
+  // GitHub({
+  //   clientId: process.env.GITHUB_CLIENT_ID!,
+  //   clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+  // }),
+];
+
+export const providerMap = providers.map((provider) => ({
+  id: provider.id,
+  name: provider.name,
+}));
+
 export const { auth, handlers, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
-  providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-    GitHub({
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-    }),
-  ],
+  providers,
+  pages: {
+    signIn: "/signin",
+    signOut: "/signout",
+  },
   session: {
     // Database sessions allow server-side token revocation and keep JWT
     // payloads lean. The Prisma adapter handles session storage.

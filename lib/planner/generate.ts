@@ -1,6 +1,7 @@
 import { generateStructuredObject } from "../ai/structured";
 import type {
   PlannerInventoryContextItem,
+  PlannedMealType,
   PlannerPreferredDishInput,
   Recipe,
 } from "@/lib/planner/types";
@@ -28,6 +29,7 @@ export async function generateRecipeResponse(
 export async function generateWeeklyPlannerResponse(
   prompt: string,
   recipes: Recipe[],
+  mealTypes: PlannedMealType[],
 ) {
   const response = await generateStructuredObject({
     enableGoogleSearch: true,
@@ -35,7 +37,7 @@ export async function generateWeeklyPlannerResponse(
     schema: plannerMealSlotsModelResponseSchema,
   });
 
-  return parsePlannerMealSlotsModelResponse(response, recipes);
+  return parsePlannerMealSlotsModelResponse(response, recipes, mealTypes);
 }
 
 export async function generateCustomRecipeResponse(

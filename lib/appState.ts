@@ -17,12 +17,15 @@ import type {
   PreferredDishRequest,
   Recipe,
 } from "@/lib/planner/types";
+import { PLANNED_MEAL_TYPES } from "@/lib/planner/types";
 import { revalidatePlannedMeals, validateRecipeAgainstInventory } from "@/lib/planner/validation";
 import { resolveRecipeByDishName } from "@/lib/recipes/resolve";
 
 export type AppState = {
   fridge: FridgeLayout;
   pantry: StorageLayout;
+  /** User-defined staple ingredient names (beyond the built-in hardcoded set). */
+  customStapleNames: string[];
   inventory: InventoryItem[];
   recipes: Recipe[];
   planner: PlannerState;
@@ -64,7 +67,10 @@ export type AppAction =
   | { type: "ADD_INVENTORY_ITEM"; item: InventoryDraft }
   | { type: "UPDATE_INVENTORY_ITEM"; itemId: string; patch: Partial<InventoryDraft> }
   | { type: "REMOVE_INVENTORY_ITEM"; itemId: string }
+  | { type: "ADD_CUSTOM_STAPLES"; names: string[] }
+  | { type: "REMOVE_CUSTOM_STAPLE"; name: string }
   | { type: "SET_PREFERENCES"; preferences: string }
+  | { type: "SET_PLANNER_MEAL_TYPES"; mealTypes: PlannedMealType[] }
   | { type: "ADD_PREFERRED_DISH"; name: string; mealType?: PreferredDishRequest["mealType"] }
   | {
       type: "SET_PREFERRED_DISHES";
@@ -111,11 +117,13 @@ export function createDefaultAppState(): AppState {
   return {
     fridge: createEmptyFridge(),
     pantry: createEmptyPantry(),
+    customStapleNames: [],
     inventory: [],
     recipes: [],
     planner: {
       preferences: "",
       preferredDishes: [],
+      selectedMealTypes: [...PLANNED_MEAL_TYPES],
       weeklyPlan: [],
       groceryCart: [],
       selectedMealId: undefined,
@@ -137,14 +145,35 @@ function toPlannerPreferredDishInput(
   }));
 }
 
+function normalizePlannerMealTypes(
+  mealTypes: PlannedMealType[] | undefined,
+): PlannedMealType[] {
+  if (!mealTypes || mealTypes.length === 0) {
+    return [...PLANNED_MEAL_TYPES];
+  }
+
+  const selected = new Set<PlannedMealType>(
+    mealTypes.filter((mealType): mealType is PlannedMealType =>
+      PLANNED_MEAL_TYPES.includes(mealType),
+    ),
+  );
+
+  const normalized = PLANNED_MEAL_TYPES.filter((mealType) =>
+    selected.has(mealType),
+  );
+  return normalized.length > 0 ? normalized : [...PLANNED_MEAL_TYPES];
+}
+
 export function createPlannerConfigSnapshot(
   planner: {
     preferences: string;
+    selectedMealTypes: PlannedMealType[];
     preferredDishes: Array<Pick<PreferredDishRequest, "name" | "mealType">>;
   },
 ): PlannerConfigSnapshot {
   return {
     preferences: normalizePlannerPreferenceText(planner.preferences),
+    selectedMealTypes: normalizePlannerMealTypes(planner.selectedMealTypes),
     preferredDishes: toPlannerPreferredDishInput(planner.preferredDishes),
   };
 }
@@ -160,6 +189,17 @@ export function arePlannerConfigsEqual(
   if (
     normalizePlannerPreferenceText(left.preferences) !==
     normalizePlannerPreferenceText(right.preferences)
+  ) {
+    return false;
+  }
+
+  const leftMealTypes = normalizePlannerMealTypes(left.selectedMealTypes);
+  const rightMealTypes = normalizePlannerMealTypes(right.selectedMealTypes);
+  if (leftMealTypes.length !== rightMealTypes.length) {
+    return false;
+  }
+  if (
+    leftMealTypes.some((mealType, index) => mealType !== rightMealTypes[index])
   ) {
     return false;
   }
@@ -450,12 +490,41 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    case "ADD_CUSTOM_STAPLES": {
+      const existing = new Set(state.customStapleNames.map((n) => n.trim().toLowerCase()));
+      const toAdd = action.names
+        .map((n) => n.trim())
+        .filter((n) => n.length > 0 && !existing.has(n.toLowerCase()));
+      if (toAdd.length === 0) return state;
+      return { ...state, customStapleNames: [...state.customStapleNames, ...toAdd] };
+    }
+
+    case "REMOVE_CUSTOM_STAPLE": {
+      const lower = action.name.trim().toLowerCase();
+      return {
+        ...state,
+        customStapleNames: state.customStapleNames.filter(
+          (n) => n.trim().toLowerCase() !== lower,
+        ),
+      };
+    }
+
     case "SET_PREFERENCES": {
       return {
         ...state,
         planner: {
           ...state.planner,
           preferences: action.preferences,
+        },
+      };
+    }
+
+    case "SET_PLANNER_MEAL_TYPES": {
+      return {
+        ...state,
+        planner: {
+          ...state.planner,
+          selectedMealTypes: normalizePlannerMealTypes(action.mealTypes),
         },
       };
     }
@@ -515,6 +584,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         inventory: state.inventory,
         recipes: nextRecipes,
         mealSlots: action.mealSlots,
+        customStapleNames: state.customStapleNames,
       });
 
       return {
@@ -548,13 +618,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const resolved = state.recipes.find((recipe) => recipe.id === action.recipeId) ?? null;
       if (!resolved) return state;
 
-      const validation = validateRecipeAgainstInventory(resolved, state.inventory);
+      const validation = validateRecipeAgainstInventory(resolved, state.inventory, state.customStapleNames);
       const nextPlan = state.planner.weeklyPlan.map((meal) =>
         meal.id === action.mealId
           ? { ...meal, recipe: resolved, validation }
           : meal,
       );
-      const groceryCart = buildGroceryCartFromMeals(nextPlan, state.inventory);
+      const groceryCart = buildGroceryCartFromMeals(nextPlan, state.inventory, state.customStapleNames);
 
       return {
         ...state,
@@ -595,8 +665,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             : plannedMeal,
         ),
         nextInventory,
+        state.customStapleNames,
       );
-      const groceryCart = buildGroceryCartFromMeals(nextPlan, nextInventory);
+      const groceryCart = buildGroceryCartFromMeals(nextPlan, nextInventory, state.customStapleNames);
 
       return {
         ...state,
@@ -645,7 +716,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const nextPlan = state.planner.weeklyPlan.filter(
         (plannedMeal) => plannedMeal.id !== action.mealId,
       );
-      const groceryCart = buildGroceryCartFromMeals(nextPlan, state.inventory);
+      const groceryCart = buildGroceryCartFromMeals(nextPlan, state.inventory, state.customStapleNames);
       return {
         ...state,
         planner: {

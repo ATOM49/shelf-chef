@@ -50,7 +50,7 @@ export type IngredientMatch = {
   usesHeuristic: boolean;
   availableQuantity: number;
   availableUnit: InventoryUnit | "unknown";
-  status: "enough" | "low" | "missing" | "unit_mismatch";
+  status: "enough" | "low" | "missing" | "unit_mismatch" | "staple";
   matchedInventoryItemId?: string;
   optional?: boolean;
 };
@@ -96,12 +96,14 @@ export type PlannerPreferredDishInput = {
 export type PlannerConfigSnapshot = {
   preferences: string;
   preferredDishes: PlannerPreferredDishInput[];
+  selectedMealTypes: PlannedMealType[];
 };
 
 export type PlannerGenerationRequest = {
   inventory: PlannerInventoryContextItem[];
   preferences: string;
   preferredDishes: PlannerPreferredDishInput[];
+  mealTypes: PlannedMealType[];
   recipeBook: Recipe[];
 };
 
@@ -146,6 +148,7 @@ export type GroceryCartItem = {
 export type PlannerState = {
   preferences: string;
   preferredDishes: PreferredDishRequest[];
+  selectedMealTypes: PlannedMealType[];
   weeklyPlan: PlannedMeal[];
   groceryCart: GroceryCartItem[];
   selectedMealId?: string;

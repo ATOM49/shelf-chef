@@ -18,6 +18,30 @@ import { discoverAuthorizationServerMetadata } from "@/src/lib/mcp/discovery";
 import { exchangeCodeForToken } from "@/src/lib/mcp/oauth";
 import { consumePendingState, upsertConnection } from "@/src/lib/mcp/token-store";
 
+function buildPlaygroundRedirect(
+  request: NextRequest,
+  query: Record<string, string>,
+) {
+  const redirectUrl = new URL("/playground/mcp", request.nextUrl.origin);
+
+  for (const [key, value] of Object.entries(query)) {
+    redirectUrl.searchParams.set(key, value);
+  }
+
+  return NextResponse.redirect(redirectUrl);
+}
+
+function buildPlaygroundErrorRedirect(
+  request: NextRequest,
+  providerKey: string,
+  error: string,
+) {
+  return buildPlaygroundRedirect(request, {
+    error,
+    provider: providerKey,
+  });
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ provider: string }> },
@@ -41,32 +65,33 @@ export async function GET(
   // Authorization server reported an error
   if (errorParam) {
     const description = searchParams.get("error_description") ?? errorParam;
-    return NextResponse.redirect(
-      `${request.nextUrl.origin}/?mcp_error=${encodeURIComponent(description)}`,
-    );
+    return buildPlaygroundErrorRedirect(request, providerKey, description);
   }
 
   if (!code || !state) {
-    return NextResponse.json(
-      { error: "Missing code or state parameter." },
-      { status: 400 },
+    return buildPlaygroundErrorRedirect(
+      request,
+      providerKey,
+      "Missing code or state parameter.",
     );
   }
 
   // Validate state and retrieve the pending PKCE verifier
   const pending = consumePendingState(state);
   if (!pending) {
-    return NextResponse.json(
-      { error: "Invalid or expired state parameter." },
-      { status: 400 },
+    return buildPlaygroundErrorRedirect(
+      request,
+      providerKey,
+      "Invalid or expired state parameter.",
     );
   }
 
   // Ensure the callback is for the same user who initiated the flow
   if (pending.userId !== user.id) {
-    return NextResponse.json(
-      { error: "State mismatch: user identity changed during OAuth flow." },
-      { status: 400 },
+    return buildPlaygroundErrorRedirect(
+      request,
+      providerKey,
+      "State mismatch: user identity changed during OAuth flow.",
     );
   }
 
@@ -76,9 +101,10 @@ export async function GET(
     clientId = getClientId(providerKey);
     clientSecret = getClientSecret(providerKey);
   } catch {
-    return NextResponse.json(
-      { error: `Provider "${providerKey}" is not configured (missing client credentials).` },
-      { status: 503 },
+    return buildPlaygroundErrorRedirect(
+      request,
+      providerKey,
+      `Provider "${providerKey}" is not configured (missing client credentials).`,
     );
   }
 
@@ -96,12 +122,12 @@ export async function GET(
     const asMeta = await discoverAuthorizationServerMetadata(issuer);
     tokenEndpoint = asMeta.token_endpoint;
   } catch (err) {
-    return NextResponse.json(
-      {
-        error: "Failed to discover token endpoint.",
-        detail: err instanceof Error ? err.message : String(err),
-      },
-      { status: 502 },
+    return buildPlaygroundErrorRedirect(
+      request,
+      providerKey,
+      err instanceof Error
+        ? `Failed to discover token endpoint: ${err.message}`
+        : "Failed to discover token endpoint.",
     );
   }
 
@@ -117,12 +143,12 @@ export async function GET(
       clientSecret,
     });
   } catch (err) {
-    return NextResponse.json(
-      {
-        error: "Token exchange failed.",
-        detail: err instanceof Error ? err.message : String(err),
-      },
-      { status: 502 },
+    return buildPlaygroundErrorRedirect(
+      request,
+      providerKey,
+      err instanceof Error
+        ? `Token exchange failed: ${err.message}`
+        : "Token exchange failed.",
     );
   }
 
@@ -143,6 +169,7 @@ export async function GET(
     tokenType: tokenResponse.token_type,
   });
 
-  // Redirect back to the app
-  return NextResponse.redirect(`${request.nextUrl.origin}/?mcp_connected=${encodeURIComponent(providerKey)}`);
+  return buildPlaygroundRedirect(request, {
+    connected: providerKey,
+  });
 }
