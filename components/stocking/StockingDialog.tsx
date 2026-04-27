@@ -303,6 +303,13 @@ function InputStep({
       </DialogHeader>
 
       <div className="grid gap-6 pt-2">
+        <p className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Tip:</span> Common
+          kitchen staples — water, salt, oil, pepper, and sugar — are always
+          assumed to be in stock. You don&apos;t need to track them here for
+          recipe validation to work correctly.
+        </p>
+
         <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
           <div>
             <p className="text-sm font-medium">Start from a kitchen preset</p>

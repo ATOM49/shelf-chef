@@ -109,6 +109,18 @@ export function MealDetailsDrawer({
 
       <div>
         <h4 className="mb-2 text-sm font-semibold text-zinc-700">Ingredients</h4>
+        {(() => {
+          const stapleMatches = meal.validation.matches.filter(
+            (m) => m.status === "staple",
+          );
+          return stapleMatches.length > 0 ? (
+            <p className="mb-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              <span className="font-medium text-zinc-700">Assumed staples:</span>{" "}
+              {stapleMatches.map((m) => m.ingredientName).join(", ")} — treated
+              as always available and not checked against your inventory.
+            </p>
+          ) : null;
+        })()}
         <RecipeIngredientList ingredients={meal.recipe.ingredients} matches={meal.validation.matches} />
       </div>
 
