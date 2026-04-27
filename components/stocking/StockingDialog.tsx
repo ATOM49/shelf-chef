@@ -9,6 +9,8 @@ import {
   PRESET_ORDER,
   type PresetId,
 } from "@/lib/inventory/presets";
+import { getAllStapleNames } from "@/lib/inventory/staples";
+import { normalizeIngredientName } from "@/lib/inventory/normalize";
 import { parseStockApiResponseForReview } from "@/lib/stocking/schema";
 import { INVENTORY_CATEGORIES, INVENTORY_UNITS } from "@/lib/inventory/types";
 import type {
@@ -49,6 +51,7 @@ type StockingDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCommit: (items: StockingItemDraft[]) => void;
+  customStapleNames?: readonly string[];
 };
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -57,6 +60,7 @@ export function StockingDialog({
   open,
   onOpenChange,
   onCommit,
+  customStapleNames = [],
 }: StockingDialogProps) {
   const [step, setStep] = useState<Step>("input");
   const [freeText, setFreeText] = useState("");
@@ -95,6 +99,11 @@ export function StockingDialog({
     request: StockTextRequest | StockPresetRequest,
     nextPendingAction: PendingAction,
   ) => {
+    // Build the full staple list and inject it into the request
+    const stapleNames = getAllStapleNames(customStapleNames);
+    const stapleSet = new Set(stapleNames.map(normalizeIngredientName));
+    const requestWithStaples = { ...request, stapleNames };
+
     setApiError(null);
     setPendingAction(nextPendingAction);
     setIsPending(true);
@@ -103,7 +112,7 @@ export function StockingDialog({
         const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(request),
+          body: JSON.stringify(requestWithStaples),
         });
         if (!res.ok) {
           const err = (await res.json()) as { error?: string };
@@ -111,8 +120,12 @@ export function StockingDialog({
         }
         const rawData = (await res.json()) as StockApiResponse;
         const data = parseStockApiResponseForReview(rawData);
+        // Client-side safety filter: remove any items that are still staples
+        const filtered = data.items.filter(
+          (item) => !stapleSet.has(normalizeIngredientName(item.name)),
+        );
         setStockedItems(
-          data.items.map((item) => ({ ...item, id: generateId() })),
+          filtered.map((item) => ({ ...item, id: generateId() })),
         );
         setStep("preview");
       } catch (err) {

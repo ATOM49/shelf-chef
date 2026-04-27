@@ -3,6 +3,7 @@ import { isLlmConfigurationError } from "@/lib/ai/structured";
 import { generateStockPresetResponse } from "@/lib/stocking/generate";
 import { buildPresetStockPrompt } from "@/lib/stocking/prompts";
 import { stockPresetRequestSchema } from "@/lib/stocking/schema";
+import { normalizeIngredientName } from "@/lib/inventory/normalize";
 
 export async function POST(req: NextRequest) {
   let payload: unknown;
@@ -17,11 +18,18 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "A valid preset selection is required" }, { status: 400 });
   }
 
+  const stapleNames = parsedRequest.data.stapleNames ?? [];
+  const normalizedStapleSet = new Set(stapleNames.map(normalizeIngredientName));
+
   try {
     const response = await generateStockPresetResponse(
-      buildPresetStockPrompt(parsedRequest.data.presetId),
+      buildPresetStockPrompt(parsedRequest.data.presetId, stapleNames),
     );
-    return Response.json(response);
+    // Filter out any staples that slipped through the AI response
+    const filteredItems = response.items.filter(
+      (item) => !normalizedStapleSet.has(normalizeIngredientName(item.name)),
+    );
+    return Response.json({ items: filteredItems });
   } catch (err) {
     const status = isLlmConfigurationError(err) ? 500 : 502;
     return Response.json(

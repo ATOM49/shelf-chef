@@ -56,3 +56,17 @@ export function isStapleOrCustom(
     (name) => normalizeIngredientName(name) === key,
   );
 }
+
+/**
+ * Returns the full de-duplicated list of staple names (built-in + custom),
+ * suitable for injecting into AI prompts or for client-side filtering.
+ * All returned names are normalized (lowercase, trimmed).
+ */
+export function getAllStapleNames(customStapleNames: readonly string[] = []): string[] {
+  const all = new Set<string>(STAPLE_INGREDIENTS);
+  for (const name of customStapleNames) {
+    const normalized = normalizeIngredientName(name);
+    if (normalized) all.add(normalized);
+  }
+  return Array.from(all);
+}

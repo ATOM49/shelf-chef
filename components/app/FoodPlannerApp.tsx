@@ -901,6 +901,7 @@ export function FoodPlannerApp() {
           open={stockingOpen}
           onOpenChange={setStockingOpen}
           onCommit={handleCommitStock}
+          customStapleNames={state.customStapleNames}
         />
         <Drawer
           direction="bottom"
