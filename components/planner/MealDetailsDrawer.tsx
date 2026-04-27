@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import type { IngredientMatch, PlannedMeal } from "@/lib/planner/types";
 
 function describeMatch(match: IngredientMatch) {
+  if (match.status === "staple") {
+    return `${match.ingredientName}: assumed available as a kitchen staple`;
+  }
+
   const recipeMeasurement = `${match.neededQuantity} ${match.neededUnit}`;
   const resolvedMeasurement = `${match.resolvedNeededQuantity} ${match.resolvedNeededUnit}`;
   const availability = `${match.availableQuantity} ${match.availableUnit}`;

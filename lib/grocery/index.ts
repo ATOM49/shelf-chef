@@ -1,4 +1,5 @@
 import { generateId } from "@/lib/id";
+import { isStaple } from "@/lib/inventory/staples";
 import { normalizeIngredientName } from "@/lib/inventory/normalize";
 import type { InventoryItem, InventoryUnit } from "@/lib/inventory/types";
 import {
@@ -76,6 +77,8 @@ export function buildGroceryCartFromMeals(
       const normalizedName = normalizeIngredientName(
         ingredient.normalizedName || ingredient.name,
       );
+
+      if (isStaple(normalizedName)) continue;
       const existing = needsMap.get(normalizedName);
       const matchingInventory = inventoryByName.get(normalizedName) ?? [];
       const resolvedDisplay = existing

@@ -1,4 +1,5 @@
 import { normalizeIngredientName } from "@/lib/inventory/normalize";
+import { isStaple } from "@/lib/inventory/staples";
 import type { InventoryItem, InventoryUnit } from "@/lib/inventory/types";
 import {
   convertQuantity,
@@ -116,6 +117,26 @@ export function validateRecipeAgainstInventory(recipe: Recipe, inventory: Invent
 
     if (!item || !resolvedNeeded) {
       const availableSummary = summarizeNamedMatches(namedMatches, normalizedName, ingredient.unit);
+
+      if (namedMatches.length === 0 && !hasUnitMismatch && isStaple(normalizedName)) {
+        return {
+          ingredientName: ingredient.name,
+          normalizedName,
+          neededQuantity: ingredient.quantity,
+          neededUnit: ingredient.unit,
+          resolvedNeededQuantity: Number(
+            (fallbackNeeded?.quantity ?? ingredient.quantity).toFixed(2),
+          ),
+          resolvedNeededUnit: fallbackUnit,
+          measurementSource: "canonical",
+          usesHeuristic: fallbackNeeded?.method === "heuristic",
+          availableQuantity: 0,
+          availableUnit: fallbackUnit,
+          status: "staple",
+          optional: ingredient.optional,
+        };
+      }
+
       return {
         ingredientName: ingredient.name,
         normalizedName,
@@ -160,7 +181,9 @@ export function validateRecipeAgainstInventory(recipe: Recipe, inventory: Invent
     .map((match) => match.ingredientName);
 
   return {
-    canCook: blockingMatches.every((match) => match.status === "enough"),
+    canCook: blockingMatches.every(
+      (match) => match.status === "enough" || match.status === "staple",
+    ),
     matches,
     missingItems,
     lowItems,

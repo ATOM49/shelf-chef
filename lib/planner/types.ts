@@ -50,7 +50,7 @@ export type IngredientMatch = {
   usesHeuristic: boolean;
   availableQuantity: number;
   availableUnit: InventoryUnit | "unknown";
-  status: "enough" | "low" | "missing" | "unit_mismatch";
+  status: "enough" | "low" | "missing" | "unit_mismatch" | "staple";
   matchedInventoryItemId?: string;
   optional?: boolean;
 };
