@@ -142,6 +142,10 @@ function migrateLegacyLayout(stored: unknown): AppState | undefined {
   };
 }
 
+export function parsePersistedAppState(stored: unknown): AppState | undefined {
+  return reviveAppState(stored);
+}
+
 function reviveAppState(stored: unknown): AppState | undefined {
   if (
     !isObject(stored) ||

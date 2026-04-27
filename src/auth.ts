@@ -1,8 +1,11 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import GitHub from "next-auth/providers/github";
+import { PrismaAdapter } from "@auth/prisma-adapter";
+import { prisma } from "@/lib/db";
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
+  adapter: PrismaAdapter(prisma),
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -14,22 +17,14 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     }),
   ],
   session: {
-    // Using JWT here for zero-infrastructure startup.
-    // Switch to "database" (with a DB adapter) once a persistent store is added –
-    // that makes token revocation trivial and avoids stuffing integration state
-    // into the JWT payload.
-    strategy: "jwt",
+    // Database sessions allow server-side token revocation and keep JWT
+    // payloads lean. The Prisma adapter handles session storage.
+    strategy: "database",
   },
   callbacks: {
-    async jwt({ token, user }) {
-      if (user?.id) {
-        token.sub = user.id;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user && token.sub) {
-        session.user.id = token.sub;
+    async session({ session, user }) {
+      if (session.user && user?.id) {
+        session.user.id = user.id;
       }
       return session;
     },

@@ -82,7 +82,8 @@ export type AppAction =
   | { type: "REMOVE_PLANNED_MEAL"; mealId: string }
   | { type: "ADD_MEAL_TO_SLOT"; day: string; mealType: PlannedMealType; recipeId: string }
   | { type: "TOGGLE_GROCERY_ITEM"; itemId: string }
-  | { type: "STOCK_ITEMS"; items: StockingItemDraft[] };
+  | { type: "STOCK_ITEMS"; items: StockingItemDraft[] }
+  | { type: "LOAD_STATE"; state: AppState };
 
 export function createInventoryItem(item: InventoryDraft): InventoryItem {
   return {
@@ -721,6 +722,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case "STOCK_ITEMS": {
       return applyStockItems(state, action.items);
+    }
+
+    case "LOAD_STATE": {
+      return action.state;
     }
 
     default:
