@@ -150,7 +150,7 @@ export function FoodPlannerApp() {
     typeof navigator !== "undefined" && !!navigator.clipboard?.writeText;
 
   const handleCopyCartSection = useCallback(
-    async (items: GroceryCartItem[]) => {
+    (items: GroceryCartItem[]) => {
       setCartCopyError(null);
       if (!canUseClipboard || items.length === 0) return;
 
@@ -163,13 +163,11 @@ export function FoodPlannerApp() {
         )
         .join("\n");
 
-      try {
-        await navigator.clipboard.writeText(shoppingListText);
-      } catch {
+      navigator.clipboard.writeText(shoppingListText).catch(() => {
         setCartCopyError(
           "Clipboard access denied. Please check your browser permissions.",
         );
-      }
+      });
     },
     [canUseClipboard],
   );
@@ -618,12 +616,8 @@ export function FoodPlannerApp() {
       <GroceryCartPanel
         items={state.planner.groceryCart}
         onToggle={(id) => dispatch({ type: "TOGGLE_GROCERY_ITEM", itemId: id })}
-        onCopyMissing={() => {
-          handleCopyCartSection(requiredCartItems).catch(() => undefined);
-        }}
-        onCopyLowStock={() => {
-          handleCopyCartSection(lowStockCartItems).catch(() => undefined);
-        }}
+        onCopyMissing={() => handleCopyCartSection(requiredCartItems)}
+        onCopyLowStock={() => handleCopyCartSection(lowStockCartItems)}
         canUseClipboard={canUseClipboard}
       />
     ) : (
@@ -910,11 +904,7 @@ export function FoodPlannerApp() {
               <Button
                 type="button"
                 className="w-full"
-                onClick={() => {
-                  handleCopyCartSection(state.planner.groceryCart).catch(
-                    () => undefined,
-                  );
-                }}
+                onClick={() => handleCopyCartSection(state.planner.groceryCart)}
                 disabled={state.planner.groceryCart.length === 0 || !canUseClipboard}
               >
                 <Copy className="size-4" aria-hidden />
