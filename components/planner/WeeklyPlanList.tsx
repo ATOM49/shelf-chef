@@ -65,6 +65,7 @@ function slotForMeal(meals: PlannedMeal[]) {
 
 export function WeeklyPlanList({
   meals,
+  visibleMealTypes = PLANNED_MEAL_TYPES,
   selectedMealId,
   onSelectMeal,
   onSetMealCooked,
@@ -75,6 +76,7 @@ export function WeeklyPlanList({
   onDeselectMeal,
 }: {
   meals: PlannedMeal[];
+  visibleMealTypes?: readonly PlannedMealType[];
   selectedMealId?: string;
   onSelectMeal: (mealId: string) => void;
   onSetMealCooked: (mealId: string, cooked: boolean) => void;
@@ -103,7 +105,7 @@ export function WeeklyPlanList({
   const mealsBySlot = useMemo(() => slotForMeal(meals), [meals]);
   const slotsByRow = useMemo(
     () =>
-      PLANNED_MEAL_TYPES.map((mealType) => ({
+      visibleMealTypes.map((mealType) => ({
         mealType,
         slots: PLANNER_WEEK_DAYS.map((day) => ({
           id: toSlotId(day, mealType),
@@ -112,7 +114,7 @@ export function WeeklyPlanList({
           meal: mealsBySlot.get(toSlotId(day, mealType)),
         })),
       })),
-    [mealsBySlot],
+    [mealsBySlot, visibleMealTypes],
   );
 
   function handleDragStart(event: DragStartEvent) {
@@ -132,6 +134,7 @@ export function WeeklyPlanList({
       typeof activeData.mealId !== "string" ||
       overData?.type !== "slot" ||
       !isPlannerMealType(overData.mealType) ||
+      !visibleMealTypes.includes(overData.mealType) ||
       typeof overData.day !== "string"
     ) {
       return;

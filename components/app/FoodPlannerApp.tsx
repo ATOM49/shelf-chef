@@ -294,6 +294,7 @@ export function FoodPlannerApp() {
             name: dish.name,
             mealType: dish.mealType,
           })),
+          mealTypes: state.planner.selectedMealTypes,
           recipeBook: state.recipes,
         };
 
@@ -328,6 +329,7 @@ export function FoodPlannerApp() {
   }, [
     state.inventory,
     state.planner.preferences,
+    state.planner.selectedMealTypes,
     state.planner.preferredDishes,
     state.recipes,
   ]);
@@ -335,11 +337,16 @@ export function FoodPlannerApp() {
   const handleSavePlannerSettings = useCallback(
     (payload: {
       preferences: string;
+      selectedMealTypes: Array<PlannedMeal["mealType"]>;
       preferredDishes: Array<
         Pick<PreferredDishRequest, "id" | "name" | "mealType">
       >;
     }) => {
       dispatch({ type: "SET_PREFERENCES", preferences: payload.preferences });
+      dispatch({
+        type: "SET_PLANNER_MEAL_TYPES",
+        mealTypes: payload.selectedMealTypes,
+      });
       dispatch({
         type: "SET_PREFERRED_DISHES",
         preferredDishes: payload.preferredDishes,
@@ -627,6 +634,7 @@ export function FoodPlannerApp() {
             <div className="relative h-full">
               <WeeklyPlanList
                 meals={state.planner.weeklyPlan}
+                visibleMealTypes={state.planner.selectedMealTypes}
                 selectedMealId={state.planner.selectedMealId}
                 onSelectMeal={(mealId) =>
                   dispatch({ type: "SELECT_MEAL", mealId })
@@ -933,8 +941,9 @@ export function FoodPlannerApp() {
             <PlannerSidebar
               key={`${plannerSettingsOpen ? "open" : "closed"}::${state.planner.preferences}::${state.planner.preferredDishes
                 .map((dish) => `${dish.id}:${dish.name}:${dish.mealType ?? ""}`)
-                .join("|")}`}
+                .join("|")}::${state.planner.selectedMealTypes.join(",")}`}
               savedPreferences={state.planner.preferences}
+              savedSelectedMealTypes={state.planner.selectedMealTypes}
               savedPreferredDishes={state.planner.preferredDishes}
               onSave={handleSavePlannerSettings}
               onCancel={() => setPlannerSettingsOpen(false)}

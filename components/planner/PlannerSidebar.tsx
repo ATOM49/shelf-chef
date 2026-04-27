@@ -11,27 +11,33 @@ import {
   createPlannerConfigSnapshot,
 } from "@/lib/appState";
 import { generateId } from "@/lib/id";
-import type { PreferredDishRequest } from "@/lib/planner/types";
+import type { PlannedMealType, PreferredDishRequest } from "@/lib/planner/types";
 
 type DraftPreferredDish = Pick<PreferredDishRequest, "id" | "name" | "mealType">;
 
 export function PlannerSidebar({
   savedPreferences,
+  savedSelectedMealTypes,
   savedPreferredDishes,
   onSave,
   onCancel,
   isDisabled = false,
 }: {
   savedPreferences: string;
+  savedSelectedMealTypes: PlannedMealType[];
   savedPreferredDishes: PreferredDishRequest[];
   onSave: (payload: {
     preferences: string;
+    selectedMealTypes: PlannedMealType[];
     preferredDishes: DraftPreferredDish[];
   }) => void;
   onCancel: () => void;
   isDisabled?: boolean;
 }) {
   const [draftPreferences, setDraftPreferences] = useState(() => savedPreferences);
+  const [draftSelectedMealTypes, setDraftSelectedMealTypes] = useState(
+    () => savedSelectedMealTypes,
+  );
   const [draftPreferredDishes, setDraftPreferredDishes] = useState<DraftPreferredDish[]>(
     () =>
       savedPreferredDishes.map((dish) => ({
@@ -47,14 +53,23 @@ export function PlannerSidebar({
       !arePlannerConfigsEqual(
         createPlannerConfigSnapshot({
           preferences: savedPreferences,
+          selectedMealTypes: savedSelectedMealTypes,
           preferredDishes: savedPreferredDishes,
         }),
         createPlannerConfigSnapshot({
           preferences: draftPreferences,
+          selectedMealTypes: draftSelectedMealTypes,
           preferredDishes: draftPreferredDishes,
         }),
       ),
-    [draftPreferences, draftPreferredDishes, savedPreferences, savedPreferredDishes],
+    [
+      draftPreferences,
+      draftPreferredDishes,
+      draftSelectedMealTypes,
+      savedPreferences,
+      savedPreferredDishes,
+      savedSelectedMealTypes,
+    ],
   );
 
   function handleAddDish() {
@@ -76,6 +91,7 @@ export function PlannerSidebar({
   function handleSave() {
     onSave({
       preferences: draftPreferences,
+      selectedMealTypes: draftSelectedMealTypes,
       preferredDishes: draftPreferredDishes,
     });
   }
@@ -86,7 +102,9 @@ export function PlannerSidebar({
         <div className="flex flex-col gap-4">
           <PreferencesForm
             preferences={draftPreferences}
+            selectedMealTypes={draftSelectedMealTypes}
             onChange={setDraftPreferences}
+            onMealTypesChange={setDraftSelectedMealTypes}
             disabled={isDisabled}
           />
 
