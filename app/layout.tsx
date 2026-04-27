@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import localFont from "next/font/local";
 import { DM_Sans } from "next/font/google";
+import { NextAuthProvider } from "@/components/app/NextAuthProvider";
 
 const fontSans = DM_Sans({
   subsets: ["latin"],
@@ -57,7 +58,9 @@ export default function RootLayout({
       <body
         className={`h-svh flex flex-col overflow-hidden ${fontSans.variable} ${fontSerif.variable} ${fontMono.variable}`}
       >
-        {children}
+        <NextAuthProvider>
+          {children}
+        </NextAuthProvider>
         <Analytics />
         <SpeedInsights />
       </body>

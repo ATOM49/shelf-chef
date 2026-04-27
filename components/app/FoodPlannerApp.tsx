@@ -62,13 +62,15 @@ import {
 } from "@/lib/planner/schema";
 import type {
   GroceryCartItem,
+  PlannedMeal,
   PlannerGenerationApiResponse,
   PlannerGenerationRequest,
   PlannedMealType,
   PlannerWeekDay,
   PreferredDishRequest,
 } from "@/lib/planner/types";
-import { clearAppState, loadAppState, saveAppState } from "@/lib/persistence";
+import { clearAppState, loadAppState, parsePersistedAppState, saveAppState } from "@/lib/persistence";
+import { useSession } from "next-auth/react";
 import {
   BookOpen,
   CircleHelp,
@@ -103,6 +105,17 @@ export function FoodPlannerApp() {
   const [state, dispatch] = useReducer(appReducer, undefined, loadAppState);
   const latestStateRef = useRef(state);
   const resetPendingRef = useRef(false);
+  // Tracks whether we just loaded state from the DB (to skip the next save)
+  const loadingDbStateRef = useRef(false);
+  // Whether the DB state has been loaded (or skipped for unauthenticated users)
+  const isDbStateLoadedRef = useRef(false);
+  // Debounce timer for DB saves
+  const dbSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const { data: session, status: sessionStatus } = useSession();
+
+  // True while we're waiting for session status + initial DB state load
+  const [isInitializing, setIsInitializing] = useState(true);
   const [storageTab, setStorageTab] = useState<StorageTab>("fridge");
   const [stockingOpen, setStockingOpen] = useState(false);
   const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
@@ -178,11 +191,64 @@ export function FoodPlannerApp() {
     [canUseClipboard],
   );
 
+  // Load state from the database when the user is authenticated.
+  useEffect(() => {
+    if (sessionStatus === "loading") return;
+
+    if (sessionStatus === "unauthenticated") {
+      isDbStateLoadedRef.current = true;
+      setIsInitializing(false);
+      return;
+    }
+
+    // sessionStatus === "authenticated"
+    void (async () => {
+      try {
+        const res = await fetch("/api/state");
+        if (res.ok) {
+          const data = (await res.json()) as { state: unknown };
+          if (data.state) {
+            const revived = parsePersistedAppState(data.state);
+            if (revived) {
+              loadingDbStateRef.current = true;
+              dispatch({ type: "LOAD_STATE", state: revived });
+            }
+          }
+        }
+      } finally {
+        isDbStateLoadedRef.current = true;
+        setIsInitializing(false);
+      }
+    })();
+  }, [sessionStatus]);
+
+  // Save state to localStorage on every change; also debounce-save to DB when authenticated.
   useLayoutEffect(() => {
     latestStateRef.current = state;
     saveAppState(state);
+
+    // Skip DB save when we just loaded state from the DB
+    if (loadingDbStateRef.current) {
+      loadingDbStateRef.current = false;
+      resetPendingRef.current = false;
+      return;
+    }
+
     resetPendingRef.current = false;
-  }, [state]);
+
+    if (session?.user?.id && isDbStateLoadedRef.current) {
+      if (dbSaveTimerRef.current !== undefined) {
+        clearTimeout(dbSaveTimerRef.current);
+      }
+      dbSaveTimerRef.current = setTimeout(() => {
+        void fetch("/api/state", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ state: latestStateRef.current }),
+        });
+      }, 1500);
+    }
+  }, [state, session?.user?.id]);
 
   useEffect(() => {
     const flushState = () => {
@@ -191,6 +257,19 @@ export function FoodPlannerApp() {
       }
 
       saveAppState(latestStateRef.current);
+
+      // Flush any pending DB save immediately
+      if (session?.user?.id && isDbStateLoadedRef.current) {
+        if (dbSaveTimerRef.current !== undefined) {
+          clearTimeout(dbSaveTimerRef.current);
+          dbSaveTimerRef.current = undefined;
+        }
+        void fetch("/api/state", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ state: latestStateRef.current }),
+        });
+      }
     };
 
     const handleVisibilityChange = () => {
@@ -206,7 +285,7 @@ export function FoodPlannerApp() {
       window.removeEventListener("pagehide", flushState);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [session?.user?.id]);
 
   const handleSelectShelf = useCallback((shelfId: string) => {
     setSelectedShelfId(shelfId);
@@ -523,6 +602,13 @@ export function FoodPlannerApp() {
   const handleConfirmReset = () => {
     resetPendingRef.current = true;
     clearAppState();
+    if (session?.user?.id) {
+      void fetch("/api/state", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state: null }),
+      });
+    }
     dispatch({ type: "RESET_APP" });
     handleClearSelection();
     handleClearPantrySelection();
@@ -696,6 +782,22 @@ export function FoodPlannerApp() {
         Grocery cart is empty. Generate a weekly plan first.
       </div>
     );
+
+  if (isInitializing) {
+    return (
+      <div className="flex h-svh items-center justify-center bg-muted/30">
+        <LottieLoadingPanel
+          src={LOTTIE_ANIMATION_SOURCES.planner}
+          title="Loading your ShelfChef"
+          description="Syncing your inventory, recipes, and meal plan."
+          statusLabel="Loading"
+          className="min-h-[16rem]"
+          panelClassName="max-w-sm"
+          animationClassName="scale-90"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="h-svh overflow-hidden bg-muted/30">
