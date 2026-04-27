@@ -73,7 +73,7 @@ export function WeeklyPlanList({
   onDeselectMeal,
 }: {
   meals: PlannedMeal[];
-  visibleMealTypes?: PlannedMealType[];
+  visibleMealTypes?: readonly PlannedMealType[];
   selectedMealId?: string;
   onSelectMeal: (mealId: string) => void;
   onSetMealCooked: (mealId: string, cooked: boolean) => void;
