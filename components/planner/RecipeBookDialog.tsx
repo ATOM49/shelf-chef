@@ -49,6 +49,7 @@ type RecipeBookDialogProps = {
   mode?: "browse" | "swap";
   swapMealType?: PlannedMealType;
   onSelectRecipe?: (recipeId: string) => void;
+  onGenerateAndSwap?: (dishName: string) => Promise<void>;
   onCreateCustomRecipe: (payload: {
     inventoryItemIds: string[];
     preferences: string;
@@ -122,6 +123,7 @@ function RecipeBookBrowse({
   onBrowseStateChange,
   onViewRecipe,
   onSelectRecipe,
+  onGenerateAndSwap,
 }: {
   recipes: Recipe[];
   inventory: InventoryItem[];
@@ -131,10 +133,32 @@ function RecipeBookBrowse({
   onBrowseStateChange: (nextState: RecipeBrowseState) => void;
   onViewRecipe: (recipeId: string) => void;
   onSelectRecipe?: (recipeId: string) => void;
+  onGenerateAndSwap?: (dishName: string) => Promise<void>;
 }) {
   const { mealTypeFilter, searchTerm, sourceFilter } = browseState;
   const effectiveMealTypeFilter =
     mode === "swap" ? swapMealType ?? "all" : mealTypeFilter;
+
+  const [generateDishName, setGenerateDishName] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
+  async function handleGenerateAndSwap() {
+    const name = generateDishName.trim();
+    if (!name || !onGenerateAndSwap) return;
+    setIsGenerating(true);
+    setGenerateError(null);
+    try {
+      await onGenerateAndSwap(name);
+      setGenerateDishName("");
+    } catch (err) {
+      setGenerateError(
+        err instanceof Error ? err.message : "Unable to generate recipe right now.",
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  }
 
   const validationByRecipeId = useMemo(
     () =>
@@ -237,6 +261,38 @@ function RecipeBookBrowse({
           </div>
         </div>
       </div>
+      {mode === "swap" && onGenerateAndSwap ? (
+        <div className="border-b px-6 py-4">
+          <div className="rounded-xl border bg-muted/30 p-4">
+            <h4 className="text-sm font-semibold text-foreground">Generate a specific dish</h4>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Type any dish name and generate a new recipe for this slot.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Input
+                placeholder="e.g. Prawn fried rice, Tacos, Shakshuka"
+                value={generateDishName}
+                onChange={(e) => setGenerateDishName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleGenerateAndSwap()}
+                disabled={isGenerating}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                onClick={handleGenerateAndSwap}
+                disabled={isGenerating || !generateDishName.trim()}
+              >
+                {isGenerating ? "Generating…" : "Generate"}
+              </Button>
+            </div>
+            {generateError ? (
+              <div className="mt-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {generateError}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <ScrollArea className="min-h-0 flex-1 px-6 py-4">
         <div className="grid gap-3 pb-4">
           {filteredRecipes.length === 0 ? (
@@ -1156,6 +1212,7 @@ export function RecipeBookDialog({
   mode = "browse",
   swapMealType,
   onSelectRecipe,
+  onGenerateAndSwap,
   onCreateCustomRecipe,
   onTranscribeAudio,
   onCreateVoiceRecipe,
@@ -1305,6 +1362,7 @@ export function RecipeBookDialog({
               onBrowseStateChange={setBrowseState}
               onViewRecipe={handleViewRecipe}
               onSelectRecipe={onSelectRecipe}
+              onGenerateAndSwap={onGenerateAndSwap}
             />
           )}
         </div>

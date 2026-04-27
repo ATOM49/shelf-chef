@@ -1,10 +1,16 @@
 "use client";
 
+import { Copy } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import type { GroceryCartItem } from "@/lib/planner/types";
 
 type Props = {
   items: GroceryCartItem[];
   onToggle: (id: string) => void;
+  onCopyMissing: () => void;
+  onCopyLowStock: () => void;
+  canUseClipboard: boolean;
 };
 
 function formatQuantity(qty: number, unit: GroceryCartItem["unit"]): string {
@@ -12,7 +18,13 @@ function formatQuantity(qty: number, unit: GroceryCartItem["unit"]): string {
   return `${rounded} ${unit}`;
 }
 
-export function GroceryCartPanel({ items, onToggle }: Props) {
+export function GroceryCartPanel({
+  items,
+  onToggle,
+  onCopyMissing,
+  onCopyLowStock,
+  canUseClipboard,
+}: Props) {
   if (items.length === 0) return null;
 
   const required = items.filter((i) => i.reason === "missing");
@@ -22,12 +34,26 @@ export function GroceryCartPanel({ items, onToggle }: Props) {
     <section className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-4">
       <div>
         <h3 className="text-sm font-semibold text-foreground">Grocery cart</h3>
-        <p className="text-xs text-muted-foreground">Items needed to cook your planned meals.</p>
+        <p className="text-xs text-muted-foreground">Check off items as you buy them — they&apos;ll be added to the Groceries shelf in your pantry.</p>
       </div>
 
       {required.length > 0 && (
         <div className="flex flex-col gap-1">
-          <div className="text-xs font-semibold uppercase tracking-wide text-destructive">Missing</div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-destructive">
+              Missing
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Copy missing items to clipboard"
+              onClick={onCopyMissing}
+              disabled={!canUseClipboard}
+            >
+              <Copy className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
           {required.map((item) => (
             <GroceryRow key={item.id} item={item} onToggle={onToggle} />
           ))}
@@ -36,8 +62,20 @@ export function GroceryCartPanel({ items, onToggle }: Props) {
 
       {lowStock.length > 0 && (
         <div className="flex flex-col gap-1">
-          <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-            Low stock top-ups
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+              Low stock top-ups
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Copy low stock items to clipboard"
+              onClick={onCopyLowStock}
+              disabled={!canUseClipboard}
+            >
+              <Copy className="size-4" aria-hidden="true" />
+            </Button>
           </div>
           {lowStock.map((item) => (
             <GroceryRow key={item.id} item={item} onToggle={onToggle} />

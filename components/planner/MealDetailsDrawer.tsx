@@ -31,10 +31,12 @@ export function MealDetailsDrawer({
   meal,
   onSetCooked,
   onSwap,
+  onRemove,
 }: {
   meal?: PlannedMeal;
   onSetCooked?: (cooked: boolean) => void;
   onSwap?: () => void;
+  onRemove?: () => void;
 }) {
   if (!meal) {
     return (
@@ -45,13 +47,13 @@ export function MealDetailsDrawer({
   }
 
   const isCooked = meal.status === "completed";
-  const isCheckboxDisabled = isCooked || !meal.validation.canCook;
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
       <div>
         <div className="text-xs uppercase tracking-wide text-zinc-400">
           {meal.day} · {meal.mealType}
+          {meal.recipe.servings ? ` · ${meal.recipe.servings} servings` : ""}
         </div>
         <h3 className="text-lg font-semibold text-zinc-800">{meal.recipe.title}</h3>
         <div className="mt-2">
@@ -64,7 +66,7 @@ export function MealDetailsDrawer({
           <div>
             <h4 className="text-sm font-semibold text-zinc-700">Meal actions</h4>
             <p className="mt-1 text-xs text-zinc-500">
-              Marking a meal as cooked consumes the matched inventory items.
+              Marking as cooked consumes matched inventory items.
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -73,11 +75,16 @@ export function MealDetailsDrawer({
                 Swap recipe
               </Button>
             ) : null}
+            {onRemove ? (
+              <Button type="button" variant="outline" size="sm" onClick={onRemove}>
+                Eating out
+              </Button>
+            ) : null}
             <label className="flex items-center gap-2 text-sm font-medium text-zinc-700">
               <input
                 type="checkbox"
                 checked={isCooked}
-                disabled={isCheckboxDisabled}
+                disabled={isCooked}
                 onChange={(event) => onSetCooked?.(event.currentTarget.checked)}
               />
               Cooked

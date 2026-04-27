@@ -9,6 +9,7 @@ import { convertQuantity } from "@/lib/inventory/units";
 import { buildGeneratedWeeklyPlan } from "@/lib/planner/generatePlan";
 import type {
   PlannedMeal,
+  PlannedMealType,
   PlannerConfigSnapshot,
   PlannerMealSlot,
   PlannerPreferredDishInput,
@@ -78,6 +79,8 @@ export type AppAction =
   | { type: "SELECT_MEAL"; mealId?: string }
   | { type: "SET_MEAL_COOKED"; mealId: string; cooked: boolean }
   | { type: "MOVE_PLANNED_MEAL_SLOT"; mealId: string; day: string; mealType: PlannedMeal["mealType"] }
+  | { type: "REMOVE_PLANNED_MEAL"; mealId: string }
+  | { type: "ADD_MEAL_TO_SLOT"; day: string; mealType: PlannedMealType; recipeId: string }
   | { type: "TOGGLE_GROCERY_ITEM"; itemId: string }
   | { type: "STOCK_ITEMS"; items: StockingItemDraft[] };
 
@@ -579,7 +582,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       }
 
       const meal = state.planner.weeklyPlan.find((plannedMeal) => plannedMeal.id === action.mealId);
-      if (!meal || meal.status === "completed" || !meal.validation.canCook) {
+      if (!meal || meal.status === "completed") {
         return state;
       }
 
@@ -637,8 +640,60 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
-    case "TOGGLE_GROCERY_ITEM": {
+    case "REMOVE_PLANNED_MEAL": {
+      const nextPlan = state.planner.weeklyPlan.filter(
+        (plannedMeal) => plannedMeal.id !== action.mealId,
+      );
+      const groceryCart = buildGroceryCartFromMeals(nextPlan, state.inventory);
       return {
+        ...state,
+        planner: {
+          ...state.planner,
+          weeklyPlan: nextPlan,
+          groceryCart,
+          selectedMealId:
+            state.planner.selectedMealId === action.mealId
+              ? undefined
+              : state.planner.selectedMealId,
+        },
+      };
+    }
+
+    case "ADD_MEAL_TO_SLOT": {
+      const recipe = state.recipes.find((r) => r.id === action.recipeId);
+      if (!recipe) return state;
+
+      const slotOccupied = state.planner.weeklyPlan.some(
+        (m) => m.day === action.day && m.mealType === action.mealType,
+      );
+      if (slotOccupied) return state;
+
+      const validation = validateRecipeAgainstInventory(recipe, state.inventory);
+      const newMeal: PlannedMeal = {
+        id: generateId(),
+        day: action.day,
+        mealType: action.mealType,
+        recipe,
+        status: "planned",
+        validation,
+      };
+      const nextPlan = [...state.planner.weeklyPlan, newMeal];
+      const groceryCart = buildGroceryCartFromMeals(nextPlan, state.inventory);
+      return {
+        ...state,
+        planner: {
+          ...state.planner,
+          weeklyPlan: nextPlan,
+          groceryCart,
+        },
+      };
+    }
+
+    case "TOGGLE_GROCERY_ITEM": {
+      const cartItem = state.planner.groceryCart.find((item) => item.id === action.itemId);
+      const isChecking = cartItem && !cartItem.checked;
+
+      const nextState: AppState = {
         ...state,
         planner: {
           ...state.planner,
@@ -647,6 +702,21 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           ),
         },
       };
+
+      if (isChecking && cartItem) {
+        return applyStockItems(nextState, [
+          {
+            name: cartItem.displayName,
+            quantity: cartItem.neededQuantity,
+            unit: cartItem.unit,
+            category: "other",
+            storageType: "pantry",
+            shelfName: "Groceries",
+          },
+        ]);
+      }
+
+      return nextState;
     }
 
     case "STOCK_ITEMS": {
