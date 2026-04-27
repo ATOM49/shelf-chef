@@ -27,11 +27,10 @@ const STAPLE_INGREDIENTS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Returns true when the supplied (already-normalised) ingredient name is a
- * universally-assumed kitchen staple.
+ * Returns true when the supplied ingredient name is a universally-assumed
+ * kitchen staple. Accepts both pre-normalized and raw ingredient names.
  */
-export function isStaple(normalizedName: string): boolean {
-  // Accept both pre-normalised strings and raw names for safety.
-  const key = normalizeIngredientName(normalizedName);
+export function isStaple(ingredientName: string): boolean {
+  const key = normalizeIngredientName(ingredientName);
   return STAPLE_INGREDIENTS.has(key);
 }
