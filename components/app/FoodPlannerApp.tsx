@@ -618,6 +618,9 @@ export function FoodPlannerApp() {
       <GroceryCartPanel
         items={state.planner.groceryCart}
         onToggle={(id) => dispatch({ type: "TOGGLE_GROCERY_ITEM", itemId: id })}
+        onCopyMissing={() => void handleCopyCartSection(requiredCartItems)}
+        onCopyLowStock={() => void handleCopyCartSection(lowStockCartItems)}
+        canUseClipboard={canUseClipboard}
       />
     ) : (
       <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
@@ -900,32 +903,15 @@ export function FoodPlannerApp() {
               {groceryCartContent}
             </div>
             <div className="sticky bottom-0 border-t bg-background/95 p-4 backdrop-blur">
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  aria-label="Copy missing items to clipboard"
-                  onClick={() => handleCopyCartSection(requiredCartItems)}
-                  disabled={!canUseClipboard || requiredCartItems.length === 0}
-                >
-                  <Copy className="size-4" aria-hidden />
-                  Copy missing items
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  aria-label="Copy low stock items to clipboard"
-                  onClick={() => handleCopyCartSection(lowStockCartItems)}
-                  disabled={!canUseClipboard || lowStockCartItems.length === 0}
-                >
-                  <Copy className="size-4" aria-hidden />
-                  Copy low stock items
-                </Button>
-              </div>
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => void handleCopyCartSection(state.planner.groceryCart)}
+                disabled={state.planner.groceryCart.length === 0 || !canUseClipboard}
+              >
+                <Copy className="size-4" aria-hidden />
+                Copy shopping list
+              </Button>
               {cartCopyError ? (
                 <p className="mt-2 text-xs text-destructive">{cartCopyError}</p>
               ) : null}
