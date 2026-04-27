@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -10,7 +11,7 @@ import {
 } from "react";
 import { WeeklyPlanList } from "@/components/planner/WeeklyPlanList";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   LOTTIE_ANIMATION_SOURCES,
   LottieLoadingPanel,
@@ -63,7 +64,6 @@ import type {
   GroceryCartItem,
   PlannerGenerationApiResponse,
   PlannerGenerationRequest,
-  PlannedMeal,
   PlannedMealType,
   PlannerWeekDay,
   PreferredDishRequest,
@@ -74,6 +74,7 @@ import {
   CircleHelp,
   Copy,
   LoaderCircle,
+  LogOut,
   PackagePlus,
   ShoppingCart,
   SlidersHorizontal,
@@ -760,6 +761,17 @@ export function FoodPlannerApp() {
                   </Badge>
                 ) : null}
               </Button>
+              <Link
+                href="/signout"
+                className={buttonVariants({
+                  variant: "ghost",
+                  size: "sm",
+                  className: "shrink-0 text-muted-foreground",
+                })}
+              >
+                <LogOut className="size-3.5" aria-hidden />
+                <span className="hidden sm:inline">Sign out</span>
+              </Link>
             </div>
           </div>
         </header>
