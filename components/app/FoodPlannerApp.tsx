@@ -62,6 +62,7 @@ import {
 } from "@/lib/planner/schema";
 import type {
   GroceryCartItem,
+  PlannedMeal,
   PlannerGenerationApiResponse,
   PlannerGenerationRequest,
   PlannedMealType,
