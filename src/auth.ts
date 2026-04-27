@@ -1,8 +1,8 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import GitHub from "next-auth/providers/github";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/db";
+import { ensureUserAppState } from "@/lib/userAppState";
 
 const providers = [
   Google({
@@ -31,6 +31,13 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     // Database sessions allow server-side token revocation and keep JWT
     // payloads lean. The Prisma adapter handles session storage.
     strategy: "database",
+  },
+  events: {
+    async signIn({ user }) {
+      if (user.id) {
+        await ensureUserAppState(user.id);
+      }
+    },
   },
   callbacks: {
     async session({ session, user }) {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/src/auth";
 import { prisma } from "@/lib/db";
 import { parsePersistedAppState } from "@/lib/persistence";
+import { ensureUserAppState } from "@/lib/userAppState";
 
 // Maximum allowed state payload size (1 MB)
 const MAX_STATE_BYTES = 1_000_000;
@@ -12,11 +13,9 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const record = await prisma.userAppState.findUnique({
-    where: { userId: session.user.id },
-  });
+  const record = await ensureUserAppState(session.user.id);
 
-  return NextResponse.json({ state: record?.state ?? null });
+  return NextResponse.json({ state: record.state });
 }
 
 export async function PUT(request: Request) {
