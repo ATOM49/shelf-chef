@@ -51,7 +51,7 @@ export function GroceryCartPanel({
               onClick={onCopyMissing}
               disabled={!canUseClipboard}
             >
-              <Copy className="size-4" aria-hidden={true} />
+              <Copy className="size-4" aria-hidden="true" />
             </Button>
           </div>
           {required.map((item) => (
@@ -74,7 +74,7 @@ export function GroceryCartPanel({
               onClick={onCopyLowStock}
               disabled={!canUseClipboard}
             >
-              <Copy className="size-4" aria-hidden={true} />
+              <Copy className="size-4" aria-hidden="true" />
             </Button>
           </div>
           {lowStock.map((item) => (

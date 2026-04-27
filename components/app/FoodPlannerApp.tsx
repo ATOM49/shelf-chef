@@ -150,7 +150,7 @@ export function FoodPlannerApp() {
     typeof navigator !== "undefined" && !!navigator.clipboard?.writeText;
 
   const handleCopyCartSection = useCallback(
-    (items: GroceryCartItem[]) => {
+    (items: GroceryCartItem[]): void => {
       setCartCopyError(null);
       if (!canUseClipboard || items.length === 0) return;
 
@@ -163,7 +163,7 @@ export function FoodPlannerApp() {
         )
         .join("\n");
 
-      navigator.clipboard.writeText(shoppingListText).catch(() => {
+      void navigator.clipboard.writeText(shoppingListText).catch(() => {
         setCartCopyError(
           "Clipboard access denied. Please check your browser permissions.",
         );
@@ -907,7 +907,7 @@ export function FoodPlannerApp() {
                 onClick={() => handleCopyCartSection(state.planner.groceryCart)}
                 disabled={state.planner.groceryCart.length === 0 || !canUseClipboard}
               >
-                <Copy className="size-4" aria-hidden />
+                <Copy className="size-4" aria-hidden="true" />
                 Copy shopping list
               </Button>
               {cartCopyError ? (
