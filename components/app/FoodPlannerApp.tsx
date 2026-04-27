@@ -593,7 +593,11 @@ export function FoodPlannerApp() {
     resetPendingRef.current = true;
     clearAppState();
     if (session?.user?.id) {
-      void fetch("/api/state", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state: null }) });
+      void fetch("/api/state", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state: null }),
+      });
     }
     dispatch({ type: "RESET_APP" });
     handleClearSelection();
