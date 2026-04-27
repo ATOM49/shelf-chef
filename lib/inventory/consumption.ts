@@ -2,22 +2,27 @@ import type { InventoryItem } from "@/lib/inventory/types";
 import type { PlannedMeal } from "@/lib/planner/types";
 
 export function applyMealConsumption(inventory: InventoryItem[], plannedMeal: PlannedMeal) {
-  if (plannedMeal.status === "completed" || !plannedMeal.validation.canCook) {
+  if (plannedMeal.status === "completed") {
     return inventory;
   }
 
   return inventory.map((item) => {
     const matchingIngredients = plannedMeal.validation.matches.filter(
-      (match) => match.status === "enough" && match.matchedInventoryItemId === item.id,
+      (match) =>
+        (match.status === "enough" || match.status === "low") &&
+        match.matchedInventoryItemId === item.id,
     );
 
     if (matchingIngredients.length === 0) {
       return item;
     }
 
-    const usedQuantity = matchingIngredients.reduce((total, match) => {
-      return total + match.resolvedNeededQuantity;
-    }, 0);
+    // If any match is "low" (not enough), deplete all available stock for this item.
+    // Otherwise consume only what each "enough" match needs.
+    const hasLowMatch = matchingIngredients.some((match) => match.status === "low");
+    const usedQuantity = hasLowMatch
+      ? item.quantity
+      : matchingIngredients.reduce((total, match) => total + match.resolvedNeededQuantity, 0);
 
     return {
       ...item,

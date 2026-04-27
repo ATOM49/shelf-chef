@@ -100,14 +100,18 @@ Requirements:
 - Treat the existing recipe book as already available to the user. Do not regenerate exact or lightly renamed duplicates of recipes already in that book.
 - If a recipe idea already exists in the recipe book, generate a different recipe instead of repeating it.
 - Prefer recipes that use the inventory on hand, especially items that expire soon.
+- Strongly prefer using protein items (meat, fish, poultry, seafood) with expiry dates within the next 3 days, as they spoil fastest.
 - Respect the user preferences and preferred dishes when possible.
-- Use clear household ingredient quantities.
+- Use clear household ingredient quantities standardized for 2 servings (unless user preferences specify otherwise).
+- Include a "servings" field in each recipe indicating the number of portions it makes.
+- Ensure ingredient quantities across all recipes are consistent for the same serving count.
 - Allowed units: ${INVENTORY_UNITS.join(", ")}.
 - If a recipe ingredient matches an inventory ingredient by normalized name, use the inventory unit rule for that ingredient.
 - Do not switch an in-inventory ingredient to a different measurement group or a different household unit when an inventory unit is already provided.
 - Prefer exact inventory units for stocked ingredients even when another unit would also be common in recipes.
-- Each recipe must include: title, mealType, tags, ingredients.
-- Include cuisine, instructions, and referenceUrl when you can do so confidently.
+- Each recipe must include: title, mealType, servings, tags, ingredients.
+- Include cuisine and instructions when you can do so confidently.
+- For referenceUrl: only include it when you are highly confident the exact URL is real, valid, and accessible (not a 404). Only use https:// links from well-known cooking sites such as allrecipes.com, food.com, bbcgoodfood.com, seriouseats.com, or similar reputable sources. If you have any doubt, omit referenceUrl entirely.
 - Keep recipe titles concise and natural.
 - Do not include markdown or explanation text.
 
@@ -135,12 +139,15 @@ export function buildCustomRecipeGenerationPrompt({
 }: CustomRecipeGenerationRequest) {
   const today = new Date().toISOString().split("T")[0];
   const inventoryUnitHints = buildInventoryUnitHints(inventory);
-  const inventoryLines = inventory
-    .map((item) => {
-      const normalizedName = item.normalizedName ? `, normalized ${item.normalizedName}` : "";
-      return `- ${item.name}: ${item.quantity} ${item.unit}${normalizedName}`;
-    })
-    .join("\n");
+  const inventoryLines =
+    inventory.length > 0
+      ? inventory
+          .map((item) => {
+            const normalizedName = item.normalizedName ? `, normalized ${item.normalizedName}` : "";
+            return `- ${item.name}: ${item.quantity} ${item.unit}${normalizedName}`;
+          })
+          .join("\n")
+      : "- No inventory provided. Generate a practical recipe based on the dish name.";
   const inventoryUnitRuleLines =
     inventoryUnitHints.length > 0
       ? inventoryUnitHints
@@ -174,8 +181,9 @@ Requirements:
 - Do not generate a duplicate of an existing recipe-book entry.
 - Allowed units: ${INVENTORY_UNITS.join(", ")}.
 - If an ingredient matches an inventory ingredient by normalized name, use the inventory unit rule for that ingredient.
-- Include: title, mealType, tags, ingredients.
-- Include cuisine, instructions, and referenceUrl when you can do so confidently.
+- Include: title, mealType, servings, tags, ingredients.
+- Include cuisine and instructions when you can do so confidently.
+- For referenceUrl: only include it when you are highly confident the exact URL is real and accessible. Only use https:// links from well-known cooking sites. If in doubt, omit referenceUrl entirely.
 - Keep the recipe practical for a home kitchen.
 
 ${requestedDishLine}
