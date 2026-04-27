@@ -77,7 +77,7 @@ export function MealDetailsDrawer({
             ) : null}
             {onRemove ? (
               <Button type="button" variant="outline" size="sm" onClick={onRemove}>
-                Remove meal
+                Eating out
               </Button>
             ) : null}
             <label className="flex items-center gap-2 text-sm font-medium text-zinc-700">
