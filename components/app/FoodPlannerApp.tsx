@@ -60,6 +60,7 @@ import {
   parsePlannerGenerationApiResponse,
 } from "@/lib/planner/schema";
 import type {
+  GroceryCartItem,
   PlannerGenerationApiResponse,
   PlannerGenerationRequest,
   PlannedMeal,
@@ -69,6 +70,7 @@ import { clearAppState, loadAppState, saveAppState } from "@/lib/persistence";
 import {
   BookOpen,
   CircleHelp,
+  Copy,
   LoaderCircle,
   PackagePlus,
   ShoppingCart,
@@ -86,6 +88,10 @@ type RecipeBookState = {
   mealId?: string;
   swapMealType?: PlannedMeal["mealType"];
 };
+
+function formatCartItemQuantity(quantity: number) {
+  return Number.isInteger(quantity) ? quantity : quantity.toFixed(1);
+}
 
 export function FoodPlannerApp() {
   const [state, dispatch] = useReducer(appReducer, undefined, loadAppState);
@@ -114,6 +120,7 @@ export function FoodPlannerApp() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [plannerApiError, setPlannerApiError] = useState<string | null>(null);
   const [isPlannerPending, setIsPlannerPending] = useState(false);
+  const [cartCopyError, setCartCopyError] = useState<string | null>(null);
   const fridgeInventory = state.inventory.filter(
     (item) => item.storageId === state.fridge.id,
   );
@@ -133,6 +140,37 @@ export function FoodPlannerApp() {
       )
     : false;
   const planActionLabel = "Create plan";
+  const requiredCartItems = state.planner.groceryCart.filter(
+    (item) => item.reason === "missing",
+  );
+  const lowStockCartItems = state.planner.groceryCart.filter(
+    (item) => item.reason === "low",
+  );
+  const canUseClipboard =
+    typeof navigator !== "undefined" && !!navigator.clipboard?.writeText;
+
+  const handleCopyCartSection = useCallback(
+    (items: GroceryCartItem[]): void => {
+      setCartCopyError(null);
+      if (!canUseClipboard || items.length === 0) return;
+
+      const uncheckedItems = items.filter((item) => !item.checked);
+      const itemsToCopy = uncheckedItems.length > 0 ? uncheckedItems : items;
+      const shoppingListText = itemsToCopy
+        .map(
+          (item) =>
+            `- ${item.displayName} — ${formatCartItemQuantity(item.neededQuantity)} ${item.unit}`,
+        )
+        .join("\n");
+
+      void navigator.clipboard.writeText(shoppingListText).catch(() => {
+        setCartCopyError(
+          "Clipboard access denied. Please check your browser permissions.",
+        );
+      });
+    },
+    [canUseClipboard],
+  );
 
   useLayoutEffect(() => {
     latestStateRef.current = state;
@@ -604,6 +642,9 @@ export function FoodPlannerApp() {
       <GroceryCartPanel
         items={state.planner.groceryCart}
         onToggle={(id) => dispatch({ type: "TOGGLE_GROCERY_ITEM", itemId: id })}
+        onCopyMissing={() => handleCopyCartSection(requiredCartItems)}
+        onCopyLowStock={() => handleCopyCartSection(lowStockCartItems)}
+        canUseClipboard={canUseClipboard}
       />
     ) : (
       <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
@@ -884,6 +925,20 @@ export function FoodPlannerApp() {
             </DrawerHeader>
             <div className="flex-1 overflow-y-auto px-4 pb-4">
               {groceryCartContent}
+            </div>
+            <div className="sticky bottom-0 border-t bg-background/95 p-4 backdrop-blur">
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => handleCopyCartSection(state.planner.groceryCart)}
+                disabled={state.planner.groceryCart.length === 0 || !canUseClipboard}
+              >
+                <Copy className="size-4" aria-hidden="true" />
+                Copy shopping list
+              </Button>
+              {cartCopyError ? (
+                <p className="mt-2 text-xs text-destructive">{cartCopyError}</p>
+              ) : null}
             </div>
           </DrawerContent>
         </Drawer>
