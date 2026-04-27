@@ -464,6 +464,55 @@ export function FoodPlannerApp() {
     [state.inventory, state.recipes],
   );
 
+  const handleTranscribeAudio = useCallback(
+    async (payload: { audioFile: File }) => {
+      const formData = new FormData();
+      formData.append("audio", payload.audioFile);
+
+      const response = await fetch("/api/recipes/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const err = (await response.json()) as { error?: string; detail?: string };
+        throw new Error(err.detail || err.error || `HTTP ${response.status}`);
+      }
+
+      const data = (await response.json()) as { transcript?: string };
+      if (!data.transcript) {
+        throw new Error("No transcript returned. Please try again.");
+      }
+      return data.transcript;
+    },
+    [],
+  );
+
+  const handleCreateVoiceRecipe = useCallback(
+    async (payload: { transcript: string; preferences: string }) => {
+      const response = await fetch("/api/recipes/generate/voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transcript: payload.transcript,
+          preferences: payload.preferences,
+          recipeBook: state.recipes,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = (await response.json()) as { error?: string; detail?: string };
+        throw new Error(err.detail || err.error || `HTTP ${response.status}`);
+      }
+
+      const rawData = await response.json();
+      const data = parseCustomRecipeGenerationApiResponse(rawData);
+      dispatch({ type: "ADD_CUSTOM_RECIPE", recipe: data.recipe });
+      return data.recipe.id;
+    },
+    [state.recipes],
+  );
+
   const handleGenerateAndSwap = useCallback(
     async (dishName: string) => {
       const allInventoryIds = state.inventory.map((item) => item.id);
@@ -994,6 +1043,8 @@ export function FoodPlannerApp() {
             recipeBookState.mode === "swap" ? handleGenerateAndSwap : undefined
           }
           onCreateCustomRecipe={handleCreateCustomRecipe}
+          onTranscribeAudio={handleTranscribeAudio}
+          onCreateVoiceRecipe={handleCreateVoiceRecipe}
           onDeleteRecipe={handleDeleteCustomRecipe}
         />
         <AlertDialog

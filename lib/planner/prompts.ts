@@ -8,6 +8,13 @@ import {
   type Recipe,
 } from "@/lib/planner/types";
 
+export type VoiceRecipeGenerationRequest = {
+  /** Plain-English summary of the cooking intent extracted from the voice note. */
+  transcript: string;
+  preferences: string;
+  recipeBook: Recipe[];
+};
+
 const MAX_RECIPE_BOOK_PROMPT_ITEMS = 60;
 
 function summarizeRecipeBook(recipes: Recipe[]) {
@@ -259,4 +266,41 @@ Allowed meal types: ${PLANNED_MEAL_TYPES.join(", ")}
 
 Recipe catalog:
 ${recipeCatalog}`;
+}
+
+export function buildVoiceRecipeGenerationPrompt({
+  transcript,
+  preferences,
+  recipeBook,
+}: VoiceRecipeGenerationRequest) {
+  const today = new Date().toISOString().split("T")[0];
+  const preferenceSummary = preferences.trim() || "No additional preferences supplied.";
+  const recipeBookLines = summarizeRecipeBook(recipeBook);
+
+  return `You are a home kitchen recipe assistant.
+
+Today's date: ${today}
+
+Use Google Search grounding when helpful to keep recipes realistic and commonly cooked.
+
+The user recorded a voice note describing what they want to cook. Generate exactly one recipe based on their spoken intent.
+
+Requirements:
+- Return JSON only with a top-level recipes array containing exactly one recipe.
+- Use the voice note description as the primary recipe intent.
+- Respect the user's additional preferences if provided.
+- Do not generate a duplicate of an existing recipe-book entry.
+- Allowed units: ${INVENTORY_UNITS.join(", ")}.
+- Include: title, mealType, tags, ingredients.
+- Include cuisine, instructions, and referenceUrl when you can do so confidently.
+- Keep the recipe practical for a home kitchen.
+
+Voice note description:
+${transcript}
+
+User preferences:
+${preferenceSummary}
+
+Existing recipe book (do not duplicate):
+${recipeBookLines}`;
 }
