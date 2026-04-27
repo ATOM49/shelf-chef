@@ -88,9 +88,9 @@ type RecipeBookState = {
   open: boolean;
   mode: "browse" | "swap";
   mealId?: string;
-  swapMealType?: PlannedMeal["mealType"];
-  fillDay?: string;
-  fillMealType?: PlannedMeal["mealType"];
+  swapMealType?: PlannedMealType;
+  fillDay?: PlannerWeekDay;
+  fillMealType?: PlannedMealType;
 };
 
 function formatCartItemQuantity(quantity: number) {
