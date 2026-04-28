@@ -21,7 +21,7 @@ function getSingleValue(value: string | string[] | undefined) {
 }
 
 const SIGN_IN_ERROR_MESSAGES: Record<string, string> = {
-  AccessDenied: "Hmm, this account isn't authorised for ShelfChef.",
+  AccessDenied: "Hmm, this account isn't authorized for ShelfChef.",
   Configuration: "Something's off on our end — authentication isn't set up correctly.",
   Default: "Sign-in didn't work. Give it another go!",
   OAuthAccountNotLinked:

@@ -1230,7 +1230,7 @@ export function FoodPlannerApp() {
                       )}
                     </div>
                     <p className="shrink-0 text-xs text-muted-foreground">
-                      Add some items to your shelves and the AI will help organise everything!
+                      Add some items to your shelves and the AI will help organize everything!
                     </p>
                   </div>
                 </TabsContent>
@@ -1293,7 +1293,7 @@ export function FoodPlannerApp() {
             <DrawerHeader className="pr-12">
               <DrawerTitle>Customise plan</DrawerTitle>
               <DrawerDescription>
-                Save your preferences and favourite dishes here, then hit
+                Save your preferences and favorite dishes here, then hit
                 &apos;Create plan&apos; to build the week.
               </DrawerDescription>
             </DrawerHeader>
