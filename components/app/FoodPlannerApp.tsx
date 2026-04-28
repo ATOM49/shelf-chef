@@ -146,6 +146,9 @@ function formatCartItemQuantity(quantity: number) {
   return Number.isInteger(quantity) ? quantity : quantity.toFixed(1);
 }
 
+const PULL_THRESHOLD = 72;
+const PULL_DAMPING_FACTOR = 0.4;
+
 export function FoodPlannerApp() {
   const [activeWorkspace, setActiveWorkspace] = useState<Workspace>(() =>
     loadWorkspacePreference(),
@@ -199,7 +202,6 @@ export function FoodPlannerApp() {
   const isRefreshingRef = useRef(false);
   const touchStartYRef = useRef(0);
   const isPullActiveRef = useRef(false);
-  const PULL_THRESHOLD = 72;
   const fridgeInventory = state.inventory.filter(
     (item) => item.storageId === state.fridge.id,
   );
@@ -866,7 +868,7 @@ export function FoodPlannerApp() {
       setPullDistance(clamped);
       isPullActiveRef.current = delta >= PULL_THRESHOLD;
     },
-    [PULL_THRESHOLD],
+    [],
   );
 
   const handleTouchEnd = useCallback(() => {
@@ -1116,7 +1118,7 @@ export function FoodPlannerApp() {
         style={
           pullDistance > 0
             ? {
-                transform: `translateY(${Math.min(pullDistance * 0.4, PULL_THRESHOLD * 0.4)}px)`,
+                transform: `translateY(${Math.min(pullDistance * PULL_DAMPING_FACTOR, PULL_THRESHOLD * PULL_DAMPING_FACTOR)}px)`,
               }
             : undefined
         }
