@@ -184,17 +184,19 @@ async function upsertMealRows(
   }
 
   let upserted = 0;
-  for (const meal of meals) {
-    const properties = plannedMealToRowProperties(meal);
-    const existingPageId = existingByMealId.get(meal.id);
+  await Promise.all(
+    meals.map(async (meal) => {
+      const properties = plannedMealToRowProperties(meal);
+      const existingPageId = existingByMealId.get(meal.id);
 
-    if (existingPageId) {
-      await updateDatabaseRow(userId, existingPageId, properties);
-    } else {
-      await createDatabaseRow(userId, databaseId, properties);
-    }
-    upserted++;
-  }
+      if (existingPageId) {
+        await updateDatabaseRow(userId, existingPageId, properties);
+      } else {
+        await createDatabaseRow(userId, databaseId, properties);
+      }
+      upserted++;
+    }),
+  );
 
   return upserted;
 }
@@ -221,17 +223,19 @@ async function upsertCartRows(
   }
 
   let upserted = 0;
-  for (const item of cartItems) {
-    const properties = groceryItemToRowProperties(item);
-    const existingPageId = existingByItemId.get(item.id);
+  await Promise.all(
+    cartItems.map(async (item) => {
+      const properties = groceryItemToRowProperties(item);
+      const existingPageId = existingByItemId.get(item.id);
 
-    if (existingPageId) {
-      await updateDatabaseRow(userId, existingPageId, properties);
-    } else {
-      await createDatabaseRow(userId, databaseId, properties);
-    }
-    upserted++;
-  }
+      if (existingPageId) {
+        await updateDatabaseRow(userId, existingPageId, properties);
+      } else {
+        await createDatabaseRow(userId, databaseId, properties);
+      }
+      upserted++;
+    }),
+  );
 
   return upserted;
 }
