@@ -29,8 +29,7 @@ function getInviteBaseUrl() {
 
 function defaultHouseholdName(user: { name?: string | null; email?: string | null }) {
   const base = user.name?.trim() || user.email?.split("@")[0]?.trim() || "My";
-  const needsSuffix = base.toLowerCase().endsWith("s") ? "'" : "'s";
-  return `${base}${needsSuffix} household`;
+  return `${base}'s household`;
 }
 
 function hashInviteToken(token: string) {
@@ -517,10 +516,7 @@ async function removeMembershipWithOwnershipTransfer(
     }
 
     if (targetMembership.role === "OWNER") {
-      const nextOwner = pickNextOwner(remainingMemberships);
-      if (!nextOwner) {
-        throw new HouseholdAccessError("Unable to determine the next household owner", 409);
-      }
+      const nextOwner = pickNextOwner(remainingMemberships)!;
 
       await tx.householdMembership.update({
         where: { id: nextOwner.id },

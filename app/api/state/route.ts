@@ -32,8 +32,10 @@ function parseWorkspaceFromBody(body: unknown): Workspace {
     "type" in body.workspace
   ) {
     const workspace = body.workspace as { type?: unknown; householdId?: unknown };
-    if (workspace.type === "household" && typeof workspace.householdId === "string") {
-      return { type: "household", householdId: workspace.householdId };
+    const householdId =
+      typeof workspace.householdId === "string" ? workspace.householdId.trim() : "";
+    if (workspace.type === "household" && householdId) {
+      return { type: "household", householdId };
     }
   }
 

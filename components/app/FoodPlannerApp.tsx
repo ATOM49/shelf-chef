@@ -983,9 +983,6 @@ export function FoodPlannerApp() {
             <div className="flex items-center gap-2">
               <span className="text-xl">🍽️</span>
               <h1 className="text-lg font-semibold">ShelfChef</h1>
-              <Badge variant="outline" className="hidden sm:inline-flex">
-                {activeHousehold ? "Shared household" : "Personal workspace"}
-              </Badge>
               <Popover>
                 <PopoverTrigger
                   type="button"
