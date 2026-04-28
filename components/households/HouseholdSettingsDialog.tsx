@@ -283,14 +283,14 @@ export function HouseholdSettingsDialog({
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    No pending invites.
+                    No pending invites — send one above!
                   </p>
                 )}
               </section>
             </>
           ) : (
             <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-              Personal workspaces are private. Switch to a household from the workspace selector to invite people or manage roles.
+              Personal workspaces are just for you. Switch to a household to share with others.
             </div>
           )}
 

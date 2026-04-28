@@ -17,7 +17,7 @@ export function MealDetailsDrawer({
   if (!meal) {
     return (
       <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-500">
-        Select a planned meal to inspect recipe ingredients, inventory matches, and cookability.
+        Tap a meal in the plan to see its recipe, ingredients, and what&apos;s in stock.
       </div>
     );
   }

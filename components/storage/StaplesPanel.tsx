@@ -89,7 +89,7 @@ export function StaplesPanel({
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            No custom staples yet. Add items below.
+            No custom staples yet — add your own below!
           </p>
         )}
       </div>

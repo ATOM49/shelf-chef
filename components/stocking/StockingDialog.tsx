@@ -257,7 +257,7 @@ function getStockPendingState(pendingAction: PendingAction | null) {
     return {
       title: "Reading your stock note",
       description:
-        "Turning your note into reviewable inventory rows with suggested storage details.",
+        "Pulling out items from your note and suggesting where they belong.",
       statusLabel: "Analyzing stock note",
     };
   }
@@ -268,14 +268,14 @@ function getStockPendingState(pendingAction: PendingAction | null) {
     return {
       title: `Generating the ${presetLabel} preset`,
       description:
-        "Assembling fridge and pantry items for this kitchen preset before the review table opens.",
+        "Building out a kitchen full of items for this preset — almost ready to review!",
       statusLabel: "Generating stock preset",
     };
   }
 
   return {
     title: "Preparing your stock review",
-    description: "Organizing inventory suggestions for you to review.",
+    description: "Getting your suggestions ready to review.",
     statusLabel: "Preparing review",
   };
 }
@@ -405,10 +405,10 @@ function InputStep({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
             {isTextPending
-              ? "AI is parsing your stock note into reviewable inventory rows."
+              ? "Parsing your note into inventory rows…"
               : trimmedInput
-                ? "AI will parse this note into inventory rows for you to review."
-                : "Paste a note or use a preset to begin."}
+                ? "AI will read this note and lay out inventory rows for you to review."
+                : "Paste a note or use a preset to get started."}
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
