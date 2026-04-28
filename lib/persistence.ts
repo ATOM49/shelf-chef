@@ -14,10 +14,14 @@ import type {
   Recipe,
 } from "@/lib/planner/types";
 import { PLANNED_MEAL_TYPES, RECIPE_MEAL_TYPES } from "@/lib/planner/types";
+import { DEFAULT_WORKSPACE, parseSerializedWorkspace, serializeWorkspace, type Workspace } from "@/lib/households/shared";
 
 const APP_STORAGE_KEY = "food-planner-app-state-v2";
 const LEGACY_STORAGE_KEY = "food-planner-fridge-layout";
 const FALLBACK_CATEGORY: InventoryCategory = "other";
+
+const ACTIVE_WORKSPACE_KEY = "food-planner-active-workspace-v1";
+const WORKSPACE_STORAGE_PREFIX = "food-planner-workspace-state-v1";
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -311,6 +315,87 @@ export function clearAppState() {
   try {
     localStorage.removeItem(APP_STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function getWorkspaceStorageKey(workspace: Workspace) {
+  return `${WORKSPACE_STORAGE_PREFIX}:${serializeWorkspace(workspace)}`;
+}
+
+export function loadWorkspacePreference(): Workspace {
+  if (typeof window === "undefined") {
+    return DEFAULT_WORKSPACE;
+  }
+
+  try {
+    return parseSerializedWorkspace(localStorage.getItem(ACTIVE_WORKSPACE_KEY));
+  } catch {
+    return DEFAULT_WORKSPACE;
+  }
+}
+
+export function saveWorkspacePreference(workspace: Workspace) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    localStorage.setItem(ACTIVE_WORKSPACE_KEY, serializeWorkspace(workspace));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+export function loadWorkspaceAppState(workspace: Workspace): AppState {
+  if (typeof window === "undefined") {
+    return createDefaultAppState();
+  }
+
+  try {
+    const workspaceState = localStorage.getItem(getWorkspaceStorageKey(workspace));
+    if (workspaceState) {
+      const parsed = reviveAppState(JSON.parse(workspaceState));
+      if (parsed) return parsed;
+    }
+
+    if (workspace.type === "personal") {
+      return loadAppState();
+    }
+  } catch {
+    // ignore malformed storage and reset to defaults
+  }
+
+  return createDefaultAppState();
+}
+
+export function saveWorkspaceAppState(workspace: Workspace, state: AppState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const serialized = JSON.stringify(state);
+    localStorage.setItem(getWorkspaceStorageKey(workspace), serialized);
+    if (workspace.type === "personal") {
+      localStorage.setItem(APP_STORAGE_KEY, serialized);
+    }
+  } catch {
+    // ignore storage failures
+  }
+}
+
+export function clearWorkspaceAppState(workspace: Workspace) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    localStorage.removeItem(getWorkspaceStorageKey(workspace));
+    if (workspace.type === "personal") {
+      clearAppState();
+    }
   } catch {
     // ignore storage failures
   }
