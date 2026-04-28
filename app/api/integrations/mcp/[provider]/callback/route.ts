@@ -77,7 +77,7 @@ export async function GET(
   }
 
   // Validate state and retrieve the pending PKCE verifier
-  const pending = consumePendingState(state);
+  const pending = await consumePendingState(state);
   if (!pending) {
     return buildPlaygroundErrorRedirect(
       request,
@@ -157,7 +157,7 @@ export async function GET(
       ? new Date(Date.now() + tokenResponse.expires_in * 1000)
       : undefined;
 
-  upsertConnection({
+  await upsertConnection({
     userId: user.id,
     providerKey,
     providerType: "mcp",
