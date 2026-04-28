@@ -273,7 +273,7 @@ function RecipeBookBrowse({
         <div className="grid gap-3 pb-4">
           {filteredRecipes.length === 0 ? (
             <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-              No recipes match the current filters.
+              No recipes found — try adjusting the filters.
             </div>
           ) : null}
           {filteredRecipes.map((recipe) => {
@@ -413,7 +413,7 @@ function RecipeBookCreate({
 
   async function handleSubmit() {
     if (selectedInventoryItemIds.length === 0) {
-      setSubmitError("Select at least one inventory item for the recipe.");
+      setSubmitError("Pick at least one inventory item to build the recipe from.");
       return;
     }
 
@@ -548,7 +548,7 @@ function RecipeBookCreate({
             })}
             {filteredInventory.length === 0 ? (
               <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-                No inventory items match the current filter.
+                No items match — try a different search.
               </div>
             ) : null}
           </div>
@@ -656,10 +656,10 @@ export function RecipeBookDialog({
         : "Recipe book";
   const headerDescription =
     mode === "swap"
-      ? `Choose a ${swapMealType ?? "saved"} recipe directly from your recipe book.`
+      ? `Pick a ${swapMealType ?? "saved"} recipe from your book to fill this slot.`
       : view === "detail"
-        ? "Review cookability, ingredients, and instructions without leaving the drawer."
-        : "Browse saved recipes, review what you can cook from current inventory, and create custom recipes from selected items.";
+        ? "Check ingredients, instructions, and cookability right here."
+        : "Browse your saved recipes, see what you can cook today, and create new ones from your pantry.";
 
   return (
     <Drawer open={open} onOpenChange={handleDrawerOpenChange} direction="left">

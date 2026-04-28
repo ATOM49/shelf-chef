@@ -21,14 +21,14 @@ function getSingleValue(value: string | string[] | undefined) {
 }
 
 const SIGN_IN_ERROR_MESSAGES: Record<string, string> = {
-  AccessDenied: "Your account is not allowed to access ShelfChef.",
-  Configuration: "Authentication is not configured correctly.",
-  Default: "Authentication failed. Try again.",
+  AccessDenied: "Hmm, this account isn't authorised for ShelfChef.",
+  Configuration: "Something's off on our end — authentication isn't set up correctly.",
+  Default: "Sign-in didn't work. Give it another go!",
   OAuthAccountNotLinked:
     "This email is already linked to a different sign-in method.",
-  OAuthCallback: "The provider did not complete the login flow.",
-  OAuthCreateAccount: "We could not create an account from that provider.",
-  OAuthSignin: "The provider rejected the sign-in request.",
+  OAuthCallback: "The sign-in provider didn't finish — please try again.",
+  OAuthCreateAccount: "We couldn't create an account with that provider. Try a different one.",
+  OAuthSignin: "The provider turned down the request — please try again.",
 };
 
 export default async function SignInPage({
@@ -60,7 +60,7 @@ export default async function SignInPage({
             <div className="space-y-1">
               <CardTitle className="text-2xl">Welcome back to ShelfChef</CardTitle>
               <CardDescription>
-                Sign in to open the planner and access your MCP playground.
+                Sign in to get cooking — your pantry and planner are waiting.
               </CardDescription>
             </div>
           </CardHeader>
@@ -87,7 +87,7 @@ export default async function SignInPage({
             </div>
           </CardContent>
           <CardFooter className="justify-start text-sm text-muted-foreground">
-            You will be returned to the page you originally requested after login.
+            We&apos;ll take you back to where you were once you&apos;re in.
           </CardFooter>
         </Card>
       </div>

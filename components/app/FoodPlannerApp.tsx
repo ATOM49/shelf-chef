@@ -830,7 +830,7 @@ export function FoodPlannerApp() {
                   variant="outline"
                   className="border-amber-300 bg-amber-50 text-amber-700"
                 >
-                  Saved settings not used for this plan
+                  Settings updated — regenerate to apply
                 </Badge>
               ) : null}
             </div>
@@ -955,7 +955,7 @@ export function FoodPlannerApp() {
       />
     ) : (
       <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-        Grocery cart is empty. Generate a weekly plan first.
+        Nothing here yet — generate a plan and your cart will fill up!
       </div>
     );
 
@@ -995,9 +995,8 @@ export function FoodPlannerApp() {
                   <PopoverHeader>
                     <PopoverTitle>What ShelfChef helps you do</PopoverTitle>
                     <PopoverDescription>
-                      Manage inventory stock, create recipes with ingredients,
-                      and plan your weekly menu so you can better manage your
-                      groceries.
+                      Stock your shelves, generate recipes from what you have,
+                      and plan a full week of meals — all in one place.
                     </PopoverDescription>
                   </PopoverHeader>
                 </PopoverContent>
@@ -1231,8 +1230,7 @@ export function FoodPlannerApp() {
                       )}
                     </div>
                     <p className="shrink-0 text-xs text-muted-foreground">
-                      Stock items first to let AI build out fridge and pantry
-                      shelves for you.
+                      Add some items to your shelves and the AI will help organise everything!
                     </p>
                   </div>
                 </TabsContent>
@@ -1295,8 +1293,8 @@ export function FoodPlannerApp() {
             <DrawerHeader className="pr-12">
               <DrawerTitle>Customise plan</DrawerTitle>
               <DrawerDescription>
-                Save planner preferences and preferred dishes here, then create
-                or recreate the week from the planner header.
+                Save your preferences and favourite dishes here, then hit
+                &apos;Create plan&apos; to build the week.
               </DrawerDescription>
             </DrawerHeader>
             <PlannerSidebar
@@ -1325,7 +1323,7 @@ export function FoodPlannerApp() {
               <DrawerTitle>Shopping cart</DrawerTitle>
               <DrawerDescription>
                 Review missing and low-stock ingredients from your current
-                weekly plan.
+                weekly plan. Check off items as you shop!
               </DrawerDescription>
             </DrawerHeader>
             <div className="flex-1 overflow-y-auto px-4 pb-4">
@@ -1374,7 +1372,7 @@ export function FoodPlannerApp() {
             <AlertDialogHeader>
               <AlertDialogTitle>Clear the weekly plan?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will remove your current weekly plan and shopping cart.
+                Your current plan and shopping cart will be cleared.
                 Your saved preferences will stay in place.
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -1398,8 +1396,7 @@ export function FoodPlannerApp() {
                 Reset the app to default state?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                This will clear your fridge, pantry inventory, weekly plan, and
-                grocery cart.
+                Everything gets wiped — fridge, pantry, plan, and cart. A fresh start!
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
