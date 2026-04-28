@@ -1,0 +1,56 @@
+{
+  "items": [
+    {
+      "emoji": "🥕",
+      "name": "Carrots",
+      "quantity": 4,
+      "unit": "count",
+      "category": "vegetable",
+      "storageType": "fridge",
+      "shelfName": "Produce",
+      "expiresAt": "2026-05-15",
+      "flagged": false
+    },
+    {
+      "emoji": "🥚",
+      "name": "Eggs",
+      "quantity": 6,
+      "unit": "count",
+      "category": "protein",
+      "storageType": "fridge",
+      "shelfName": "Dairy",
+      "flagged": false
+    },
+    {
+      "emoji": "🧅",
+      "name": "Onions",
+      "quantity": 3,
+      "unit": "count",
+      "category": "vegetable",
+      "storageType": "pantry",
+      "shelfName": "Dry Goods & Grains",
+      "flagged": false
+    },
+    {
+      "emoji": "🍅",
+      "name": "Tomatoes",
+      "quantity": 5,
+      "unit": "count",
+      "category": "vegetable",
+      "storageType": "fridge",
+      "shelfName": "Produce",
+      "expiresAt": "2026-05-10",
+      "flagged": false
+    },
+    {
+      "emoji": "🧄",
+      "name": "Garlic",
+      "quantity": 2,
+      "unit": "count",
+      "category": "vegetable",
+      "storageType": "pantry",
+      "shelfName": "Dry Goods & Grains",
+      "flagged": false
+    }
+  ]
+}

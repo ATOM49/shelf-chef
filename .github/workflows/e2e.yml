@@ -1,0 +1,91 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      record_videos:
+        description: "Record videos (always on in this workflow)"
+        required: false
+        default: "true"
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      # Required by the Next.js app at build/runtime
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # Dummy values for OAuth providers (not used during tests)
+      GOOGLE_CLIENT_ID: dummy
+      GOOGLE_CLIENT_SECRET: dummy
+      # App base URL for Playwright
+      TEST_BASE_URL: http://localhost:3000
+      # Tell Next.js to listen on localhost
+      HOSTNAME: localhost
+      PORT: 3000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Install ffmpeg
+        run: sudo apt-get install -y ffmpeg
+
+      - name: Build the app
+        run: npm run build
+
+      - name: Start the app
+        run: npm run start &
+
+      - name: Wait for the app to be ready
+        run: |
+          echo "Waiting for http://localhost:3000..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+              echo "App is ready."
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run Playwright tests
+        run: npm run test:e2e
+
+      - name: Convert videos to MP4
+        if: always()
+        run: npm run test:e2e:convert || true
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: tests/e2e/report/
+          retention-days: 14
+
+      - name: Upload test videos (webm + mp4)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-videos
+          path: tests/e2e/videos/
+          retention-days: 14

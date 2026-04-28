@@ -1,0 +1,86 @@
+{
+  "items": [
+    {
+      "emoji": "🧈",
+      "name": "Butter",
+      "quantity": 200,
+      "unit": "g",
+      "category": "dairy",
+      "storageType": "fridge",
+      "shelfName": "Dairy",
+      "flagged": false
+    },
+    {
+      "emoji": "🥛",
+      "name": "Milk",
+      "quantity": 1,
+      "unit": "l",
+      "category": "dairy",
+      "storageType": "fridge",
+      "shelfName": "Dairy",
+      "expiresAt": "2026-05-05",
+      "flagged": false
+    },
+    {
+      "emoji": "🧀",
+      "name": "Cheddar Cheese",
+      "quantity": 200,
+      "unit": "g",
+      "category": "dairy",
+      "storageType": "fridge",
+      "shelfName": "Dairy",
+      "flagged": false
+    },
+    {
+      "emoji": "🥚",
+      "name": "Eggs",
+      "quantity": 12,
+      "unit": "count",
+      "category": "protein",
+      "storageType": "fridge",
+      "shelfName": "Dairy",
+      "flagged": false
+    },
+    {
+      "emoji": "🫙",
+      "name": "Plain Yogurt",
+      "quantity": 500,
+      "unit": "g",
+      "category": "dairy",
+      "storageType": "fridge",
+      "shelfName": "Dairy",
+      "flagged": false
+    },
+    {
+      "emoji": "🌽",
+      "name": "Corn",
+      "quantity": 3,
+      "unit": "count",
+      "category": "vegetable",
+      "storageType": "fridge",
+      "shelfName": "Produce",
+      "flagged": false
+    },
+    {
+      "emoji": "🥦",
+      "name": "Broccoli",
+      "quantity": 1,
+      "unit": "count",
+      "category": "vegetable",
+      "storageType": "fridge",
+      "shelfName": "Produce",
+      "expiresAt": "2026-05-08",
+      "flagged": false
+    },
+    {
+      "emoji": "🫒",
+      "name": "Olive Oil",
+      "quantity": 250,
+      "unit": "ml",
+      "category": "condiment",
+      "storageType": "pantry",
+      "shelfName": "Oils & Condiments",
+      "flagged": false
+    }
+  ]
+}

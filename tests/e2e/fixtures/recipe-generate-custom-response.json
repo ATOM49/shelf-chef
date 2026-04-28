@@ -1,0 +1,37 @@
+{
+  "recipe": {
+    "id": "e2e-custom-recipe-1",
+    "title": "Custom Egg Fried Rice",
+    "mealType": "dinner",
+    "cuisine": "Asian",
+    "servings": 2,
+    "tags": ["quick", "rice"],
+    "ingredients": [
+      {
+        "name": "Eggs",
+        "normalizedName": "eggs",
+        "quantity": 2,
+        "unit": "count"
+      },
+      {
+        "name": "Rice",
+        "normalizedName": "rice",
+        "quantity": 200,
+        "unit": "g"
+      },
+      {
+        "name": "Soy Sauce",
+        "normalizedName": "soy sauce",
+        "quantity": 1,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Cook rice and let it cool.",
+      "Scramble eggs in a wok.",
+      "Add rice and soy sauce, stir fry for 3 minutes.",
+      "Serve hot."
+    ],
+    "source": "user-saved"
+  }
+}

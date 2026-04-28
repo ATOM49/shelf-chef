@@ -1,0 +1,117 @@
+{
+  "recipes": [
+    {
+      "id": "e2e-recipe-1",
+      "title": "Vegetable Stir Fry",
+      "mealType": "dinner",
+      "cuisine": "Asian",
+      "servings": 2,
+      "tags": ["quick", "vegetarian"],
+      "ingredients": [
+        {
+          "name": "Carrots",
+          "normalizedName": "carrots",
+          "quantity": 2,
+          "unit": "count"
+        },
+        {
+          "name": "Broccoli",
+          "normalizedName": "broccoli",
+          "quantity": 1,
+          "unit": "count"
+        },
+        {
+          "name": "Soy Sauce",
+          "normalizedName": "soy sauce",
+          "quantity": 2,
+          "unit": "tbsp"
+        }
+      ],
+      "instructions": [
+        "Heat oil in a wok over high heat.",
+        "Add carrots and stir fry for 2 minutes.",
+        "Add broccoli and soy sauce, cook for 3 more minutes.",
+        "Serve hot."
+      ],
+      "source": "user-requested"
+    },
+    {
+      "id": "e2e-recipe-2",
+      "title": "Scrambled Eggs",
+      "mealType": "breakfast",
+      "cuisine": "Western",
+      "servings": 2,
+      "tags": ["quick", "protein"],
+      "ingredients": [
+        {
+          "name": "Eggs",
+          "normalizedName": "eggs",
+          "quantity": 4,
+          "unit": "count"
+        },
+        {
+          "name": "Butter",
+          "normalizedName": "butter",
+          "quantity": 1,
+          "unit": "tbsp"
+        },
+        {
+          "name": "Milk",
+          "normalizedName": "milk",
+          "quantity": 2,
+          "unit": "tbsp"
+        }
+      ],
+      "instructions": [
+        "Whisk eggs with milk.",
+        "Melt butter in a pan over medium heat.",
+        "Pour egg mixture and stir gently until just set.",
+        "Season and serve."
+      ],
+      "source": "user-requested"
+    },
+    {
+      "id": "e2e-recipe-3",
+      "title": "Tomato Soup",
+      "mealType": "lunch",
+      "cuisine": "Mediterranean",
+      "servings": 2,
+      "tags": ["soup", "vegetarian"],
+      "ingredients": [
+        {
+          "name": "Tomatoes",
+          "normalizedName": "tomatoes",
+          "quantity": 4,
+          "unit": "count"
+        },
+        {
+          "name": "Onions",
+          "normalizedName": "onions",
+          "quantity": 1,
+          "unit": "count"
+        },
+        {
+          "name": "Garlic",
+          "normalizedName": "garlic",
+          "quantity": 2,
+          "unit": "count"
+        }
+      ],
+      "instructions": [
+        "Saute onions and garlic until soft.",
+        "Add chopped tomatoes and cook for 10 minutes.",
+        "Blend until smooth.",
+        "Season and serve."
+      ],
+      "source": "user-requested"
+    }
+  ],
+  "mealSlots": [
+    { "day": "Monday", "mealType": "breakfast", "recipeId": "e2e-recipe-2" },
+    { "day": "Monday", "mealType": "lunch", "recipeId": "e2e-recipe-3" },
+    { "day": "Monday", "mealType": "dinner", "recipeId": "e2e-recipe-1" },
+    { "day": "Tuesday", "mealType": "breakfast", "recipeId": "e2e-recipe-2" },
+    { "day": "Tuesday", "mealType": "lunch", "recipeId": "e2e-recipe-3" },
+    { "day": "Tuesday", "mealType": "dinner", "recipeId": "e2e-recipe-1" }
+  ]
+}

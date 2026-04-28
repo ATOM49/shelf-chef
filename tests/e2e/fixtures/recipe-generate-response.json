@@ -1,0 +1,61 @@
+{
+  "recipes": [
+    {
+      "id": "e2e-recipe-1",
+      "title": "Vegetable Stir Fry",
+      "mealType": "dinner",
+      "cuisine": "Asian",
+      "servings": 2,
+      "tags": ["quick", "vegetarian"],
+      "ingredients": [
+        {
+          "name": "Carrots",
+          "normalizedName": "carrots",
+          "quantity": 2,
+          "unit": "count"
+        },
+        {
+          "name": "Broccoli",
+          "normalizedName": "broccoli",
+          "quantity": 1,
+          "unit": "count"
+        }
+      ],
+      "instructions": [
+        "Heat oil in a wok over high heat.",
+        "Add carrots and stir fry for 2 minutes.",
+        "Add broccoli and cook for 3 more minutes.",
+        "Serve hot."
+      ],
+      "source": "user-requested"
+    },
+    {
+      "id": "e2e-recipe-2",
+      "title": "Scrambled Eggs",
+      "mealType": "breakfast",
+      "cuisine": "Western",
+      "servings": 2,
+      "tags": ["quick", "protein"],
+      "ingredients": [
+        {
+          "name": "Eggs",
+          "normalizedName": "eggs",
+          "quantity": 4,
+          "unit": "count"
+        },
+        {
+          "name": "Butter",
+          "normalizedName": "butter",
+          "quantity": 1,
+          "unit": "tbsp"
+        }
+      ],
+      "instructions": [
+        "Whisk eggs.",
+        "Melt butter in a pan.",
+        "Pour eggs and stir until set."
+      ],
+      "source": "user-requested"
+    }
+  ]
+}
