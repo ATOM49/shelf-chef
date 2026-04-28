@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { WeeklyPlanList } from "@/components/planner/WeeklyPlanList";
+import { HouseholdSettingsDialog } from "@/components/households/HouseholdSettingsDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -44,6 +45,13 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StorageCanvas } from "@/components/storage/StorageCanvas";
 import { StorageEditorPanel } from "@/components/storage/StorageEditorPanel";
 import { StaplesPanel } from "@/components/storage/StaplesPanel";
@@ -53,6 +61,7 @@ import { StockingDialog } from "@/components/stocking/StockingDialog";
 import {
   appReducer,
   arePlannerConfigsEqual,
+  createDefaultAppState,
   createPlannerConfigSnapshot,
 } from "@/lib/appState";
 import type { StockingItemDraft } from "@/lib/appState";
@@ -69,8 +78,24 @@ import type {
   PlannerWeekDay,
   PreferredDishRequest,
 } from "@/lib/planner/types";
-import { clearAppState, loadAppState, parsePersistedAppState, saveAppState } from "@/lib/persistence";
+import {
+  clearWorkspaceAppState,
+  loadWorkspaceAppState,
+  loadWorkspacePreference,
+  parsePersistedAppState,
+  saveWorkspaceAppState,
+  saveWorkspacePreference,
+} from "@/lib/persistence";
 import { useSession } from "next-auth/react";
+import {
+  DEFAULT_WORKSPACE,
+  isHouseholdWorkspace,
+  normalizeWorkspace,
+  parseSerializedWorkspace,
+  serializeWorkspace,
+  type HouseholdSummary,
+  type Workspace,
+} from "@/lib/households/shared";
 import {
   BookOpen,
   CircleHelp,
@@ -102,19 +127,27 @@ function formatCartItemQuantity(quantity: number) {
 }
 
 export function FoodPlannerApp() {
-  const [state, dispatch] = useReducer(appReducer, undefined, loadAppState);
+  const [activeWorkspace, setActiveWorkspace] = useState<Workspace>(() =>
+    loadWorkspacePreference(),
+  );
+  const [state, dispatch] = useReducer(
+    appReducer,
+    activeWorkspace,
+    loadWorkspaceAppState,
+  );
   const latestStateRef = useRef(state);
   const resetPendingRef = useRef(false);
-  // Tracks whether we just loaded state from the DB (to skip the next save)
   const loadingDbStateRef = useRef(false);
-  // Whether the DB state has been loaded (or skipped for unauthenticated users)
   const isDbStateLoadedRef = useRef(false);
-  // Debounce timer for DB saves
+  const loadedWorkspaceKeyRef = useRef<string | null>(null);
   const dbSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const { data: session, status: sessionStatus } = useSession();
 
-  // True while we're waiting for session status + initial DB state load
+  const [households, setHouseholds] = useState<HouseholdSummary[]>([]);
+  const [householdsReady, setHouseholdsReady] = useState(false);
+  const [householdsError, setHouseholdsError] = useState<string | null>(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [storageTab, setStorageTab] = useState<StorageTab>("fridge");
   const [stockingOpen, setStockingOpen] = useState(false);
@@ -130,6 +163,7 @@ export function FoodPlannerApp() {
   >();
   const [cartOpen, setCartOpen] = useState(false);
   const [plannerSettingsOpen, setPlannerSettingsOpen] = useState(false);
+  const [householdSettingsOpen, setHouseholdSettingsOpen] = useState(false);
   const [recipeBookState, setRecipeBookState] = useState<RecipeBookState>({
     open: false,
     mode: "browse",
@@ -167,6 +201,44 @@ export function FoodPlannerApp() {
   );
   const canUseClipboard =
     typeof navigator !== "undefined" && !!navigator.clipboard?.writeText;
+  const activeHousehold = isHouseholdWorkspace(activeWorkspace)
+    ? households.find((household) => household.id === activeWorkspace.householdId)
+    : undefined;
+  const activeWorkspaceLabel = activeHousehold?.name ?? "Personal workspace";
+
+  const buildStateUrl = useCallback((workspace: Workspace) => {
+    if (!isHouseholdWorkspace(workspace)) {
+      return "/api/state";
+    }
+
+    const searchParams = new URLSearchParams({
+      workspace: "household",
+      householdId: workspace.householdId,
+    });
+    return `/api/state?${searchParams.toString()}`;
+  }, []);
+
+  const refreshHouseholds = useCallback(async () => {
+    const response = await fetch("/api/households");
+    const data = (await response.json()) as {
+      error?: string;
+      households?: HouseholdSummary[];
+    };
+
+    if (!response.ok || !data.households) {
+      throw new Error(data.error ?? "Unable to load households");
+    }
+
+    setHouseholds(data.households);
+    setHouseholdsError(null);
+
+    const normalized = normalizeWorkspace(activeWorkspace, data.households);
+    if (serializeWorkspace(normalized) !== serializeWorkspace(activeWorkspace)) {
+      setActiveWorkspace(normalized);
+    }
+
+    return data.households;
+  }, [activeWorkspace]);
 
   const handleCopyCartSection = useCallback(
     (items: GroceryCartItem[]): void => {
@@ -191,43 +263,121 @@ export function FoodPlannerApp() {
     [canUseClipboard],
   );
 
-  // Load state from the database when the user is authenticated.
   useEffect(() => {
     if (sessionStatus === "loading") return;
 
     if (sessionStatus === "unauthenticated") {
       isDbStateLoadedRef.current = true;
+      loadedWorkspaceKeyRef.current = serializeWorkspace(DEFAULT_WORKSPACE);
+      setHouseholds([]);
+      setHouseholdsReady(true);
       setIsInitializing(false);
       return;
     }
 
-    // sessionStatus === "authenticated"
+    let isCancelled = false;
+
     void (async () => {
       try {
-        const res = await fetch("/api/state");
-        if (res.ok) {
-          const data = (await res.json()) as { state: unknown };
-          if (data.state) {
-            const revived = parsePersistedAppState(data.state);
-            if (revived) {
-              loadingDbStateRef.current = true;
-              dispatch({ type: "LOAD_STATE", state: revived });
-            }
-          }
+        setIsInitializing(true);
+        setHouseholdsReady(false);
+        await refreshHouseholds();
+      } catch (error) {
+        if (!isCancelled) {
+          setHouseholdsError(
+            error instanceof Error ? error.message : "Unable to load households",
+          );
         }
       } finally {
-        isDbStateLoadedRef.current = true;
-        setIsInitializing(false);
+        if (!isCancelled) {
+          setHouseholdsReady(true);
+        }
       }
     })();
-  }, [sessionStatus]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [refreshHouseholds, sessionStatus]);
+
+  useEffect(() => {
+    saveWorkspacePreference(activeWorkspace);
+  }, [activeWorkspace]);
+
+  useEffect(() => {
+    if (sessionStatus !== "authenticated" || !householdsReady) {
+      return;
+    }
+
+    const normalizedWorkspace = normalizeWorkspace(activeWorkspace, households);
+    if (
+      serializeWorkspace(normalizedWorkspace) !== serializeWorkspace(activeWorkspace)
+    ) {
+      setActiveWorkspace(normalizedWorkspace);
+      return;
+    }
+
+    const workspaceKey = serializeWorkspace(normalizedWorkspace);
+    const localState = loadWorkspaceAppState(normalizedWorkspace);
+    let isCancelled = false;
+
+    loadedWorkspaceKeyRef.current = null;
+    isDbStateLoadedRef.current = false;
+    loadingDbStateRef.current = true;
+    setWorkspaceError(null);
+    setIsInitializing(true);
+    dispatch({ type: "LOAD_STATE", state: localState });
+
+    void (async () => {
+      try {
+        const response = await fetch(buildStateUrl(normalizedWorkspace));
+        const data = (await response.json()) as { error?: string; state?: unknown };
+
+        if (!response.ok) {
+          throw new Error(data.error ?? "Unable to load workspace state");
+        }
+
+        const revived = data.state
+          ? parsePersistedAppState(data.state) ?? createDefaultAppState()
+          : createDefaultAppState();
+
+        if (!isCancelled) {
+          loadingDbStateRef.current = true;
+          dispatch({ type: "LOAD_STATE", state: revived });
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setWorkspaceError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load workspace state",
+          );
+        }
+      } finally {
+        if (!isCancelled) {
+          loadedWorkspaceKeyRef.current = workspaceKey;
+          isDbStateLoadedRef.current = true;
+          setIsInitializing(false);
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeWorkspace, buildStateUrl, households, householdsReady, sessionStatus]);
 
   // Save state to localStorage on every change; also debounce-save to DB when authenticated.
   useLayoutEffect(() => {
     latestStateRef.current = state;
-    saveAppState(state);
 
-    // Skip DB save when we just loaded state from the DB
+    const workspaceKey = serializeWorkspace(activeWorkspace);
+    if (loadedWorkspaceKeyRef.current !== workspaceKey) {
+      return;
+    }
+
+    saveWorkspaceAppState(activeWorkspace, state);
+
     if (loadingDbStateRef.current) {
       loadingDbStateRef.current = false;
       resetPendingRef.current = false;
@@ -244,11 +394,14 @@ export function FoodPlannerApp() {
         void fetch("/api/state", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ state: latestStateRef.current }),
+          body: JSON.stringify({
+            state: latestStateRef.current,
+            workspace: activeWorkspace,
+          }),
         });
       }, 1500);
     }
-  }, [state, session?.user?.id]);
+  }, [activeWorkspace, session?.user?.id, state]);
 
   useEffect(() => {
     const flushState = () => {
@@ -256,9 +409,13 @@ export function FoodPlannerApp() {
         return;
       }
 
-      saveAppState(latestStateRef.current);
+      const workspaceKey = serializeWorkspace(activeWorkspace);
+      if (loadedWorkspaceKeyRef.current !== workspaceKey) {
+        return;
+      }
 
-      // Flush any pending DB save immediately
+      saveWorkspaceAppState(activeWorkspace, latestStateRef.current);
+
       if (session?.user?.id && isDbStateLoadedRef.current) {
         if (dbSaveTimerRef.current !== undefined) {
           clearTimeout(dbSaveTimerRef.current);
@@ -267,7 +424,10 @@ export function FoodPlannerApp() {
         void fetch("/api/state", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ state: latestStateRef.current }),
+          body: JSON.stringify({
+            state: latestStateRef.current,
+            workspace: activeWorkspace,
+          }),
         });
       }
     };
@@ -285,7 +445,7 @@ export function FoodPlannerApp() {
       window.removeEventListener("pagehide", flushState);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [session?.user?.id]);
+  }, [activeWorkspace, session?.user?.id]);
 
   const handleSelectShelf = useCallback((shelfId: string) => {
     setSelectedShelfId(shelfId);
@@ -327,6 +487,22 @@ export function FoodPlannerApp() {
     setSelectedPantryShelfId(undefined);
     setSelectedPantryCell(undefined);
   }, []);
+
+  const handleWorkspaceChange = useCallback(
+    (workspace: Workspace) => {
+      const normalizedWorkspace = normalizeWorkspace(workspace, households);
+      loadedWorkspaceKeyRef.current = null;
+      setActiveWorkspace(normalizedWorkspace);
+      setPlannerApiError(null);
+      setCartOpen(false);
+      setPlannerSettingsOpen(false);
+      setHouseholdSettingsOpen(false);
+      setMobileTab("storage");
+      handleClearSelection();
+      handleClearPantrySelection();
+    },
+    [handleClearPantrySelection, handleClearSelection, households],
+  );
 
   const handleReorderFridgeShelves = useCallback(
     (activeShelfId: string, overShelfId: string) => {
@@ -601,12 +777,12 @@ export function FoodPlannerApp() {
 
   const handleConfirmReset = () => {
     resetPendingRef.current = true;
-    clearAppState();
+    clearWorkspaceAppState(activeWorkspace);
     if (session?.user?.id) {
       void fetch("/api/state", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: null }),
+        body: JSON.stringify({ state: null, workspace: activeWorkspace }),
       });
     }
     dispatch({ type: "RESET_APP" });
@@ -827,7 +1003,36 @@ export function FoodPlannerApp() {
                 </PopoverContent>
               </Popover>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Select
+                value={serializeWorkspace(activeWorkspace)}
+                onValueChange={(value) =>
+                  handleWorkspaceChange(parseSerializedWorkspace(value))
+                }
+              >
+                <SelectTrigger className="w-[15rem] max-w-full">
+                  <SelectValue>{activeWorkspaceLabel}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="personal">👤 Personal workspace</SelectItem>
+                  {households.map((household) => (
+                    <SelectItem
+                      key={household.id}
+                      value={`household:${household.id}`}
+                    >
+                      🏠 {household.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setHouseholdSettingsOpen(true)}
+              >
+                Household
+              </Button>
               <Button
                 type="button"
                 variant="destructive"
@@ -877,6 +1082,12 @@ export function FoodPlannerApp() {
             </div>
           </div>
         </header>
+
+        {(householdsError || workspaceError) ? (
+          <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {householdsError ?? workspaceError}
+          </div>
+        ) : null}
 
         <div className="mt-3 flex min-h-0 flex-1 gap-3">
           <div className="hidden min-h-0 w-96 shrink-0 flex-col rounded-xl border bg-card p-3 md:flex">
@@ -1059,6 +1270,14 @@ export function FoodPlannerApp() {
           onOpenChange={setStockingOpen}
           onCommit={handleCommitStock}
           customStapleNames={state.customStapleNames}
+        />
+        <HouseholdSettingsDialog
+          open={householdSettingsOpen}
+          onOpenChange={setHouseholdSettingsOpen}
+          household={activeHousehold}
+          currentUserId={session?.user?.id}
+          onHouseholdsChanged={refreshHouseholds}
+          onWorkspaceChange={handleWorkspaceChange}
         />
         <Drawer
           direction="bottom"
