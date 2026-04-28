@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/db";
-import { ensureUserAppState } from "@/lib/userAppState";
+import { ensureUserWorkspaceBootstrap } from "@/lib/userAppState";
 
 const providers = [
   Google({
@@ -35,7 +35,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   events: {
     async signIn({ user }) {
       if (user.id) {
-        await ensureUserAppState(user.id);
+        await ensureUserWorkspaceBootstrap(user.id);
       }
     },
   },

@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -12,15 +9,23 @@ datasource db {
 
 // NextAuth required models
 
+enum HouseholdRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  appState      UserAppState?
+  id                     String               @id @default(cuid())
+  name                   String?
+  email                  String               @unique
+  emailVerified          DateTime?
+  image                  String?
+  accounts               Account[]
+  sessions               Session[]
+  appState               UserAppState?
+  memberships            HouseholdMembership[]
+  createdHouseholdInvites HouseholdInvite[]   @relation("HouseholdInviteCreatedBy")
 }
 
 model Account {
@@ -67,4 +72,53 @@ model UserAppState {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   state     Json
   updatedAt DateTime @updatedAt
+}
+
+model Household {
+  id          String                @id @default(cuid())
+  name        String
+  memberships HouseholdMembership[]
+  appState    HouseholdAppState?
+  invites     HouseholdInvite[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+}
+
+model HouseholdMembership {
+  id          String        @id @default(cuid())
+  householdId String
+  userId      String
+  role        HouseholdRole @default(MEMBER)
+  household   Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([householdId, userId])
+  @@index([userId])
+}
+
+model HouseholdAppState {
+  id          String    @id @default(cuid())
+  householdId String    @unique
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  state       Json
+  updatedAt   DateTime  @updatedAt
+}
+
+model HouseholdInvite {
+  id              String    @id @default(cuid())
+  householdId     String
+  email           String
+  tokenHash       String    @unique
+  createdByUserId String
+  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdBy       User      @relation("HouseholdInviteCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([householdId, email])
+  @@index([email])
 }
