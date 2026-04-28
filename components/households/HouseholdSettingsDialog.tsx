@@ -42,7 +42,7 @@ export function HouseholdSettingsDialog({
   onOpenChange: (open: boolean) => void;
   household?: HouseholdSummary;
   currentUserId?: string;
-  onHouseholdsChanged: () => Promise<void>;
+  onHouseholdsChanged: () => Promise<unknown>;
   onWorkspaceChange: (workspace: Workspace) => void;
 }) {
   const [inviteEmail, setInviteEmail] = useState("");

@@ -136,7 +136,7 @@ function canManageMember(actorRole: HouseholdRole, targetRole: HouseholdRole) {
 }
 
 function pickNextOwner(
-  memberships: Array<{ userId: string; role: HouseholdRole; createdAt: Date }>,
+  memberships: Array<{ id: string; userId: string; role: HouseholdRole; createdAt: Date }>,
 ) {
   const sorted = [...memberships].sort(
     (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
