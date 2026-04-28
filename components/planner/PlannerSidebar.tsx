@@ -145,7 +145,7 @@ export function PlannerSidebar({
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                No preferred dishes saved yet.
+                Nothing added yet — type a dish above!
               </p>
             )}
           </section>

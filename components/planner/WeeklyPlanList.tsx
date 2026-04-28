@@ -146,7 +146,7 @@ export function WeeklyPlanList({
   if (meals.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-        Generate a plan to see meals and inventory validation.
+        Hit &apos;Create plan&apos; to build your week and see what&apos;s cookable!
       </div>
     );
   }

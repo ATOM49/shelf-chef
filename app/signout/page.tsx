@@ -36,8 +36,7 @@ export default async function SignOutPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              Your planner data remains local to this browser, but the current
-              authenticated session will be removed.
+              Your data stays safe in this browser — we&apos;ll just end your current session.
             </p>
           </CardContent>
           <CardFooter className="justify-between gap-3">

@@ -158,8 +158,7 @@ export function RecipeDetailPanel({
                 <PopoverHeader>
                   <PopoverTitle>Delete this recipe?</PopoverTitle>
                   <PopoverDescription>
-                    This removes the saved recipe from your recipe book. You can regenerate
-                    it later from your inventory.
+                    This recipe will be removed from your book. You can always regenerate it later.
                   </PopoverDescription>
                 </PopoverHeader>
                 <div className="flex items-center justify-end gap-2 pt-1">
@@ -196,7 +195,7 @@ export function RecipeDetailPanel({
             <div>
               <h4 className="text-sm font-semibold text-foreground">Meal actions</h4>
               <p className="mt-1 text-xs text-muted-foreground">
-                Marking as cooked consumes matched inventory items.
+                Mark as cooked to deduct matched items from your inventory.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">

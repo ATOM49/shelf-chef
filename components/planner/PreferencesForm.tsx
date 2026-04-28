@@ -45,7 +45,7 @@ export function PreferencesForm({
       <div>
         <h3 className="text-sm font-semibold text-foreground">Preferences</h3>
         <p className="text-xs text-muted-foreground">
-          Describe your diet, goals, or items to use up. Save these settings, then create or recreate a weekly plan from the planner header.
+          Tell us about your diet, goals, or what needs using up. Save, then hit &apos;Create plan&apos; to build your week.
         </p>
       </div>
       <Textarea
