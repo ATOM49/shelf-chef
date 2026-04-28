@@ -103,6 +103,7 @@ import {
   LogOut,
   MoreHorizontal,
   PackagePlus,
+  RefreshCw,
   Settings2,
   ShoppingCart,
   SlidersHorizontal,
@@ -127,6 +128,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 type MobileTab = "storage" | "planner";
 type StorageTab = "fridge" | "pantry" | "staples";
@@ -192,6 +194,12 @@ export function FoodPlannerApp() {
   const [plannerApiError, setPlannerApiError] = useState<string | null>(null);
   const [isPlannerPending, setIsPlannerPending] = useState(false);
   const [cartCopyError, setCartCopyError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const isRefreshingRef = useRef(false);
+  const touchStartYRef = useRef(0);
+  const isPullActiveRef = useRef(false);
+  const PULL_THRESHOLD = 72;
   const fridgeInventory = state.inventory.filter(
     (item) => item.storageId === state.fridge.id,
   );
@@ -793,6 +801,82 @@ export function FoodPlannerApp() {
     setResetDialogOpen(true);
   };
 
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshingRef.current || sessionStatus !== "authenticated") return;
+
+    isRefreshingRef.current = true;
+    setIsRefreshing(true);
+    try {
+      const freshHouseholds = await refreshHouseholds();
+      const normalizedWorkspace = normalizeWorkspace(activeWorkspace, freshHouseholds);
+      const response = await fetch(buildStateUrl(normalizedWorkspace));
+      const data = (await response.json()) as { error?: string; state?: unknown };
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to load workspace state");
+      }
+
+      const revived = data.state
+        ? parsePersistedAppState(data.state) ?? createDefaultAppState()
+        : createDefaultAppState();
+
+      loadingDbStateRef.current = true;
+      dispatch({ type: "LOAD_STATE", state: revived });
+    } catch (error) {
+      if (error instanceof Error) {
+        setWorkspaceError(error.message);
+      }
+    } finally {
+      isRefreshingRef.current = false;
+      setIsRefreshing(false);
+    }
+  }, [sessionStatus, refreshHouseholds, activeWorkspace, buildStateUrl]);
+
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      touchStartYRef.current = e.touches[0].clientY;
+      isPullActiveRef.current = false;
+    },
+    [],
+  );
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (isRefreshingRef.current) return;
+
+      const delta = e.touches[0].clientY - touchStartYRef.current;
+      if (delta <= 0) {
+        setPullDistance(0);
+        isPullActiveRef.current = false;
+        return;
+      }
+
+      // Don't activate if a scrollable ancestor is already scrolled down
+      let el = e.target as HTMLElement | null;
+      while (el) {
+        if (el.scrollTop > 0) {
+          setPullDistance(0);
+          isPullActiveRef.current = false;
+          return;
+        }
+        el = el.parentElement;
+      }
+
+      const clamped = Math.min(delta, PULL_THRESHOLD * 2);
+      setPullDistance(clamped);
+      isPullActiveRef.current = delta >= PULL_THRESHOLD;
+    },
+    [PULL_THRESHOLD],
+  );
+
+  const handleTouchEnd = useCallback(() => {
+    if (isPullActiveRef.current && !isRefreshingRef.current) {
+      void handleRefresh();
+    }
+    setPullDistance(0);
+    isPullActiveRef.current = false;
+  }, [handleRefresh]);
+
   const handleConfirmReset = () => {
     resetPendingRef.current = true;
     clearWorkspaceAppState(activeWorkspace);
@@ -994,8 +1078,49 @@ export function FoodPlannerApp() {
   }
 
   return (
-    <div className="h-svh overflow-hidden bg-muted/30">
-      <div className="mx-auto flex h-full max-w-screen-2xl flex-col p-3 md:p-4">
+    <div
+      className="relative h-svh overflow-hidden bg-muted/30"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Pull-to-refresh indicator (mobile only) */}
+      {(pullDistance > 0 || isRefreshing) && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 z-50 flex items-center justify-center md:hidden"
+          style={{
+            height: isRefreshing ? 48 : Math.min(pullDistance, PULL_THRESHOLD),
+            opacity: isRefreshing ? 1 : Math.min(pullDistance / PULL_THRESHOLD, 1),
+          }}
+        >
+          {isRefreshing ? (
+            <LoaderCircle className="size-5 animate-spin text-primary" />
+          ) : (
+            <RefreshCw
+              className={cn(
+                "size-5 transition-colors",
+                pullDistance >= PULL_THRESHOLD
+                  ? "text-primary"
+                  : "text-muted-foreground",
+              )}
+              style={{
+                transform: `rotate(${Math.min((pullDistance / PULL_THRESHOLD) * 180, 180)}deg)`,
+              }}
+            />
+          )}
+        </div>
+      )}
+      <div
+        className="mx-auto flex h-full max-w-screen-2xl flex-col p-3 md:p-4"
+        style={
+          pullDistance > 0
+            ? {
+                transform: `translateY(${Math.min(pullDistance * 0.4, PULL_THRESHOLD * 0.4)}px)`,
+              }
+            : undefined
+        }
+      >
         <header className="shrink-0 rounded-xl border bg-card px-4 py-3 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -1095,6 +1220,16 @@ export function FoodPlannerApp() {
                     </DropdownMenuLinkItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
+                      onClick={() => void handleRefresh()}
+                      disabled={isRefreshing}
+                    >
+                      <RefreshCw
+                        className={cn("size-4", isRefreshing && "animate-spin")}
+                        aria-hidden
+                      />
+                      Refresh data
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
                       variant="destructive"
                       onClick={handleReset}
                     >
@@ -1172,6 +1307,16 @@ export function FoodPlannerApp() {
                     Sign out
                   </DropdownMenuLinkItem>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => void handleRefresh()}
+                    disabled={isRefreshing}
+                  >
+                    <RefreshCw
+                      className={cn("size-4", isRefreshing && "animate-spin")}
+                      aria-hidden
+                    />
+                    Refresh data
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     variant="destructive"
                     onClick={handleReset}
