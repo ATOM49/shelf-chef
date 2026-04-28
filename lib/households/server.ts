@@ -516,7 +516,7 @@ async function removeMembershipWithOwnershipTransfer(
     }
 
     if (targetMembership.role === "OWNER") {
-      const nextOwner = pickNextOwner(remainingMemberships)!;
+      const nextOwner = pickNextOwner(remainingMemberships) ?? remainingMemberships[0];
 
       await tx.householdMembership.update({
         where: { id: nextOwner.id },
