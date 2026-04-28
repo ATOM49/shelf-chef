@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -102,13 +101,32 @@ import {
   Copy,
   LoaderCircle,
   LogOut,
+  MoreHorizontal,
   PackagePlus,
+  Settings2,
   ShoppingCart,
   SlidersHorizontal,
   Sparkles,
   Trash2,
   XIcon,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuLinkItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type MobileTab = "storage" | "planner";
 type StorageTab = "fridge" | "pantry" | "staples";
@@ -1003,82 +1021,167 @@ export function FoodPlannerApp() {
                 </PopoverContent>
               </Popover>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Select
-                value={serializeWorkspace(activeWorkspace)}
-                onValueChange={(value) =>
-                  handleWorkspaceChange(parseSerializedWorkspace(value))
-                }
-              >
-                <SelectTrigger className="w-[15rem] max-w-full">
-                  <SelectValue>{activeWorkspaceLabel}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="personal">👤 Personal workspace</SelectItem>
-                  {households.map((household) => (
-                    <SelectItem
-                      key={household.id}
-                      value={`household:${household.id}`}
+            {/* Desktop actions */}
+            <TooltipProvider>
+              <div className="hidden items-center gap-2 md:flex">
+                <Select
+                  value={serializeWorkspace(activeWorkspace)}
+                  onValueChange={(value) =>
+                    handleWorkspaceChange(parseSerializedWorkspace(value))
+                  }
+                >
+                  <SelectTrigger className="w-44">
+                    <SelectValue>{activeWorkspaceLabel}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="personal">👤 Personal workspace</SelectItem>
+                    {households.map((household) => (
+                      <SelectItem
+                        key={household.id}
+                        value={`household:${household.id}`}
+                      >
+                        🏠 {household.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Tooltip>
+                  <TooltipTrigger
+                    type="button"
+                    aria-label="Household settings"
+                    onClick={() => setHouseholdSettingsOpen(true)}
+                    className={buttonVariants({ variant: "outline", size: "icon-sm" })}
+                  >
+                    <Settings2 className="size-4" aria-hidden />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Household settings</TooltipContent>
+                </Tooltip>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={handleOpenRecipeBook}
+                  disabled={isPlannerPending}
+                >
+                  <BookOpen className="size-4" aria-hidden />
+                  Recipe book
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setCartOpen(true)}
+                  aria-label="Shopping cart"
+                  className="relative"
+                >
+                  <ShoppingCart className="size-4" aria-hidden />
+                  {uncheckedCartCount > 0 ? (
+                    <Badge className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]">
+                      {uncheckedCartCount}
+                    </Badge>
+                  ) : null}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    type="button"
+                    aria-label="More options"
+                    className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                  >
+                    <MoreHorizontal className="size-4" aria-hidden />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="bottom" align="end" sideOffset={6}>
+                    <DropdownMenuLinkItem href="/signout">
+                      <LogOut className="size-4" aria-hidden />
+                      Sign out
+                    </DropdownMenuLinkItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={handleReset}
                     >
-                      🏠 {household.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                      <Trash2 className="size-4" aria-hidden />
+                      Reset workspace
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </TooltipProvider>
+
+            {/* Mobile actions */}
+            <div className="flex items-center gap-2 md:hidden">
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
-                onClick={() => setHouseholdSettingsOpen(true)}
-              >
-                Household
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                onClick={handleReset}
-                className="shrink-0"
-              >
-                Reset
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
+                size="icon-sm"
                 onClick={handleOpenRecipeBook}
                 disabled={isPlannerPending}
                 aria-label="Recipe book"
               >
                 <BookOpen className="size-4" aria-hidden />
-                <span className="hidden sm:inline">Recipe book</span>
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                size="icon"
                 onClick={() => setCartOpen(true)}
-                className="relative shrink-0"
                 aria-label="Shopping cart"
+                className="relative"
               >
                 <ShoppingCart className="size-4" aria-hidden />
-                <span className="hidden sm:inline">Cart</span>
                 {uncheckedCartCount > 0 ? (
-                  <Badge className="ml-1 min-w-5 justify-center px-1.5">
+                  <Badge className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]">
                     {uncheckedCartCount}
                   </Badge>
                 ) : null}
               </Button>
-              <Link
-                href="/signout"
-                className={buttonVariants({
-                  variant: "ghost",
-                  size: "sm",
-                  className: "shrink-0 text-muted-foreground",
-                })}
-              >
-                <LogOut className="size-3.5" aria-hidden />
-                <span className="hidden sm:inline">Sign out</span>
-              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  type="button"
+                  aria-label="More options"
+                  className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                >
+                  <MoreHorizontal className="size-4" aria-hidden />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="bottom" align="end" sideOffset={6} className="w-56">
+                  <DropdownMenuLabel>Workspace</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={serializeWorkspace(activeWorkspace)}
+                    onValueChange={(value) =>
+                      handleWorkspaceChange(parseSerializedWorkspace(value))
+                    }
+                  >
+                    <DropdownMenuRadioItem value="personal">
+                      👤 Personal
+                    </DropdownMenuRadioItem>
+                    {households.map((household) => (
+                      <DropdownMenuRadioItem
+                        key={household.id}
+                        value={`household:${household.id}`}
+                      >
+                        🏠 {household.name}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setHouseholdSettingsOpen(true)}>
+                    <Settings2 className="size-4" aria-hidden />
+                    Household settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLinkItem href="/signout">
+                    <LogOut className="size-4" aria-hidden />
+                    Sign out
+                  </DropdownMenuLinkItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={handleReset}
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                    Reset workspace
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </header>

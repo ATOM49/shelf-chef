@@ -187,7 +187,7 @@ export function StockingDialog({
       <DialogContent
         aria-busy={isPending}
         showCloseButton={false}
-        className="w-full max-w-[min(96vw,76rem)] max-h-[min(90svh,800px)] overflow-y-auto p-0"
+        className="w-full overflow-y-auto p-0"
       >
         <div className="relative flex min-h-0 flex-1 flex-col p-6">
           <div className="absolute right-2 top-2 z-20">

@@ -153,7 +153,7 @@ export function HouseholdSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100svh-2rem)] max-w-3xl overflow-hidden p-0">
+      <DialogContent className="overflow-hidden p-0">
         <DialogHeader className="px-4 pt-4">
           <DialogTitle>Household settings</DialogTitle>
           <DialogDescription>
@@ -235,7 +235,7 @@ export function HouseholdSettingsDialog({
                                 void updateRole(member.userId, value as "ADMIN" | "MEMBER")
                               }
                             >
-                              <SelectTrigger className="w-32">
+                              <SelectTrigger className="w-auto">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>

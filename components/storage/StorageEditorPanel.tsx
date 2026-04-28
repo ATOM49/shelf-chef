@@ -104,7 +104,7 @@ export function StorageEditorPanel({
             if (!open) onClearSelection();
           }}
         >
-          <DialogContent className="w-full max-w-[min(64rem,calc(100vw-2rem))] max-h-[min(90svh,800px)] overflow-y-auto">
+          <DialogContent className="overflow-y-auto">
             <ShelfEditor
               key={selectedShelf.id}
               shelf={selectedShelf}
@@ -149,7 +149,7 @@ export function StorageEditorPanel({
             if (!open) onClearSelection();
           }}
         >
-          <DialogContent className="w-full max-w-[min(52rem,calc(100vw-2rem))] max-h-[min(90svh,900px)] overflow-y-auto">
+          <DialogContent className="w-full overflow-y-auto">
             <DialogHeader className="pr-10">
               <DialogTitle>
                 {selectedShelf.name} | {selectedCell.cellId}
