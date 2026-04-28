@@ -3,6 +3,12 @@
 import { useState } from "react";
 import { MealValidationSummary } from "@/components/planner/MealValidationSummary";
 import { RecipeIngredientList } from "@/components/planner/RecipeIngredientList";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -239,6 +245,27 @@ export function RecipeDetailPanel({
         <div className="mt-3">
           <MealValidationSummary validation={validation} />
         </div>
+        {plannedMeal ? (
+          <Accordion className="mt-4" defaultValue={[]}>
+            <AccordionItem value="validation-details" className="border-t pt-2">
+              <AccordionTrigger className="py-2 text-sm font-semibold text-foreground hover:no-underline">
+                Validation details
+              </AccordionTrigger>
+              <AccordionContent className="pt-2">
+                <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+                  {validation.matches.map((match) => (
+                    <div
+                      key={`${match.normalizedName}-${match.neededUnit}`}
+                      className="rounded-lg border bg-muted/20 px-3 py-2"
+                    >
+                      {describeMatch(match)}
+                    </div>
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        ) : null}
       </section>
 
       {/* Tags */}
@@ -282,28 +309,6 @@ export function RecipeDetailPanel({
           />
         </div>
       </section>
-
-      {/* Verbose validation details — planner context only */}
-      {plannedMeal ? (
-        <section className="rounded-2xl border bg-background/80 p-4 sm:p-5">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-              Validation
-            </p>
-            <h4 className="text-base font-semibold text-foreground">Validation details</h4>
-          </div>
-          <div className="mt-3 flex flex-col gap-2 text-sm text-muted-foreground">
-            {validation.matches.map((match) => (
-              <div
-                key={`${match.normalizedName}-${match.neededUnit}`}
-                className="rounded-lg border bg-muted/20 px-3 py-2"
-              >
-                {describeMatch(match)}
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
 
       {/* Cooking steps */}
       {recipe.instructions && recipe.instructions.length > 0 ? (
