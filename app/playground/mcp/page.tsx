@@ -50,7 +50,7 @@ export default async function McpPlaygroundPage({
 }) {
   const user = await requireUser({ callbackUrl: "/playground/mcp" });
   const resolvedSearchParams = await searchParams;
-  const connections = listConnections(user.id);
+  const connections = await listConnections(user.id);
   const connectionLookup = new Map(
     connections.map((connection) => [connection.providerKey, connection]),
   );
