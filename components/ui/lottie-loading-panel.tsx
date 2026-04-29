@@ -43,8 +43,8 @@ export function LottieLoadingPanel({
           panelClassName,
         )}
       >
-        {/* Lottie animation fills the entire card background */}
-        <div className="absolute inset-0">
+        {/* Lottie animation sits on top section of the card */}
+        <div className="relative h-56 w-full">
           <DotLottieReact
             src={src}
             autoplay
@@ -54,8 +54,8 @@ export function LottieLoadingPanel({
           />
         </div>
 
-        {/* Translucent overlay with text content */}
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-card/80 px-6 py-6 text-center supports-backdrop-filter:backdrop-blur-sm">
+        {/* Text content is shown in a separate panel below the animation */}
+        <div className="flex flex-col items-center justify-center gap-4 border-t border-border/60 bg-card/80 px-6 py-6 text-center supports-backdrop-filter:backdrop-blur-sm">
           <div className="space-y-2">
             <p className="text-lg font-semibold text-foreground">{title}</p>
             <p className="text-sm leading-6 text-muted-foreground">
