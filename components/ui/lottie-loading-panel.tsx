@@ -57,7 +57,7 @@ export function LottieLoadingPanel({
         {/* Text content is shown in a separate panel below the animation */}
         <div className="flex flex-col items-center justify-center gap-4 border-t border-border/60 bg-card/80 px-6 py-6 text-center supports-backdrop-filter:backdrop-blur-sm">
           <div className="space-y-2">
-            <p className="text-lg font-semibold text-foreground">{title}</p>
+            <h2 className="font-serif text-lg font-semibold text-foreground">{title}</h2>
             <p className="text-sm leading-6 text-muted-foreground">
               {description}
             </p>

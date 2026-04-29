@@ -180,10 +180,7 @@ export function StockingDialog({
   const pendingState = getStockPendingState(pendingAction);
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={handleDialogOpenChange}
-    >
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         aria-busy={isPending}
         showCloseButton={false}
@@ -320,13 +317,36 @@ function InputStep({
           <span className="font-medium text-foreground">Tip:</span> Common
           kitchen staples — water, salt, oil, pepper, and sugar — are always
           assumed to be in stock. Visit the{" "}
-          <span className="font-medium text-foreground">🧂 Staples</span> tab
-          to see the full list or add your own (e.g. cumin, turmeric).
+          <span className="font-medium text-foreground">🧂 Staples</span> tab to
+          see the full list or add your own (e.g. cumin, turmeric).
         </p>
 
+        <div className="grid gap-1.5">
+          <Label htmlFor="stock-freetext">
+            Describe what you want to stock
+          </Label>
+          <Textarea
+            id="stock-freetext"
+            rows={6}
+            disabled={isPending}
+            placeholder={
+              "I bought eggs, milk, yogurt, spinach, rice, olive oil, and a few spices for the pantry."
+            }
+            value={freeText}
+            onChange={(e) => onFreeTextChange(e.target.value)}
+            className="text-sm"
+          />
+          <p className="text-xs text-muted-foreground">
+            Natural language, loose lists, and mixed formatting are all fine. AI
+            will extract the items and suggest storage details.
+          </p>
+        </div>
+        
         <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
           <div>
-            <p className="text-sm font-medium">Start from a kitchen preset</p>
+            <p className="text-sm font-semibold font-serif">
+              Start from a kitchen preset
+            </p>
             <p className="text-xs text-muted-foreground">
               AI-generated presets designed for urban Indian kitchens. Select
               one to generate fridge and pantry items, then review the result.
@@ -356,44 +376,23 @@ function InputStep({
                   <span className="mt-1 block text-xs text-muted-foreground">
                     {meta.description}
                   </span>
-                  <span className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-foreground">
+                  <span>
                     {isActive && isPending ? (
-                      <>
+                      <div className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-foreground">
                         <LoaderCircle
                           className="size-3 animate-spin"
                           aria-hidden
                         />
                         <span>Generating review...</span>
-                      </>
+                      </div>
                     ) : (
-                      <span>Generate from preset</span>
+                      <></>
                     )}
                   </span>
                 </button>
               );
             })}
           </div>
-        </div>
-
-        <div className="grid gap-1.5">
-          <Label htmlFor="stock-freetext">
-            Describe what you want to stock
-          </Label>
-          <Textarea
-            id="stock-freetext"
-            rows={6}
-            disabled={isPending}
-            placeholder={
-              "I bought eggs, milk, yogurt, spinach, rice, olive oil, and a few spices for the pantry."
-            }
-            value={freeText}
-            onChange={(e) => onFreeTextChange(e.target.value)}
-            className="text-sm"
-          />
-          <p className="text-xs text-muted-foreground">
-            Natural language, loose lists, and mixed formatting are all fine. AI
-            will extract the items and suggest storage details.
-          </p>
         </div>
 
         {apiError ? (

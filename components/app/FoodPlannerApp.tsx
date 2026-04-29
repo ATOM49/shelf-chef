@@ -158,7 +158,9 @@ export function FoodPlannerApp() {
   const loadingDbStateRef = useRef(false);
   const isDbStateLoadedRef = useRef(false);
   const loadedWorkspaceKeyRef = useRef<string | null>(null);
-  const dbSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const dbSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
 
   const { data: session, status: sessionStatus } = useSession();
 
@@ -220,7 +222,9 @@ export function FoodPlannerApp() {
   const canUseClipboard =
     typeof navigator !== "undefined" && !!navigator.clipboard?.writeText;
   const activeHousehold = isHouseholdWorkspace(activeWorkspace)
-    ? households.find((household) => household.id === activeWorkspace.householdId)
+    ? households.find(
+        (household) => household.id === activeWorkspace.householdId,
+      )
     : undefined;
   const activeWorkspaceLabel = activeHousehold?.name ?? "Personal workspace";
 
@@ -251,7 +255,9 @@ export function FoodPlannerApp() {
     setHouseholdsError(null);
 
     const normalized = normalizeWorkspace(activeWorkspace, data.households);
-    if (serializeWorkspace(normalized) !== serializeWorkspace(activeWorkspace)) {
+    if (
+      serializeWorkspace(normalized) !== serializeWorkspace(activeWorkspace)
+    ) {
       setActiveWorkspace(normalized);
     }
 
@@ -303,7 +309,9 @@ export function FoodPlannerApp() {
       } catch (error) {
         if (!isCancelled) {
           setHouseholdsError(
-            error instanceof Error ? error.message : "Unable to load households",
+            error instanceof Error
+              ? error.message
+              : "Unable to load households",
           );
         }
       } finally {
@@ -329,7 +337,8 @@ export function FoodPlannerApp() {
 
     const normalizedWorkspace = normalizeWorkspace(activeWorkspace, households);
     if (
-      serializeWorkspace(normalizedWorkspace) !== serializeWorkspace(activeWorkspace)
+      serializeWorkspace(normalizedWorkspace) !==
+      serializeWorkspace(activeWorkspace)
     ) {
       setActiveWorkspace(normalizedWorkspace);
       return;
@@ -349,14 +358,17 @@ export function FoodPlannerApp() {
     void (async () => {
       try {
         const response = await fetch(buildStateUrl(normalizedWorkspace));
-        const data = (await response.json()) as { error?: string; state?: unknown };
+        const data = (await response.json()) as {
+          error?: string;
+          state?: unknown;
+        };
 
         if (!response.ok) {
           throw new Error(data.error ?? "Unable to load workspace state");
         }
 
         const revived = data.state
-          ? parsePersistedAppState(data.state) ?? createDefaultAppState()
+          ? (parsePersistedAppState(data.state) ?? createDefaultAppState())
           : createDefaultAppState();
 
         if (!isCancelled) {
@@ -383,7 +395,13 @@ export function FoodPlannerApp() {
     return () => {
       isCancelled = true;
     };
-  }, [activeWorkspace, buildStateUrl, households, householdsReady, sessionStatus]);
+  }, [
+    activeWorkspace,
+    buildStateUrl,
+    households,
+    householdsReady,
+    sessionStatus,
+  ]);
 
   // Save state to localStorage on every change; also debounce-save to DB when authenticated.
   useLayoutEffect(() => {
@@ -698,7 +716,11 @@ export function FoodPlannerApp() {
       }
       setRecipeBookState({ open: false, mode: "browse" });
     },
-    [recipeBookState.mealId, recipeBookState.fillDay, recipeBookState.fillMealType],
+    [
+      recipeBookState.mealId,
+      recipeBookState.fillDay,
+      recipeBookState.fillMealType,
+    ],
   );
 
   const handleCreateCustomRecipe = useCallback(
@@ -756,7 +778,11 @@ export function FoodPlannerApp() {
       });
 
       if (recipeBookState.mealId) {
-        dispatch({ type: "REPLACE_PLANNED_MEAL", mealId: recipeBookState.mealId, recipeId });
+        dispatch({
+          type: "REPLACE_PLANNED_MEAL",
+          mealId: recipeBookState.mealId,
+          recipeId,
+        });
       } else if (recipeBookState.fillDay && recipeBookState.fillMealType) {
         dispatch({
           type: "ADD_MEAL_TO_SLOT",
@@ -840,7 +866,7 @@ export function FoodPlannerApp() {
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 pb-3">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-semibold text-foreground">
+              <h2 className="font-serif text-lg font-semibold text-foreground">
                 This week&apos;s plan
               </h2>
               {isPlanStale ? (
@@ -1000,7 +1026,7 @@ export function FoodPlannerApp() {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xl">🍽️</span>
-              <h1 className="text-lg font-semibold">ShelfChef</h1>
+              <h1 className="font-serif text-lg font-semibold">ShelfChef</h1>
               <Popover>
                 <PopoverTrigger
                   type="button"
@@ -1033,7 +1059,9 @@ export function FoodPlannerApp() {
                     <SelectValue>{activeWorkspaceLabel}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="personal">👤 Personal workspace</SelectItem>
+                    <SelectItem value="personal">
+                      👤 Personal workspace
+                    </SelectItem>
                     {households.map((household) => (
                       <SelectItem
                         key={household.id}
@@ -1049,11 +1077,16 @@ export function FoodPlannerApp() {
                     type="button"
                     aria-label="Household settings"
                     onClick={() => setHouseholdSettingsOpen(true)}
-                    className={buttonVariants({ variant: "outline", size: "icon-sm" })}
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "icon-sm",
+                    })}
                   >
                     <Settings2 className="size-4" aria-hidden />
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">Household settings</TooltipContent>
+                  <TooltipContent side="bottom">
+                    Household settings
+                  </TooltipContent>
                 </Tooltip>
                 <Button
                   type="button"
@@ -1084,7 +1117,10 @@ export function FoodPlannerApp() {
                   <DropdownMenuTrigger
                     type="button"
                     aria-label="More options"
-                    className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                    className={buttonVariants({
+                      variant: "ghost",
+                      size: "icon-sm",
+                    })}
                   >
                     <MoreHorizontal className="size-4" aria-hidden />
                   </DropdownMenuTrigger>
@@ -1137,11 +1173,19 @@ export function FoodPlannerApp() {
                 <DropdownMenuTrigger
                   type="button"
                   aria-label="More options"
-                  className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                  className={buttonVariants({
+                    variant: "ghost",
+                    size: "icon-sm",
+                  })}
                 >
                   <MoreHorizontal className="size-4" aria-hidden />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent side="bottom" align="end" sideOffset={6} className="w-56">
+                <DropdownMenuContent
+                  side="bottom"
+                  align="end"
+                  sideOffset={6}
+                  className="w-56"
+                >
                   <DropdownMenuLabel>Workspace</DropdownMenuLabel>
                   <DropdownMenuRadioGroup
                     value={serializeWorkspace(activeWorkspace)}
@@ -1162,7 +1206,9 @@ export function FoodPlannerApp() {
                     ))}
                   </DropdownMenuRadioGroup>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setHouseholdSettingsOpen(true)}>
+                  <DropdownMenuItem
+                    onClick={() => setHouseholdSettingsOpen(true)}
+                  >
                     <Settings2 className="size-4" aria-hidden />
                     Household settings
                   </DropdownMenuItem>
@@ -1172,10 +1218,7 @@ export function FoodPlannerApp() {
                     Sign out
                   </DropdownMenuLinkItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={handleReset}
-                  >
+                  <DropdownMenuItem variant="destructive" onClick={handleReset}>
                     <Trash2 className="size-4" aria-hidden />
                     Reset workspace
                   </DropdownMenuItem>
@@ -1185,7 +1228,7 @@ export function FoodPlannerApp() {
           </div>
         </header>
 
-        {(householdsError || workspaceError) ? (
+        {householdsError || workspaceError ? (
           <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {householdsError ?? workspaceError}
           </div>
@@ -1333,7 +1376,8 @@ export function FoodPlannerApp() {
                       )}
                     </div>
                     <p className="shrink-0 text-xs text-muted-foreground">
-                      Add some items to your shelves and the AI will help organize everything!
+                      Add some items to your shelves and the AI will help
+                      organize everything!
                     </p>
                   </div>
                 </TabsContent>
@@ -1437,7 +1481,9 @@ export function FoodPlannerApp() {
                 type="button"
                 className="w-full"
                 onClick={() => handleCopyCartSection(state.planner.groceryCart)}
-                disabled={state.planner.groceryCart.length === 0 || !canUseClipboard}
+                disabled={
+                  state.planner.groceryCart.length === 0 || !canUseClipboard
+                }
               >
                 <Copy className="size-4" aria-hidden="true" />
                 Copy shopping list
@@ -1475,8 +1521,8 @@ export function FoodPlannerApp() {
             <AlertDialogHeader>
               <AlertDialogTitle>Clear the weekly plan?</AlertDialogTitle>
               <AlertDialogDescription>
-                Your current plan and shopping cart will be cleared.
-                Your saved preferences will stay in place.
+                Your current plan and shopping cart will be cleared. Your saved
+                preferences will stay in place.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -1499,7 +1545,8 @@ export function FoodPlannerApp() {
                 Reset the app to default state?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Everything gets wiped — fridge, pantry, plan, and cart. A fresh start!
+                Everything gets wiped — fridge, pantry, plan, and cart. A fresh
+                start!
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

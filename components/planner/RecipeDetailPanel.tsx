@@ -20,7 +20,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ArrowLeft, ExternalLink, Trash2 } from "lucide-react";
-import type { IngredientMatch, MealValidation, PlannedMeal, Recipe } from "@/lib/planner/types";
+import type {
+  IngredientMatch,
+  MealValidation,
+  PlannedMeal,
+  Recipe,
+} from "@/lib/planner/types";
 
 function formatMealTypeLabel(mealType: Recipe["mealType"]) {
   return mealType.charAt(0).toUpperCase() + mealType.slice(1);
@@ -117,15 +122,21 @@ export function RecipeDetailPanel({
               </div>
             ) : null}
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">{formatMealTypeLabel(recipe.mealType)}</Badge>
-              <Badge variant="secondary">{formatSourceLabel(recipe.source)}</Badge>
+              <Badge variant="outline">
+                {formatMealTypeLabel(recipe.mealType)}
+              </Badge>
+              <Badge variant="secondary">
+                {formatSourceLabel(recipe.source)}
+              </Badge>
             </div>
             <div className="space-y-2">
-              <h3 className="text-2xl font-semibold leading-tight text-foreground sm:text-3xl">
+              <h3 className="text-2xl font-semibold font-serif leading-tight text-foreground sm:text-3xl">
                 {recipe.title}
               </h3>
               <p className="text-sm leading-6 text-muted-foreground sm:text-[15px]">
-                {recipe.cuisine ? `${recipe.cuisine} cuisine` : "Kitchen staple"}
+                {recipe.cuisine
+                  ? `${recipe.cuisine} cuisine`
+                  : "Kitchen staple"}
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2 sm:max-w-sm">
@@ -134,10 +145,10 @@ export function RecipeDetailPanel({
                   key={`${recipe.id}-${stat.label}`}
                   className="rounded-xl border bg-background/80 px-3 py-2"
                 >
-                  <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                  <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground truncate">
                     {stat.label}
                   </div>
-                  <div className="mt-1 text-base font-semibold text-foreground">
+                  <div className="mt-1 text-base font-semibold font-serif text-foreground">
                     {stat.value}
                   </div>
                 </div>
@@ -146,7 +157,10 @@ export function RecipeDetailPanel({
           </div>
 
           {onDelete && recipe.source === "user-saved" ? (
-            <Popover open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+            <Popover
+              open={deleteConfirmOpen}
+              onOpenChange={setDeleteConfirmOpen}
+            >
               <PopoverTrigger
                 type="button"
                 className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-auto"
@@ -158,7 +172,8 @@ export function RecipeDetailPanel({
                 <PopoverHeader>
                   <PopoverTitle>Delete this recipe?</PopoverTitle>
                   <PopoverDescription>
-                    This recipe will be removed from your book. You can always regenerate it later.
+                    This recipe will be removed from your book. You can always
+                    regenerate it later.
                   </PopoverDescription>
                 </PopoverHeader>
                 <div className="flex items-center justify-end gap-2 pt-1">
@@ -193,19 +208,31 @@ export function RecipeDetailPanel({
         <section className="rounded-2xl border bg-background/80 p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h4 className="text-sm font-semibold text-foreground">Meal actions</h4>
+              <h4 className="text-sm font-serif font-semibold text-foreground">
+                Meal actions
+              </h4>
               <p className="mt-1 text-xs text-muted-foreground">
                 Mark as cooked to deduct matched items from your inventory.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               {onSwap ? (
-                <Button type="button" variant="outline" size="sm" onClick={onSwap}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onSwap}
+                >
                   Swap recipe
                 </Button>
               ) : null}
               {onRemove ? (
-                <Button type="button" variant="outline" size="sm" onClick={onRemove}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onRemove}
+                >
                   Eating out
                 </Button>
               ) : null}
@@ -214,7 +241,9 @@ export function RecipeDetailPanel({
                   type="checkbox"
                   checked={isCooked}
                   disabled={isCooked}
-                  onChange={(event) => onSetCooked?.(event.currentTarget.checked)}
+                  onChange={(event) =>
+                    onSetCooked?.(event.currentTarget.checked)
+                  }
                 />
                 Cooked
               </label>
@@ -239,7 +268,9 @@ export function RecipeDetailPanel({
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
             Cookability
           </p>
-          <h4 className="text-base font-semibold text-foreground">Inventory check</h4>
+          <h4 className="text-base font-serif font-semibold text-foreground">
+            Inventory check
+          </h4>
         </div>
         <div className="mt-3">
           <MealValidationSummary validation={validation} />
@@ -247,7 +278,7 @@ export function RecipeDetailPanel({
         {plannedMeal ? (
           <Accordion className="mt-4" defaultValue={[]}>
             <AccordionItem value="validation-details" className="border-t pt-2">
-              <AccordionTrigger className="py-2 text-sm font-semibold text-foreground hover:no-underline">
+              <AccordionTrigger className="py-2 text-sm font-serif font-semibold text-foreground hover:no-underline">
                 Validation details
               </AccordionTrigger>
               <AccordionContent className="pt-2">
@@ -274,7 +305,9 @@ export function RecipeDetailPanel({
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
               Tags
             </p>
-            <h4 className="text-base font-semibold text-foreground">Recipe notes</h4>
+            <h4 className="text-base font-serif font-semibold text-foreground">
+              Recipe notes
+            </h4>
           </div>
           <div className="mt-3 flex flex-wrap gap-2.5">
             {recipe.tags.map((tag) => (
@@ -292,14 +325,18 @@ export function RecipeDetailPanel({
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
             Ingredients
           </p>
-          <h4 className="text-base font-semibold text-foreground">What you need</h4>
+          <h4 className="text-base font-serif font-semibold text-foreground">
+            What you need
+          </h4>
         </div>
         <div className="mt-3">
           {stapleMatches.length > 0 ? (
             <p className="mb-3 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Assumed staples:</span>{" "}
-              {stapleMatches.map((m) => m.ingredientName).join(", ")} — treated as always
-              available and not checked against your inventory.
+              <span className="font-medium text-foreground">
+                Assumed staples:
+              </span>{" "}
+              {stapleMatches.map((m) => m.ingredientName).join(", ")} — treated
+              as always available and not checked against your inventory.
             </p>
           ) : null}
           <RecipeIngredientList
@@ -316,7 +353,9 @@ export function RecipeDetailPanel({
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
               Method
             </p>
-            <h4 className="text-base font-semibold text-foreground">Cooking steps</h4>
+            <h4 className="text-base font-serif font-semibold text-foreground">
+              Cooking steps
+            </h4>
           </div>
           <ol className="mt-3 grid gap-2.5 text-sm text-muted-foreground sm:gap-3">
             {recipe.instructions.map((instruction, index) => (
@@ -341,7 +380,9 @@ export function RecipeDetailPanel({
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
               Source
             </p>
-            <h4 className="text-base font-semibold text-foreground">Original recipe</h4>
+            <h4 className="text-base font-serif font-semibold text-foreground">
+              Original recipe
+            </h4>
           </div>
           <div className="mt-3">
             <a
