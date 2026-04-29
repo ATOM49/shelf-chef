@@ -4,6 +4,7 @@ import { generateStockPresetResponse } from "@/lib/stocking/generate";
 import { buildPresetStockPrompt } from "@/lib/stocking/prompts";
 import { stockPresetRequestSchema } from "@/lib/stocking/schema";
 import { normalizeIngredientName } from "@/lib/inventory/normalize";
+import { PRESET_SEEDS } from "@/lib/inventory/preset-seeds";
 
 export async function POST(req: NextRequest) {
   let payload: unknown;
@@ -18,12 +19,24 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "A valid preset selection is required" }, { status: 400 });
   }
 
-  const stapleNames = parsedRequest.data.stapleNames ?? [];
+  const { presetId, stapleNames = [] } = parsedRequest.data;
   const normalizedStapleSet = new Set(stapleNames.map(normalizeIngredientName));
+
+  // Serve pre-generated seed data immediately — no LLM call needed.
+  // Pass useSeed=false in the request body to force an LLM call instead
+  // (useful for regenerating the seed file via scripts/generate-preset-seeds.ts).
+  const useSeed = (payload as Record<string, unknown>).useSeed !== false;
+
+  if (useSeed) {
+    const seedItems = PRESET_SEEDS[presetId].filter(
+      (item) => !normalizedStapleSet.has(normalizeIngredientName(item.name)),
+    );
+    return Response.json({ items: seedItems });
+  }
 
   try {
     const response = await generateStockPresetResponse(
-      buildPresetStockPrompt(parsedRequest.data.presetId, stapleNames),
+      buildPresetStockPrompt(presetId, stapleNames),
     );
     // Filter out any staples that slipped through the AI response
     const filteredItems = response.items.filter(

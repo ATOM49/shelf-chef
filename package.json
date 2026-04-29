@@ -12,7 +12,8 @@
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:push": "prisma db push",
-    "db:migrate": "prisma migrate deploy"
+    "db:migrate": "prisma migrate deploy",
+    "generate:preset-seeds": "NEXT_PUBLIC_APP_URL=http://localhost:3000 npx tsx scripts/generate-preset-seeds.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",
