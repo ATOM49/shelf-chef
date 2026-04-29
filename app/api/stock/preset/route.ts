@@ -19,13 +19,12 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "A valid preset selection is required" }, { status: 400 });
   }
 
-  const { presetId, stapleNames = [] } = parsedRequest.data;
+  const { presetId, stapleNames = [], useSeed = true } = parsedRequest.data;
   const normalizedStapleSet = new Set(stapleNames.map(normalizeIngredientName));
 
   // Serve pre-generated seed data immediately — no LLM call needed.
   // Pass useSeed=false in the request body to force an LLM call instead
   // (useful for regenerating the seed file via scripts/generate-preset-seeds.ts).
-  const useSeed = (payload as Record<string, unknown>).useSeed !== false;
 
   if (useSeed) {
     const seedItems = PRESET_SEEDS[presetId].filter(

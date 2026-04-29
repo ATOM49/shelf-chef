@@ -409,8 +409,8 @@ export function FoodPlannerApp() {
     if (isInitializing || hasAutoOpenedStockingRef.current) {
       return;
     }
-    hasAutoOpenedStockingRef.current = true;
     if (state.inventory.length === 0) {
+      hasAutoOpenedStockingRef.current = true;
       setStockingOpen(true);
     }
   }, [isInitializing, state.inventory.length]);
