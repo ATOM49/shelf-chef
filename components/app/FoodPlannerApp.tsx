@@ -169,6 +169,7 @@ export function FoodPlannerApp() {
   const [householdsError, setHouseholdsError] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const hasAutoOpenedStockingRef = useRef(false);
   const [storageTab, setStorageTab] = useState<StorageTab>("fridge");
   const [stockingOpen, setStockingOpen] = useState(false);
   const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
@@ -402,6 +403,17 @@ export function FoodPlannerApp() {
     householdsReady,
     sessionStatus,
   ]);
+
+  // Auto-open the stocking dialog once for new users who have an empty inventory.
+  useEffect(() => {
+    if (isInitializing || hasAutoOpenedStockingRef.current) {
+      return;
+    }
+    if (state.inventory.length === 0) {
+      hasAutoOpenedStockingRef.current = true;
+      setStockingOpen(true);
+    }
+  }, [isInitializing, state.inventory.length]);
 
   // Save state to localStorage on every change; also debounce-save to DB when authenticated.
   useLayoutEffect(() => {

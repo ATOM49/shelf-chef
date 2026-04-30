@@ -101,6 +101,7 @@ export const stockTextRequestSchema = z.object({
 export const stockPresetRequestSchema = z.object({
   presetId: z.enum(PRESET_ORDER),
   stapleNames: z.array(z.string().trim()).optional(),
+  useSeed: z.boolean().optional(),
 }).strict();
 
 export const stockApiResponseJsonSchema = z.toJSONSchema(stockApiResponseSchema, {
