@@ -662,7 +662,7 @@ function ImageUploadSection({
   return (
     <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
       <div>
-        <p className="text-sm font-semibold font-serif">Scan a photo</p>
+        <p className="text-sm font-semibold font-serif">Add a photo</p>
         <p className="text-xs text-muted-foreground">
           Take or upload a photo of your groceries, fridge, or pantry. AI will
           identify the items and suggest storage details.
@@ -758,30 +758,10 @@ function ImageUploadSection({
               size="sm"
               disabled={isPending}
               className="flex-1 gap-1.5"
-              onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.removeAttribute("capture");
-                  fileInputRef.current.click();
-                }
-              }}
+              onClick={() => fileInputRef.current?.click()}
             >
               <ImageUp className="size-3.5" aria-hidden />
-              Gallery
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isPending}
-              className="flex-1 gap-1.5"
-              onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.removeAttribute("capture");
-                  fileInputRef.current.click();
-                }
-              }}
-            >
-              Files
+              Gallery / Files
             </Button>
           </div>
 
