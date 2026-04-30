@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { LoaderCircle, XIcon } from "lucide-react";
+import { useRef, useState } from "react";
+import { Camera, ImageUp, LoaderCircle, RefreshCw, XIcon } from "lucide-react";
 import { generateId } from "@/lib/id";
 import type { StockingItemDraft } from "@/lib/appState";
 import {
@@ -46,7 +46,7 @@ import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { Textarea } from "@/components/ui/textarea";
 
 type Step = "input" | "preview";
-type PendingAction = "text" | PresetId;
+type PendingAction = "text" | "image" | PresetId;
 
 type StockingDialogProps = {
   open: boolean;
@@ -71,8 +71,20 @@ export function StockingDialog({
     null,
   );
   const [isPending, setIsPending] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const clearImage = (previewUrl: string | null) => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+  };
 
   const handleClose = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
     onOpenChange(false);
     setTimeout(() => {
       setStep("input");
@@ -80,6 +92,9 @@ export function StockingDialog({
       setStockedItems([]);
       setApiError(null);
       setPendingAction(null);
+      clearImage(imagePreviewUrl);
+      setImageFile(null);
+      setImagePreviewUrl(null);
     }, 300);
   };
 
@@ -151,6 +166,76 @@ export function StockingDialog({
     requestReview("/api/stock/preset", { presetId }, presetId);
   };
 
+  const handleImageSelect = (file: File) => {
+    clearImage(imagePreviewUrl);
+    setImageFile(file);
+    setImagePreviewUrl(URL.createObjectURL(file));
+    setApiError(null);
+  };
+
+  const handleRetakeImage = () => {
+    clearImage(imagePreviewUrl);
+    setImageFile(null);
+    setImagePreviewUrl(null);
+    setApiError(null);
+  };
+
+  const handleCancelAnalysis = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  };
+
+  const handleAnalyzeImage = () => {
+    if (!imageFile) return;
+
+    const stapleNames = getAllStapleNames(customStapleNames);
+    const stapleSet = new Set(stapleNames.map(normalizeIngredientName));
+
+    const formData = new FormData();
+    formData.append("image", imageFile);
+    formData.append("stapleNames", JSON.stringify(stapleNames));
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setApiError(null);
+    setPendingAction("image");
+    setIsPending(true);
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/stock/image", {
+          method: "POST",
+          body: formData,
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          const err = (await res.json()) as { error?: string };
+          throw new Error(err.error ?? `HTTP ${res.status}`);
+        }
+        const rawData = (await res.json()) as StockApiResponse;
+        const data = parseStockApiResponseForReview(rawData);
+        const filtered = data.items.filter(
+          (item) => !stapleSet.has(normalizeIngredientName(item.name)),
+        );
+        setStockedItems(
+          filtered.map((item) => ({ ...item, id: generateId() })),
+        );
+        setStep("preview");
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+        setApiError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        abortControllerRef.current = null;
+        setPendingAction(null);
+        setIsPending(false);
+      }
+    })();
+  };
+
   const handleCommit = () => {
     const drafts: StockingItemDraft[] = stockedItems.map((item) => ({
       emoji: item.emoji || undefined,
@@ -181,6 +266,7 @@ export function StockingDialog({
   const pendingState = getStockPendingState(pendingAction);
   const trimmedInput = freeText.trim();
   const isTextPending = isPending && pendingAction === "text";
+  const isImagePending = isPending && pendingAction === "image";
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
@@ -220,6 +306,12 @@ export function StockingDialog({
               pendingAction={pendingAction}
               apiError={apiError}
               onSelectPreset={handlePresetSelect}
+              imageFile={imageFile}
+              imagePreviewUrl={imagePreviewUrl}
+              onImageSelect={handleImageSelect}
+              onRetakeImage={handleRetakeImage}
+              onAnalyzeImage={handleAnalyzeImage}
+              isImagePending={isImagePending}
             />
           ) : (
             <PreviewStep
@@ -270,16 +362,62 @@ export function StockingDialog({
         </DialogFooter>
 
         {isPending ? (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-popover/92 p-4 supports-backdrop-filter:backdrop-blur-sm">
-            <LottieLoadingPanel
-              src={LOTTIE_ANIMATION_SOURCES.stock}
-              title={pendingState.title}
-              description={pendingState.description}
-              statusLabel={pendingState.statusLabel}
-              className="min-h-[28rem]"
-              panelClassName="max-w-xl"
-            />
-          </div>
+          isImagePending && imagePreviewUrl ? (
+            <div
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-5 bg-popover/92 p-6 supports-backdrop-filter:backdrop-blur-sm"
+            >
+              <div className="relative w-full max-w-xs overflow-hidden rounded-xl border shadow-lg">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imagePreviewUrl}
+                  alt="Photo being analyzed"
+                  className="w-full object-cover max-h-56"
+                />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                  <LoaderCircle className="size-10 animate-spin text-white drop-shadow-md" aria-hidden />
+                </div>
+              </div>
+              <div className="flex flex-col items-center gap-1 text-center">
+                <p className="font-serif text-base font-semibold text-foreground">Analyzing your photo</p>
+                <p className="text-sm text-muted-foreground">Identifying items and filling in storage details…</p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRetakeImage}
+                  className="pointer-events-auto"
+                >
+                  <RefreshCw className="size-3.5" aria-hidden />
+                  Retake
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancelAnalysis}
+                  className="pointer-events-auto"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-popover/92 p-4 supports-backdrop-filter:backdrop-blur-sm">
+              <LottieLoadingPanel
+                src={LOTTIE_ANIMATION_SOURCES.stock}
+                title={pendingState.title}
+                description={pendingState.description}
+                statusLabel={pendingState.statusLabel}
+                className="min-h-[28rem]"
+                panelClassName="max-w-xl"
+              />
+            </div>
+          )
         ) : null}
       </DialogContent>
     </Dialog>
@@ -293,6 +431,15 @@ function getStockPendingState(pendingAction: PendingAction | null) {
       description:
         "Pulling out items from your note and suggesting where they belong.",
       statusLabel: "Analyzing stock note",
+    };
+  }
+
+  if (pendingAction === "image") {
+    return {
+      title: "Analyzing your photo",
+      description:
+        "Identifying items in the photo and suggesting where they belong.",
+      statusLabel: "Analyzing photo",
     };
   }
 
@@ -323,6 +470,12 @@ type InputStepProps = {
   pendingAction: PendingAction | null;
   apiError: string | null;
   onSelectPreset: (presetId: PresetId) => void;
+  imageFile: File | null;
+  imagePreviewUrl: string | null;
+  onImageSelect: (file: File) => void;
+  onRetakeImage: () => void;
+  onAnalyzeImage: () => void;
+  isImagePending: boolean;
 };
 
 function InputStep({
@@ -332,6 +485,12 @@ function InputStep({
   pendingAction,
   apiError,
   onSelectPreset,
+  imageFile,
+  imagePreviewUrl,
+  onImageSelect,
+  onRetakeImage,
+  onAnalyzeImage,
+  isImagePending,
 }: InputStepProps) {
   return (
     <>
@@ -371,6 +530,16 @@ function InputStep({
             will extract the items and suggest storage details.
           </p>
         </div>
+
+        <ImageUploadSection
+          imageFile={imageFile}
+          imagePreviewUrl={imagePreviewUrl}
+          isPending={isPending}
+          isImagePending={isImagePending}
+          onImageSelect={onImageSelect}
+          onRetakeImage={onRetakeImage}
+          onAnalyzeImage={onAnalyzeImage}
+        />
         
         <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
           <div>
@@ -432,6 +601,219 @@ function InputStep({
         ) : null}
       </div>
     </>
+  );
+}
+
+// ─── Image upload section ─────────────────────────────────────────────────────
+
+const ACCEPTED_IMAGE_TYPES = "image/jpeg,image/png,image/webp,image/heic,image/heif";
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+type ImageUploadSectionProps = {
+  imageFile: File | null;
+  imagePreviewUrl: string | null;
+  isPending: boolean;
+  isImagePending: boolean;
+  onImageSelect: (file: File) => void;
+  onRetakeImage: () => void;
+  onAnalyzeImage: () => void;
+};
+
+function ImageUploadSection({
+  imageFile,
+  imagePreviewUrl,
+  isPending,
+  isImagePending,
+  onImageSelect,
+  onRetakeImage,
+  onAnalyzeImage,
+}: ImageUploadSectionProps) {
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [sizeError, setSizeError] = useState<string | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      setSizeError("Image is too large (max 10 MB). Please choose a smaller file.");
+      return;
+    }
+    setSizeError(null);
+    onImageSelect(file);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      setSizeError("Image is too large (max 10 MB). Please choose a smaller file.");
+      return;
+    }
+    setSizeError(null);
+    onImageSelect(file);
+  };
+
+  return (
+    <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
+      <div>
+        <p className="text-sm font-semibold font-serif">Scan a photo</p>
+        <p className="text-xs text-muted-foreground">
+          Take or upload a photo of your groceries, fridge, or pantry. AI will
+          identify the items and suggest storage details.
+        </p>
+      </div>
+
+      {/* Hidden file inputs */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept={ACCEPTED_IMAGE_TYPES}
+        capture="environment"
+        className="sr-only"
+        tabIndex={-1}
+        onChange={handleFileChange}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_IMAGE_TYPES}
+        className="sr-only"
+        tabIndex={-1}
+        onChange={handleFileChange}
+      />
+
+      {imagePreviewUrl && imageFile ? (
+        /* ── Preview state ── */
+        <div className="grid gap-3">
+          <div className="relative overflow-hidden rounded-lg border bg-background">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imagePreviewUrl}
+              alt={`Preview of ${imageFile.name}`}
+              className="w-full object-cover max-h-52"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {imageFile.name}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              onClick={onRetakeImage}
+              className="gap-1.5"
+            >
+              <RefreshCw className="size-3.5" aria-hidden />
+              Retake
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={isPending}
+              aria-busy={isImagePending}
+              onClick={onAnalyzeImage}
+              className="gap-1.5"
+            >
+              {isImagePending ? (
+                <>
+                  <LoaderCircle className="size-3.5 animate-spin" aria-hidden />
+                  Analyzing…
+                </>
+              ) : (
+                <>
+                  <ImageUp className="size-3.5" aria-hidden />
+                  Analyze photo
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        /* ── Upload state ── */
+        <div className="grid gap-2">
+          {/* Mobile: camera + gallery + files buttons */}
+          <div className="flex gap-2 md:hidden">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              className="flex-1 gap-1.5"
+              onClick={() => cameraInputRef.current?.click()}
+            >
+              <Camera className="size-3.5" aria-hidden />
+              Camera
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              className="flex-1 gap-1.5"
+              onClick={() => {
+                if (fileInputRef.current) {
+                  fileInputRef.current.removeAttribute("capture");
+                  fileInputRef.current.click();
+                }
+              }}
+            >
+              <ImageUp className="size-3.5" aria-hidden />
+              Gallery
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              className="flex-1 gap-1.5"
+              onClick={() => {
+                if (fileInputRef.current) {
+                  fileInputRef.current.removeAttribute("capture");
+                  fileInputRef.current.click();
+                }
+              }}
+            >
+              Files
+            </Button>
+          </div>
+
+          {/* Desktop: drag-and-drop area */}
+          <div
+            className={`hidden md:flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-4 py-8 text-center transition-colors cursor-pointer ${
+              isDragOver
+                ? "border-foreground/40 bg-muted/60"
+                : "border-border hover:border-foreground/30 hover:bg-muted/40"
+            } ${isPending ? "pointer-events-none opacity-60" : ""}`}
+            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+            onDragLeave={() => setIsDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            role="button"
+            tabIndex={isPending ? -1 : 0}
+            aria-label="Upload image by clicking or dragging"
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click(); }}
+          >
+            <ImageUp className="size-6 text-muted-foreground" aria-hidden />
+            <div>
+              <p className="text-sm font-medium">Drop an image here or click to browse</p>
+              <p className="text-xs text-muted-foreground mt-0.5">JPEG, PNG, WebP or HEIC · max 10 MB</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sizeError ? (
+        <p className="text-xs text-destructive">{sizeError}</p>
+      ) : null}
+    </div>
   );
 }
 

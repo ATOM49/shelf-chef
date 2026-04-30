@@ -1,4 +1,4 @@
-import { generateStructuredObject } from "../ai/structured";
+import { generateStructuredObject, type ImageContent } from "../ai/structured";
 import {
   parseStockApiResponseForReview,
   stockApiResponseSchema,
@@ -20,6 +20,19 @@ export async function generateStockPresetResponse(
 ) {
   const response = await generateStructuredObject({
     enableGoogleSearch: true,
+    prompt,
+    schema: stockApiResponseSchema,
+  });
+
+  return parseStockApiResponseForReview(response);
+}
+
+export async function generateStockImageResponse(
+  image: ImageContent,
+  prompt: string,
+) {
+  const response = await generateStructuredObject({
+    image,
     prompt,
     schema: stockApiResponseSchema,
   });

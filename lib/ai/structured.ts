@@ -73,11 +73,17 @@ type TavilyGroundingOptions = {
   includeRawContent?: boolean;
 };
 
+export type ImageContent = {
+  base64: string;
+  mimeType: string;
+};
+
 type StructuredLlmOptions<TSchema extends z.ZodTypeAny> = {
   prompt: string;
   schema: TSchema;
   enableGoogleSearch?: boolean;
   grounding?: TavilyGroundingOptions;
+  image?: ImageContent;
 };
 
 type ResolvedModelConfig = {
@@ -105,7 +111,7 @@ export async function generateStructuredObject<TSchema extends z.ZodTypeAny>(
   const groundedPrompt = await maybeGroundPrompt(options.prompt, options.grounding);
 
   return runStructuredGenerationGraph(groundedPrompt, (prompt) =>
-    invokeStructuredModel(prompt, options.schema, config),
+    invokeStructuredModel(prompt, options.schema, config, options.image),
   );
 }
 
@@ -208,14 +214,15 @@ async function invokeStructuredModel<TSchema extends z.ZodTypeAny>(
   prompt: string,
   schema: TSchema,
   config: ResolvedModelConfig,
+  image?: ImageContent,
 ) {
   switch (config.provider) {
     case "gemini":
-      return invokeGeminiStructuredModel(prompt, schema, config);
+      return invokeGeminiStructuredModel(prompt, schema, config, image);
     case "openai":
-      return invokeOpenAIStructuredModel(prompt, schema, config);
+      return invokeOpenAIStructuredModel(prompt, schema, config, image);
     case "anthropic":
-      return invokeAnthropicStructuredModel(prompt, schema, config);
+      return invokeAnthropicStructuredModel(prompt, schema, config, image);
   }
 }
 
@@ -223,6 +230,7 @@ async function invokeGeminiStructuredModel<TSchema extends z.ZodTypeAny>(
   prompt: string,
   schema: TSchema,
   config: ResolvedModelConfig,
+  image?: ImageContent,
 ) {
   ensureApiKey(config);
 
@@ -238,6 +246,24 @@ async function invokeGeminiStructuredModel<TSchema extends z.ZodTypeAny>(
     const response = await model.invoke(
       buildPromptStructuredJsonRequest(prompt, schema),
     );
+    return parseStructuredResponse(schema, parseJsonText(extractResponseText(response)));
+  }
+
+  if (image) {
+    const model = new ChatGoogle({
+      apiKey: config.apiKey,
+      maxRetries: DEFAULT_MAX_RETRIES,
+      model: config.model,
+      temperature: DEFAULT_TEMPERATURE,
+    });
+
+    const jsonPrompt = buildPromptStructuredJsonRequest(prompt, schema);
+    const response = await model.invoke([
+      ["human", [
+        { type: "text", text: jsonPrompt },
+        { type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.base64}` } },
+      ]],
+    ]);
     return parseStructuredResponse(schema, parseJsonText(extractResponseText(response)));
   }
 
@@ -257,6 +283,7 @@ async function invokeOpenAIStructuredModel<TSchema extends z.ZodTypeAny>(
   prompt: string,
   schema: TSchema,
   config: ResolvedModelConfig,
+  image?: ImageContent,
 ) {
   ensureApiKey(config);
 
@@ -267,6 +294,17 @@ async function invokeOpenAIStructuredModel<TSchema extends z.ZodTypeAny>(
     temperature: DEFAULT_TEMPERATURE,
   });
 
+  if (image) {
+    const jsonPrompt = buildPromptStructuredJsonRequest(prompt, schema);
+    const response = await model.invoke([
+      ["human", [
+        { type: "text", text: jsonPrompt },
+        { type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.base64}` } },
+      ]],
+    ]);
+    return parseStructuredResponse(schema, parseJsonText(extractResponseText(response)));
+  }
+
   const structuredModel = model.withStructuredOutput(schema);
   const response = await structuredModel.invoke(prompt);
   return parseStructuredResponse(schema, response);
@@ -276,6 +314,7 @@ async function invokeAnthropicStructuredModel<TSchema extends z.ZodTypeAny>(
   prompt: string,
   schema: TSchema,
   config: ResolvedModelConfig,
+  image?: ImageContent,
 ) {
   ensureApiKey(config);
 
@@ -285,6 +324,17 @@ async function invokeAnthropicStructuredModel<TSchema extends z.ZodTypeAny>(
     model: config.model,
     temperature: DEFAULT_TEMPERATURE,
   });
+
+  if (image) {
+    const jsonPrompt = buildPromptStructuredJsonRequest(prompt, schema);
+    const response = await model.invoke([
+      ["human", [
+        { type: "text", text: jsonPrompt },
+        { type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.base64}` } },
+      ]],
+    ]);
+    return parseStructuredResponse(schema, parseJsonText(extractResponseText(response)));
+  }
 
   const structuredModel = model.withStructuredOutput(schema);
   const response = await structuredModel.invoke(prompt);

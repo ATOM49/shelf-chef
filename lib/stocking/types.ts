@@ -23,6 +23,10 @@ export type StockTextRequest = {
   stapleNames?: string[];
 };
 
+export type StockImageRequest = {
+  stapleNames?: string[];
+};
+
 export type StockPresetRequest = {
   presetId: PresetId;
   stapleNames?: string[];
