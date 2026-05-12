@@ -4,6 +4,7 @@ import { McpHttpError } from "@/src/lib/mcp/invoke";
 export const INSTAMART_PROVIDER_KEY = "swiggy-instamart";
 const MAX_DRAFT_CART_ITEMS = 10;
 const TRACKING_POLL_INTERVAL_MS = 10_000;
+const AMBIGUOUS_CHECKOUT_ERROR_PATTERNS = ["network", "timeout", "http 5"] as const;
 
 export type InstamartCartLine = {
   spinId: string;
@@ -229,7 +230,7 @@ function isAmbiguousCheckoutError(error: unknown): boolean {
     return true;
   }
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  return message.includes("network") || message.includes("timeout") || message.includes("http 5");
+  return AMBIGUOUS_CHECKOUT_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
 }
 
 function parseOrders(response: unknown): string[] {
@@ -497,7 +498,7 @@ async function performCheckoutWithGuard(
     checkoutArgs.paymentMethod = state.requestedPaymentMethod;
   }
 
-  const successfulCheckout = async () => {
+  const attemptCheckout = async () => {
     const response = await callTool("checkout", checkoutArgs);
     const orderId = parseOrderId(response);
     return {
@@ -508,7 +509,7 @@ async function performCheckoutWithGuard(
   };
 
   try {
-    const checkout = await successfulCheckout();
+    const checkout = await attemptCheckout();
     return {
       checkout: {
         requestedAt,
@@ -546,7 +547,7 @@ async function performCheckoutWithGuard(
       };
     }
 
-    const retry = await successfulCheckout();
+    const retry = await attemptCheckout();
     return {
       checkout: {
         requestedAt,
@@ -590,7 +591,7 @@ async function trackOrderNode(
     },
     summary: [
       ...state.summary,
-      `Tracked order once after checkout. Next poll is available after ${TRACKING_POLL_INTERVAL_MS / 1000} seconds.`,
+      `Tracked order once after checkout. Next poll is available in ${TRACKING_POLL_INTERVAL_MS / 1000} seconds.`,
     ],
   };
 }

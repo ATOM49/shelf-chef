@@ -66,8 +66,6 @@ export async function POST(request: Request) {
       toolCaller,
     );
 
-    const saved = await createInstamartSession(user.id, workflowState);
-
     if (previousOpenSession) {
       await updateInstamartSession(previousOpenSession.id, {
         ...previousOpenSession.state,
@@ -80,6 +78,8 @@ export async function POST(request: Request) {
         updatedAt: new Date().toISOString(),
       });
     }
+
+    const saved = await createInstamartSession(user.id, workflowState);
 
     return NextResponse.json({
       sessionId: saved.id,
