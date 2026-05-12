@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/src/lib/auth/session";
-import { createInstamartSession, getLatestOpenInstamartSessionForUser, updateInstamartSession } from "@/src/lib/instamart/session-store";
+import { createInstamartSessionWithSupersede, getLatestOpenInstamartSessionForUser } from "@/src/lib/instamart/session-store";
 import { createInstamartToolCaller, SwiggyReauthorizeRequiredError } from "@/src/lib/instamart/mcp";
 import {
   INSTAMART_PROVIDER_KEY,
@@ -66,20 +66,12 @@ export async function POST(request: Request) {
       toolCaller,
     );
 
-    if (previousOpenSession) {
-      await updateInstamartSession(previousOpenSession.id, {
-        ...previousOpenSession.state,
-        status: "cancelled",
-        stage: "cancelled",
-        summary: [
-          ...previousOpenSession.state.summary,
-          "Superseded by a new Instamart workflow session.",
-        ],
-        updatedAt: new Date().toISOString(),
-      });
-    }
-
-    const saved = await createInstamartSession(user.id, workflowState);
+    const saved = await createInstamartSessionWithSupersede({
+      userId: user.id,
+      state: workflowState,
+      previousSessionId: previousOpenSession?.id,
+      previousSessionState: previousOpenSession?.state,
+    });
 
     return NextResponse.json({
       sessionId: saved.id,

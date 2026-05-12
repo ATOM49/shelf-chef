@@ -48,6 +48,49 @@ export async function createInstamartSession(
   return toSessionRecord(row);
 }
 
+export async function createInstamartSessionWithSupersede(params: {
+  userId: string;
+  state: InstamartWorkflowState;
+  previousSessionId?: string;
+  previousSessionState?: InstamartWorkflowState;
+}): Promise<InstamartSessionRecord> {
+  const row = await prisma.$transaction(async (tx) => {
+    if (params.previousSessionId && params.previousSessionState) {
+      await tx.instamartWorkflowSession.update({
+        where: { id: params.previousSessionId },
+        data: {
+          status: "cancelled",
+          state: {
+            ...params.previousSessionState,
+            status: "cancelled",
+            stage: "cancelled",
+            summary: [
+              ...params.previousSessionState.summary,
+              "Superseded by a new Instamart workflow session.",
+            ],
+            updatedAt: new Date().toISOString(),
+          },
+          completedAt: new Date(),
+        },
+      });
+    }
+
+    return tx.instamartWorkflowSession.create({
+      data: {
+        userId: params.userId,
+        status: params.state.status,
+        state: params.state,
+        completedAt:
+          params.state.status === "completed" || params.state.status === "cancelled"
+            ? new Date()
+            : null,
+      },
+    });
+  });
+
+  return toSessionRecord(row);
+}
+
 export async function updateInstamartSession(
   sessionId: string,
   state: InstamartWorkflowState,

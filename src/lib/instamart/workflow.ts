@@ -4,7 +4,14 @@ import { McpHttpError } from "@/src/lib/mcp/invoke";
 export const INSTAMART_PROVIDER_KEY = "swiggy-instamart";
 const MAX_DRAFT_CART_ITEMS = 10;
 const TRACKING_POLL_INTERVAL_MS = 10_000;
-const AMBIGUOUS_CHECKOUT_ERROR_PATTERNS = ["network", "timeout", "http 5"] as const;
+const AMBIGUOUS_CHECKOUT_ERROR_PATTERNS = [
+  "network",
+  "timeout",
+  "http 500",
+  "http 502",
+  "http 503",
+  "http 504",
+] as const;
 
 export type InstamartCartLine = {
   spinId: string;
@@ -289,14 +296,12 @@ async function discoverItemsNode(state: StartWorkflowState, callTool: InstamartT
 
   const toolName = state.discoveryQuery?.trim()
     ? "search_products"
-    : state.useGoToItems
-      ? "your_go_to_items"
-      : "search_products";
+    : "your_go_to_items";
   const toolArgs: Record<string, unknown> = {
     selectedAddressId: state.selectedAddressId,
   };
   if (toolName === "search_products") {
-    toolArgs.query = state.discoveryQuery?.trim() || "groceries";
+    toolArgs.query = state.discoveryQuery?.trim();
   }
 
   const response = await callTool(toolName, toolArgs);
@@ -547,21 +552,26 @@ async function performCheckoutWithGuard(
       };
     }
 
-    const retry = await attemptCheckout();
-    return {
-      checkout: {
-        requestedAt,
-        completedAt: nowIso(),
-        orderId: retry.orderId,
-        usedPaymentMethod: state.requestedPaymentMethod,
-        ambiguousFailureRecovered: false,
-        lastError: null,
-      },
-      summary: [
-        ...state.summary,
-        "Checkout response was ambiguous; no existing order found, retry succeeded safely.",
-      ],
-    };
+    try {
+      const retry = await attemptCheckout();
+      return {
+        checkout: {
+          requestedAt,
+          completedAt: nowIso(),
+          orderId: retry.orderId,
+          usedPaymentMethod: state.requestedPaymentMethod,
+          ambiguousFailureRecovered: false,
+          lastError: null,
+        },
+        summary: [
+          ...state.summary,
+          "Checkout response was ambiguous; no existing order found, retry succeeded safely.",
+        ],
+      };
+    } catch (retryError) {
+      const detail = retryError instanceof Error ? retryError.message : String(retryError);
+      throw new Error(`Checkout retry failed after ambiguous primary attempt: ${detail}`);
+    }
   }
 }
 
