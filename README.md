@@ -134,6 +134,8 @@ MCP_NOTION_MCP_CLIENT_ID=your-notion-client-id
 MCP_NOTION_MCP_CLIENT_SECRET=your-notion-client-secret
 MCP_GITHUB_MCP_CLIENT_ID=your-github-client-id
 MCP_GITHUB_MCP_CLIENT_SECRET=your-github-client-secret
+MCP_SWIGGY_INSTAMART_CLIENT_ID=your-swiggy-client-id
+MCP_SWIGGY_INSTAMART_CLIENT_SECRET=your-swiggy-client-secret
 ```
 
 ## Deployment

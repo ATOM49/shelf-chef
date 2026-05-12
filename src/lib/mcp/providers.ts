@@ -24,6 +24,12 @@ export type McpProviderConfig = {
 };
 
 export const MCP_PROVIDERS: Record<string, McpProviderConfig> = {
+  "swiggy-instamart": {
+    key: "swiggy-instamart",
+    label: "Swiggy Instamart",
+    mcpServerUrl: "https://mcp.swiggy.com/im",
+    scopes: [],
+  },
   "notion-mcp": {
     key: "notion-mcp",
     label: "Notion",

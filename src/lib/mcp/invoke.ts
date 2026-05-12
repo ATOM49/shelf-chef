@@ -42,6 +42,18 @@ export type McpJsonRpcResponse<T = unknown> = {
   };
 };
 
+export class McpHttpError extends Error {
+  status: number;
+  detail: string;
+
+  constructor(status: number, detail: string) {
+    super(`MCP server returned HTTP ${status}: ${detail}`);
+    this.name = "McpHttpError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 /**
  * Invokes an MCP tool on a remote MCP server.
  *
@@ -103,7 +115,7 @@ export async function invokeMcpTool(params: {
 
   if (!res.ok) {
     const detail = await res.text();
-    throw new Error(`MCP server returned HTTP ${res.status}: ${detail}`);
+    throw new McpHttpError(res.status, detail);
   }
 
   const rpcResponse = (await res.json()) as McpJsonRpcResponse;

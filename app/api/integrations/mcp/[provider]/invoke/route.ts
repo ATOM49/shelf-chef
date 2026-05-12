@@ -19,7 +19,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/src/lib/auth/session";
 import { getMcpProvider } from "@/src/lib/mcp/providers";
-import { invokeMcpTool } from "@/src/lib/mcp/invoke";
+import { invokeMcpTool, McpHttpError } from "@/src/lib/mcp/invoke";
 
 const invokeBodySchema = z.object({
   toolName: z.string().min(1),
@@ -68,6 +68,16 @@ export async function POST(
     });
     return NextResponse.json({ result });
   } catch (err) {
+    if (err instanceof McpHttpError && err.status === 401 && providerKey === "swiggy-instamart") {
+      return NextResponse.json(
+        {
+          error: "Swiggy authorization expired or invalid. Reconnect Swiggy and try again.",
+          code: "REAUTHORIZE_REQUIRED",
+        },
+        { status: 401 },
+      );
+    }
+
     const message = err instanceof Error ? err.message : String(err);
     const status = message.includes("No OAuth connection") ? 401 : 502;
     return NextResponse.json({ error: message }, { status });
