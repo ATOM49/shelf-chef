@@ -2,6 +2,8 @@ import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { McpHttpError } from "@/src/lib/mcp/invoke";
 
 export const INSTAMART_PROVIDER_KEY = "swiggy-instamart";
+const MAX_DRAFT_CART_ITEMS = 10;
+const TRACKING_POLL_INTERVAL_MS = 10_000;
 
 export type InstamartCartLine = {
   spinId: string;
@@ -187,7 +189,7 @@ export function buildDraftCartFromProducts(products: Record<string, unknown>[]):
   for (const product of products) {
     for (const spinId of extractSpinIdsFromProduct(product)) {
       lines.push({ spinId, quantity: 1 });
-      if (lines.length >= 10) {
+      if (lines.length >= MAX_DRAFT_CART_ITEMS) {
         return normalizeCartLines(lines);
       }
     }
@@ -576,7 +578,7 @@ async function trackOrderNode(
   const trackingSnapshot = await callTool("track_order", {
     orderId: state.checkout.orderId,
   });
-  const nextPollAfter = new Date(trackedAt.getTime() + 10_000).toISOString();
+  const nextPollAfter = new Date(trackedAt.getTime() + TRACKING_POLL_INTERVAL_MS).toISOString();
 
   return {
     tracking: {
@@ -677,4 +679,3 @@ export async function resumeInstamartWorkflow(
     updatedAt: nowIso(),
   };
 }
-

@@ -106,8 +106,7 @@ export async function POST(request: Request) {
       {
         error: error instanceof Error ? error.message : "Failed to start Instamart workflow.",
       },
-      { status: 502 },
+      { status: 500 },
     );
   }
 }
-
