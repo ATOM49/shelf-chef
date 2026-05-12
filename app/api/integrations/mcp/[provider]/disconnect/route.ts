@@ -28,7 +28,7 @@ export async function POST(
     );
   }
 
-  const deleted = deleteConnection(user.id, providerKey);
+  const deleted = await deleteConnection(user.id, providerKey);
 
   return NextResponse.json({
     disconnected: deleted,

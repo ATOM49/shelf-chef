@@ -1,52 +1,18 @@
 /**
  * Token store for MCP provider OAuth connections.
  *
- * This module defines:
- *  - The canonical DB schema types (OAuthConnection, OAuthPendingState)
- *  - A fully-typed in-memory implementation suitable for development/testing
+ * Persists OAuth connections and pending PKCE states to the database using
+ * Prisma.  Tokens are encrypted at rest using AES-256-GCM via the
+ * TOKEN_ENCRYPTION_KEY environment variable.
  *
- * ----------------------------------------------------------------------------
- * PRODUCTION NOTE
- * ----------------------------------------------------------------------------
- * Replace the in-memory Maps below with real database queries.  Suggested
- * tables (Postgres / Prisma schema shown for reference):
- *
- *   model OAuthConnection {
- *     id                     String    @id @default(cuid())
- *     userId                 String
- *     providerKey            String
- *     providerType           String    @default("mcp")
- *     resourceUri            String
- *     accessTokenEncrypted   String
- *     refreshTokenEncrypted  String?
- *     expiresAt              DateTime?
- *     scope                  String?
- *     tokenType              String?
- *     createdAt              DateTime  @default(now())
- *     updatedAt              DateTime  @updatedAt
- *     @@unique([userId, providerKey])
- *   }
- *
- *   model OAuthPendingState {
- *     id                    String   @id @default(cuid())
- *     userId                String
- *     providerKey           String
- *     codeVerifierEncrypted String
- *     state                 String   @unique
- *     redirectUri           String
- *     resourceUri           String
- *     createdAt             DateTime @default(now())
- *     expiresAt             DateTime
- *   }
- *
- * Tokens should be encrypted at rest (e.g. AES-GCM with a server-side key).
- * ----------------------------------------------------------------------------
+ * See src/lib/mcp/encrypt.ts for the encryption implementation.
  */
 
-import { generateId } from "@/lib/id";
+import { prisma } from "@/lib/db";
+import { encrypt, decrypt } from "./encrypt";
 
 // ---------------------------------------------------------------------------
-// Schema types
+// Schema types (provider-agnostic view of a stored connection)
 // ---------------------------------------------------------------------------
 
 export type OAuthConnection = {
@@ -55,9 +21,9 @@ export type OAuthConnection = {
   providerKey: string;
   providerType: "mcp";
   resourceUri: string;
-  /** Plain-text access token.  Encrypt before persisting to a real DB. */
+  /** Plain-text access token (decrypted on retrieval). */
   accessToken: string;
-  /** Plain-text refresh token.  Encrypt before persisting to a real DB. */
+  /** Plain-text refresh token (decrypted on retrieval). */
   refreshToken?: string;
   expiresAt?: Date;
   scope?: string;
@@ -70,7 +36,7 @@ export type OAuthPendingState = {
   id: string;
   userId: string;
   providerKey: string;
-  /** Plain-text PKCE verifier.  Encrypt before persisting to a real DB. */
+  /** Plain-text PKCE verifier (decrypted on retrieval). */
   codeVerifier: string;
   state: string;
   redirectUri: string;
@@ -80,54 +46,70 @@ export type OAuthPendingState = {
 };
 
 // ---------------------------------------------------------------------------
-// In-memory store (swap out for DB calls in production)
-// ---------------------------------------------------------------------------
-
-// Key: `${userId}:${providerKey}`
-const connections = new Map<string, OAuthConnection>();
-
-// Key: state parameter value
-const pendingStates = new Map<string, OAuthPendingState>();
-
-// ---------------------------------------------------------------------------
 // Connection CRUD
 // ---------------------------------------------------------------------------
 
 /** Upsert a completed OAuth connection for a user + provider pair. */
-export function upsertConnection(
+export async function upsertConnection(
   params: Omit<OAuthConnection, "id" | "createdAt" | "updatedAt">,
-): OAuthConnection {
-  const mapKey = `${params.userId}:${params.providerKey}`;
-  const existing = connections.get(mapKey);
-  const now = new Date();
+): Promise<OAuthConnection> {
+  const record = await prisma.oAuthConnection.upsert({
+    where: { userId_providerKey: { userId: params.userId, providerKey: params.providerKey } },
+    update: {
+      providerType: params.providerType,
+      resourceUri: params.resourceUri,
+      accessTokenEncrypted: encrypt(params.accessToken),
+      refreshTokenEncrypted: params.refreshToken ? encrypt(params.refreshToken) : null,
+      expiresAt: params.expiresAt ?? null,
+      scope: params.scope ?? null,
+      tokenType: params.tokenType ?? null,
+    },
+    create: {
+      userId: params.userId,
+      providerKey: params.providerKey,
+      providerType: params.providerType,
+      resourceUri: params.resourceUri,
+      accessTokenEncrypted: encrypt(params.accessToken),
+      refreshTokenEncrypted: params.refreshToken ? encrypt(params.refreshToken) : null,
+      expiresAt: params.expiresAt ?? null,
+      scope: params.scope ?? null,
+      tokenType: params.tokenType ?? null,
+    },
+  });
 
-  const record: OAuthConnection = {
-    id: existing?.id ?? generateId(),
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-    ...params,
-  };
-
-  connections.set(mapKey, record);
-  return record;
+  return dbRowToConnection(record);
 }
 
-/** Retrieve a connection for a user + provider pair.  Returns `undefined` if not found. */
-export function getConnection(
+/** Retrieve a connection for a user + provider pair. Returns `undefined` if not found. */
+export async function getConnection(
   userId: string,
   providerKey: string,
-): OAuthConnection | undefined {
-  return connections.get(`${userId}:${providerKey}`);
+): Promise<OAuthConnection | undefined> {
+  const record = await prisma.oAuthConnection.findUnique({
+    where: { userId_providerKey: { userId, providerKey } },
+  });
+  if (!record) return undefined;
+  return dbRowToConnection(record);
 }
 
 /** List all connections for a user. */
-export function listConnections(userId: string): OAuthConnection[] {
-  return [...connections.values()].filter((c) => c.userId === userId);
+export async function listConnections(userId: string): Promise<OAuthConnection[]> {
+  const records = await prisma.oAuthConnection.findMany({
+    where: { userId },
+    orderBy: { createdAt: "asc" },
+  });
+  return records.map(dbRowToConnection);
 }
 
 /** Remove a connection. Returns `true` if a record was deleted. */
-export function deleteConnection(userId: string, providerKey: string): boolean {
-  return connections.delete(`${userId}:${providerKey}`);
+export async function deleteConnection(
+  userId: string,
+  providerKey: string,
+): Promise<boolean> {
+  const deleted = await prisma.oAuthConnection
+    .delete({ where: { userId_providerKey: { userId, providerKey } } })
+    .catch(() => null);
+  return deleted !== null;
 }
 
 // ---------------------------------------------------------------------------
@@ -135,29 +117,98 @@ export function deleteConnection(userId: string, providerKey: string): boolean {
 // ---------------------------------------------------------------------------
 
 /** Persist a pending OAuth state (created at the start of the connect flow). */
-export function createPendingState(
+export async function createPendingState(
   params: Omit<OAuthPendingState, "id" | "createdAt">,
-): OAuthPendingState {
-  const now = new Date();
-  const record: OAuthPendingState = {
-    id: generateId(),
-    createdAt: now,
-    ...params,
-  };
-  pendingStates.set(params.state, record);
-  return record;
+): Promise<OAuthPendingState> {
+  const record = await prisma.oAuthPendingState.create({
+    data: {
+      userId: params.userId,
+      providerKey: params.providerKey,
+      codeVerifierEncrypted: encrypt(params.codeVerifier),
+      state: params.state,
+      redirectUri: params.redirectUri,
+      resourceUri: params.resourceUri,
+      expiresAt: params.expiresAt,
+    },
+  });
+  return dbRowToPendingState(record);
 }
 
 /** Retrieve and atomically remove a pending state by its `state` parameter. */
-export function consumePendingState(
+export async function consumePendingState(
   state: string,
-): OAuthPendingState | undefined {
-  const record = pendingStates.get(state);
+): Promise<OAuthPendingState | undefined> {
+  const record = await prisma.oAuthPendingState
+    .delete({ where: { state } })
+    .catch(() => null);
+
   if (!record) return undefined;
-  pendingStates.delete(state);
 
   // Reject states that have reached or passed their expiry time
   if (record.expiresAt <= new Date()) return undefined;
 
-  return record;
+  return dbRowToPendingState(record);
 }
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
+
+type DbConnection = {
+  id: string;
+  userId: string;
+  providerKey: string;
+  providerType: string;
+  resourceUri: string;
+  accessTokenEncrypted: string;
+  refreshTokenEncrypted: string | null;
+  expiresAt: Date | null;
+  scope: string | null;
+  tokenType: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function dbRowToConnection(row: DbConnection): OAuthConnection {
+  return {
+    id: row.id,
+    userId: row.userId,
+    providerKey: row.providerKey,
+    providerType: "mcp",
+    resourceUri: row.resourceUri,
+    accessToken: decrypt(row.accessTokenEncrypted),
+    refreshToken: row.refreshTokenEncrypted ? decrypt(row.refreshTokenEncrypted) : undefined,
+    expiresAt: row.expiresAt ?? undefined,
+    scope: row.scope ?? undefined,
+    tokenType: row.tokenType ?? undefined,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+type DbPendingState = {
+  id: string;
+  userId: string;
+  providerKey: string;
+  codeVerifierEncrypted: string;
+  state: string;
+  redirectUri: string;
+  resourceUri: string;
+  createdAt: Date;
+  expiresAt: Date;
+};
+
+function dbRowToPendingState(row: DbPendingState): OAuthPendingState {
+  return {
+    id: row.id,
+    userId: row.userId,
+    providerKey: row.providerKey,
+    codeVerifier: decrypt(row.codeVerifierEncrypted),
+    state: row.state,
+    redirectUri: row.redirectUri,
+    resourceUri: row.resourceUri,
+    createdAt: row.createdAt,
+    expiresAt: row.expiresAt,
+  };
+}
+

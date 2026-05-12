@@ -61,7 +61,7 @@ export async function invokeMcpTool(params: {
   toolName: string;
   toolArgs?: Record<string, unknown>;
 }): Promise<unknown> {
-  const connection = getConnection(params.userId, params.providerKey);
+  const connection = await getConnection(params.userId, params.providerKey);
   if (!connection) {
     throw new Error(
       `No OAuth connection found for provider "${params.providerKey}". ` +

@@ -27,7 +27,7 @@ export const MCP_PROVIDERS: Record<string, McpProviderConfig> = {
   "notion-mcp": {
     key: "notion-mcp",
     label: "Notion",
-    mcpServerUrl: "https://mcp.notion.so",
+    mcpServerUrl: "https://mcp.notion.com/mcp",
     scopes: ["read_content", "update_content"],
   },
   "github-mcp": {

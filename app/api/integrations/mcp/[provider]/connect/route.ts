@@ -69,7 +69,7 @@ export async function GET(
   const redirectUri = `${origin}/api/integrations/mcp/${providerKey}/callback`;
 
   const now = new Date();
-  createPendingState({
+  await createPendingState({
     userId: user.id,
     providerKey,
     codeVerifier,

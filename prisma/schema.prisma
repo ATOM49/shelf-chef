@@ -16,16 +16,19 @@ enum HouseholdRole {
 }
 
 model User {
-  id                     String               @id @default(cuid())
+  id                     String                  @id @default(cuid())
   name                   String?
-  email                  String               @unique
+  email                  String                  @unique
   emailVerified          DateTime?
   image                  String?
   accounts               Account[]
   sessions               Session[]
   appState               UserAppState?
   memberships            HouseholdMembership[]
-  createdHouseholdInvites HouseholdInvite[]   @relation("HouseholdInviteCreatedBy")
+  createdHouseholdInvites HouseholdInvite[]      @relation("HouseholdInviteCreatedBy")
+  oauthConnections       OAuthConnection[]
+  oauthPendingStates     OAuthPendingState[]
+  notionWorkspaceMapping NotionWorkspaceMapping?
 }
 
 model Account {
@@ -121,4 +124,51 @@ model HouseholdInvite {
 
   @@index([householdId, email])
   @@index([email])
+}
+
+// MCP OAuth integration models
+
+model OAuthConnection {
+  id                    String    @id @default(cuid())
+  userId                String
+  providerKey           String
+  providerType          String    @default("mcp")
+  resourceUri           String
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String?
+  expiresAt             DateTime?
+  scope                 String?
+  tokenType             String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, providerKey])
+  @@index([userId])
+}
+
+model OAuthPendingState {
+  id                    String   @id @default(cuid())
+  userId                String
+  providerKey           String
+  codeVerifierEncrypted String
+  state                 String   @unique
+  redirectUri           String
+  resourceUri           String
+  createdAt             DateTime @default(now())
+  expiresAt             DateTime
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model NotionWorkspaceMapping {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  parentPageId           String
+  weeklyPlanDatabaseId   String?
+  shoppingCartDatabaseId String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
