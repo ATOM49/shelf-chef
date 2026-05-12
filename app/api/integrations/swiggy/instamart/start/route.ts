@@ -68,7 +68,7 @@ export async function POST(request: Request) {
 
     const saved = await createInstamartSession(user.id, workflowState);
 
-    if (previousOpenSession && previousOpenSession.id !== saved.id) {
+    if (previousOpenSession) {
       await updateInstamartSession(previousOpenSession.id, {
         ...previousOpenSession.state,
         status: "cancelled",

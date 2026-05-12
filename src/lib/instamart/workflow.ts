@@ -261,9 +261,10 @@ async function resolveAddressNode(state: StartWorkflowState, callTool: Instamart
     throw new Error("Requested address is not available in Swiggy addresses.");
   }
 
-  if (shouldClearCartOnAddressChange(state.previousAddressIdWithCart, selectedAddressId)) {
+  const previousAddressId = state.previousAddressIdWithCart;
+  if (shouldClearCartOnAddressChange(previousAddressId, selectedAddressId)) {
     await callTool("update_cart", {
-      selectedAddressId: state.previousAddressIdWithCart,
+      selectedAddressId: previousAddressId,
       items: [],
     });
   }
@@ -533,7 +534,7 @@ async function performCheckoutWithGuard(
         checkout: {
           requestedAt,
           completedAt: nowIso(),
-          orderId: knownOrderIds[0] ?? null,
+          orderId: knownOrderIds[0],
           usedPaymentMethod: state.requestedPaymentMethod,
           ambiguousFailureRecovered: true,
           lastError: null,
@@ -589,7 +590,7 @@ async function trackOrderNode(
     },
     summary: [
       ...state.summary,
-      "Tracked order once after checkout. Next poll should not occur before 10 seconds.",
+      `Tracked order once after checkout. Next poll should not occur before ${TRACKING_POLL_INTERVAL_MS / 1000} seconds.`,
     ],
   };
 }
