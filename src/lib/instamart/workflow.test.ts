@@ -157,4 +157,3 @@ test("resumeInstamartWorkflow validates available payment methods on checkout re
     /not available for checkout/i,
   );
 });
-

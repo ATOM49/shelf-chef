@@ -92,4 +92,3 @@ export async function getLatestOpenInstamartSessionForUser(
   });
   return row ? toSessionRecord(row) : null;
 }
-
