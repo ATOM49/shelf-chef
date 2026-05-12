@@ -590,7 +590,7 @@ async function trackOrderNode(
     },
     summary: [
       ...state.summary,
-      `Tracked order once after checkout. Next poll should not occur before ${TRACKING_POLL_INTERVAL_MS / 1000} seconds.`,
+      `Tracked order once after checkout. Next poll is available after ${TRACKING_POLL_INTERVAL_MS / 1000} seconds.`,
     ],
   };
 }

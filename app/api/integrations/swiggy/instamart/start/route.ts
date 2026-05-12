@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   const parsed = startBodySchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invalid request body.", detail: parsed.error.flatten() },
+      { error: "Invalid request body", detail: parsed.error.flatten() },
       { status: 400 },
     );
   }

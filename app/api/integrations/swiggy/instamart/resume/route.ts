@@ -18,20 +18,20 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   const parsed = resumeBodySchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invalid request body.", detail: parsed.error.flatten() },
+      { error: "Invalid request body", detail: parsed.error.flatten() },
       { status: 400 },
     );
   }
 
   const session = await getInstamartSessionForUser(user.id, parsed.data.sessionId);
   if (!session) {
-    return NextResponse.json({ error: "Instamart workflow session not found." }, { status: 404 });
+    return NextResponse.json({ error: "Instamart workflow session not found" }, { status: 404 });
   }
 
   const toolCaller = createInstamartToolCaller(user.id);
