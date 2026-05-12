@@ -271,6 +271,7 @@ async function resolveAddressNode(state: StartWorkflowState, callTool: Instamart
 
   const previousAddressId = state.previousAddressIdWithCart;
   if (shouldClearCartOnAddressChange(previousAddressId, selectedAddressId)) {
+    // Instamart carts are address-scoped, so clear the old-address cart before switching.
     await callTool("update_cart", {
       selectedAddressId: previousAddressId,
       items: [],
@@ -301,7 +302,11 @@ async function discoverItemsNode(state: StartWorkflowState, callTool: InstamartT
     selectedAddressId: state.selectedAddressId,
   };
   if (toolName === "search_products") {
-    toolArgs.query = state.discoveryQuery?.trim();
+    const query = state.discoveryQuery?.trim();
+    if (!query) {
+      throw new Error("Missing search query for search_products");
+    }
+    toolArgs.query = query;
   }
 
   const response = await callTool(toolName, toolArgs);
