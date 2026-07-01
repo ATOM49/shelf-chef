@@ -25,6 +25,7 @@ import {
   DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -178,75 +179,108 @@ export function StockingDialog({
   };
 
   const pendingState = getStockPendingState(pendingAction);
+  const trimmedInput = freeText.trim();
+  const isTextPending = isPending && pendingAction === "text";
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={handleDialogOpenChange}
-    >
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         aria-busy={isPending}
         showCloseButton={false}
-        className="w-full overflow-y-auto p-0"
+        className="w-full p-0"
       >
-        <div className="relative flex min-h-0 flex-1 flex-col p-6">
-          <div className="absolute right-2 top-2 z-20">
-            <DialogClose
-              render={
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="Close stocking dialog"
-                  disabled={isPending}
-                >
-                  <XIcon className="size-4" aria-hidden />
-                </Button>
-              }
+        <div className="absolute right-2 top-2 z-20">
+          <DialogClose
+            render={
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Close stocking dialog"
+                disabled={isPending}
+              >
+                <XIcon className="size-4" aria-hidden />
+              </Button>
+            }
+          />
+        </div>
+
+        <div
+          className={
+            isPending
+              ? "flex-1 overflow-y-auto p-6 pointer-events-none select-none opacity-30"
+              : "flex-1 overflow-y-auto p-6"
+          }
+        >
+          {step === "input" ? (
+            <InputStep
+              freeText={freeText}
+              onFreeTextChange={setFreeText}
+              isPending={isPending}
+              pendingAction={pendingAction}
+              apiError={apiError}
+              onSelectPreset={handlePresetSelect}
+            />
+          ) : (
+            <PreviewStep
+              items={stockedItems}
+              onUpdateItem={updateStockedItem}
+            />
+          )}
+        </div>
+
+        <DialogFooter
+          className={isPending ? "pointer-events-none select-none opacity-30" : undefined}
+        >
+          {step === "input" ? (
+            <>
+              <Button type="button" variant="outline" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={!trimmedInput || isPending}
+                aria-busy={isTextPending}
+                onClick={handleAnalyze}
+              >
+                {isTextPending ? (
+                  <>
+                    <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                    <span>Analyzing list...</span>
+                  </>
+                ) : (
+                  "Review stock suggestions"
+                )}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button type="button" variant="outline" onClick={() => setStep("input")}>
+                ← Back
+              </Button>
+              <Button
+                type="button"
+                disabled={stockedItems.length === 0}
+                onClick={handleCommit}
+              >
+                Add {stockedItems.length} item{stockedItems.length !== 1 ? "s" : ""} to inventory
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+
+        {isPending ? (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-popover/92 p-4 supports-backdrop-filter:backdrop-blur-sm">
+            <LottieLoadingPanel
+              src={LOTTIE_ANIMATION_SOURCES.stock}
+              title={pendingState.title}
+              description={pendingState.description}
+              statusLabel={pendingState.statusLabel}
+              className="min-h-[28rem]"
+              panelClassName="max-w-xl"
             />
           </div>
-
-          <div
-            className={
-              isPending
-                ? "pointer-events-none select-none opacity-30"
-                : undefined
-            }
-          >
-            {step === "input" ? (
-              <InputStep
-                freeText={freeText}
-                onFreeTextChange={setFreeText}
-                isPending={isPending}
-                pendingAction={pendingAction}
-                apiError={apiError}
-                onAnalyze={handleAnalyze}
-                onSelectPreset={handlePresetSelect}
-                onClose={handleClose}
-              />
-            ) : (
-              <PreviewStep
-                items={stockedItems}
-                onUpdateItem={updateStockedItem}
-                onBack={() => setStep("input")}
-                onCommit={handleCommit}
-              />
-            )}
-          </div>
-
-          {isPending ? (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-popover/92 p-4 supports-backdrop-filter:backdrop-blur-sm">
-              <LottieLoadingPanel
-                src={LOTTIE_ANIMATION_SOURCES.stock}
-                title={pendingState.title}
-                description={pendingState.description}
-                statusLabel={pendingState.statusLabel}
-                className="min-h-[28rem]"
-                panelClassName="max-w-xl"
-              />
-            </div>
-          ) : null}
-        </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   );
@@ -288,9 +322,7 @@ type InputStepProps = {
   isPending: boolean;
   pendingAction: PendingAction | null;
   apiError: string | null;
-  onAnalyze: () => void;
   onSelectPreset: (presetId: PresetId) => void;
-  onClose: () => void;
 };
 
 function InputStep({
@@ -299,13 +331,8 @@ function InputStep({
   isPending,
   pendingAction,
   apiError,
-  onAnalyze,
   onSelectPreset,
-  onClose,
 }: InputStepProps) {
-  const trimmedInput = freeText.trim();
-  const isTextPending = isPending && pendingAction === "text";
-
   return (
     <>
       <DialogHeader className="px-0 pb-2 pt-0">
@@ -320,13 +347,36 @@ function InputStep({
           <span className="font-medium text-foreground">Tip:</span> Common
           kitchen staples — water, salt, oil, pepper, and sugar — are always
           assumed to be in stock. Visit the{" "}
-          <span className="font-medium text-foreground">🧂 Staples</span> tab
-          to see the full list or add your own (e.g. cumin, turmeric).
+          <span className="font-medium text-foreground">🧂 Staples</span> tab to
+          see the full list or add your own (e.g. cumin, turmeric).
         </p>
 
+        <div className="grid gap-1.5">
+          <Label htmlFor="stock-freetext">
+            Describe what you want to stock
+          </Label>
+          <Textarea
+            id="stock-freetext"
+            rows={6}
+            disabled={isPending}
+            placeholder={
+              "I bought eggs, milk, yogurt, spinach, rice, olive oil, and a few spices for the pantry."
+            }
+            value={freeText}
+            onChange={(e) => onFreeTextChange(e.target.value)}
+            className="text-sm"
+          />
+          <p className="text-xs text-muted-foreground">
+            Natural language, loose lists, and mixed formatting are all fine. AI
+            will extract the items and suggest storage details.
+          </p>
+        </div>
+        
         <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
           <div>
-            <p className="text-sm font-medium">Start from a kitchen preset</p>
+            <p className="text-sm font-semibold font-serif">
+              Start from a kitchen preset
+            </p>
             <p className="text-xs text-muted-foreground">
               AI-generated presets designed for urban Indian kitchens. Select
               one to generate fridge and pantry items, then review the result.
@@ -356,17 +406,17 @@ function InputStep({
                   <span className="mt-1 block text-xs text-muted-foreground">
                     {meta.description}
                   </span>
-                  <span className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-foreground">
+                  <span>
                     {isActive && isPending ? (
-                      <>
+                      <div className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-foreground">
                         <LoaderCircle
                           className="size-3 animate-spin"
                           aria-hidden
                         />
                         <span>Generating review...</span>
-                      </>
+                      </div>
                     ) : (
-                      <span>Generate from preset</span>
+                      <></>
                     )}
                   </span>
                 </button>
@@ -375,62 +425,11 @@ function InputStep({
           </div>
         </div>
 
-        <div className="grid gap-1.5">
-          <Label htmlFor="stock-freetext">
-            Describe what you want to stock
-          </Label>
-          <Textarea
-            id="stock-freetext"
-            rows={6}
-            disabled={isPending}
-            placeholder={
-              "I bought eggs, milk, yogurt, spinach, rice, olive oil, and a few spices for the pantry."
-            }
-            value={freeText}
-            onChange={(e) => onFreeTextChange(e.target.value)}
-            className="text-sm"
-          />
-          <p className="text-xs text-muted-foreground">
-            Natural language, loose lists, and mixed formatting are all fine. AI
-            will extract the items and suggest storage details.
-          </p>
-        </div>
-
         {apiError ? (
           <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {apiError}
           </p>
         ) : null}
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {isTextPending
-              ? "Parsing your note into inventory rows…"
-              : trimmedInput
-                ? "AI will read this note and lay out inventory rows for you to review."
-                : "Paste a note or use a preset to get started."}
-          </p>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={!trimmedInput || isPending}
-              aria-busy={isTextPending}
-              onClick={onAnalyze}
-            >
-              {isTextPending ? (
-                <>
-                  <LoaderCircle className="size-4 animate-spin" aria-hidden />
-                  <span>Analyzing list...</span>
-                </>
-              ) : (
-                "Review stock suggestions"
-              )}
-            </Button>
-          </div>
-        </div>
       </div>
     </>
   );
@@ -445,15 +444,11 @@ type PreviewStepProps = {
     field: K,
     value: StockedItem[K],
   ) => void;
-  onBack: () => void;
-  onCommit: () => void;
 };
 
 function PreviewStep({
   items,
   onUpdateItem,
-  onBack,
-  onCommit,
 }: PreviewStepProps) {
   const flaggedCount = items.filter((i) => i.flagged).length;
 
@@ -506,19 +501,6 @@ function PreviewStep({
               ))}
             </tbody>
           </table>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Button type="button" variant="outline" onClick={onBack}>
-            ← Back
-          </Button>
-          <Button
-            type="button"
-            disabled={items.length === 0}
-            onClick={onCommit}
-          >
-            Add {items.length} item{items.length !== 1 ? "s" : ""} to inventory
-          </Button>
         </div>
       </div>
     </>

@@ -163,7 +163,7 @@ export function HouseholdSettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-6 overflow-y-auto px-4 pb-4">
+        <div className="flex-1 grid gap-6 overflow-y-auto px-4 pb-4">
           {household ? (
             <>
               <section className="rounded-xl border p-4">
