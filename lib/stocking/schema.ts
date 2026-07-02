@@ -8,6 +8,14 @@ const MAX_REVIEW_ITEMS = 80;
 const DEFAULT_QUANTITY = 1;
 const DEFAULT_UNIT = "count";
 const DEFAULT_CATEGORY = "other";
+const MAX_STOCK_IMAGE_BASE64_LENGTH = 12_000_000;
+const ACCEPTED_STOCK_IMAGE_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+] as const;
 
 const UNIT_ALIASES: Record<string, (typeof INVENTORY_UNITS)[number]> = {
   cup: "cup",
@@ -95,6 +103,12 @@ export const stockApiResponseSchema = z.object({
 
 export const stockTextRequestSchema = z.object({
   input: z.string().trim().min(1).max(4000),
+  stapleNames: z.array(z.string().trim()).optional(),
+}).strict();
+
+export const stockImageRequestSchema = z.object({
+  imageBase64: z.string().trim().min(1).max(MAX_STOCK_IMAGE_BASE64_LENGTH),
+  imageMimeType: z.enum(ACCEPTED_STOCK_IMAGE_MIME_TYPES),
   stapleNames: z.array(z.string().trim()).optional(),
 }).strict();
 

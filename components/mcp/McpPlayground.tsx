@@ -193,7 +193,7 @@ export function McpPlayground({
               Test provider connections outside the planner UI
             </h1>
             <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
-              This page is intentionally separate from the main ShelfChef app.
+              This page is intentionally separate from the main Stockpot app.
               Connect an MCP provider, inspect its current session state, and run
               direct tool calls against the existing integration routes.
             </p>

@@ -56,7 +56,10 @@ import { StorageEditorPanel } from "@/components/storage/StorageEditorPanel";
 import { StaplesPanel } from "@/components/storage/StaplesPanel";
 import { GroceryCartPanel } from "@/components/planner/GroceryCartPanel";
 import { PlannerSidebar } from "@/components/planner/PlannerSidebar";
-import { StockingDialog } from "@/components/stocking/StockingDialog";
+import {
+  StockingDialog,
+  type SharedStockImage,
+} from "@/components/stocking/StockingDialog";
 import {
   appReducer,
   arePlannerConfigsEqual,
@@ -148,6 +151,32 @@ function formatCartItemQuantity(quantity: number) {
 
 const PULL_THRESHOLD = 72;
 const PULL_DAMPING_FACTOR = 0.4;
+const SHARED_STOCK_IMAGE_STORAGE_KEY = "stockpot:shared-stock-image";
+const LEGACY_SHARED_STOCK_IMAGE_STORAGE_KEY = "shelfchef:shared-stock-image";
+
+function parseSharedStockImagePayload(value: string): SharedStockImage | null {
+  try {
+    const parsed = JSON.parse(value) as {
+      dataUrl?: unknown;
+      fileName?: unknown;
+    };
+
+    if (
+      typeof parsed.dataUrl !== "string" ||
+      !parsed.dataUrl.startsWith("data:image/")
+    ) {
+      return null;
+    }
+
+    return {
+      dataUrl: parsed.dataUrl,
+      fileName:
+        typeof parsed.fileName === "string" ? parsed.fileName : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function FoodPlannerApp() {
   const [activeWorkspace, setActiveWorkspace] = useState<Workspace>(() =>
@@ -176,6 +205,8 @@ export function FoodPlannerApp() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [storageTab, setStorageTab] = useState<StorageTab>("fridge");
   const [stockingOpen, setStockingOpen] = useState(false);
+  const [sharedStockImage, setSharedStockImage] =
+    useState<SharedStockImage | null>(null);
   const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
   const [selectedCell, setSelectedCell] = useState<
     { shelfId: string; cellId: string } | undefined
@@ -303,9 +334,11 @@ export function FoodPlannerApp() {
     if (sessionStatus === "unauthenticated") {
       isDbStateLoadedRef.current = true;
       loadedWorkspaceKeyRef.current = serializeWorkspace(DEFAULT_WORKSPACE);
-      setHouseholds([]);
-      setHouseholdsReady(true);
-      setIsInitializing(false);
+      queueMicrotask(() => {
+        setHouseholds([]);
+        setHouseholdsReady(true);
+        setIsInitializing(false);
+      });
       return;
     }
 
@@ -350,7 +383,9 @@ export function FoodPlannerApp() {
       serializeWorkspace(normalizedWorkspace) !==
       serializeWorkspace(activeWorkspace)
     ) {
-      setActiveWorkspace(normalizedWorkspace);
+      queueMicrotask(() => {
+        setActiveWorkspace(normalizedWorkspace);
+      });
       return;
     }
 
@@ -412,6 +447,48 @@ export function FoodPlannerApp() {
     householdsReady,
     sessionStatus,
   ]);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const sharedImagePayload =
+      sessionStorage.getItem(SHARED_STOCK_IMAGE_STORAGE_KEY) ??
+      sessionStorage.getItem(LEGACY_SHARED_STOCK_IMAGE_STORAGE_KEY);
+    const sharedImage = sharedImagePayload
+      ? parseSharedStockImagePayload(sharedImagePayload)
+      : null;
+    const shareError = searchParams.get("stockImageError");
+
+    if (sharedImage || shareError) {
+      queueMicrotask(() => {
+        if (sharedImage) {
+          sessionStorage.removeItem(SHARED_STOCK_IMAGE_STORAGE_KEY);
+          sessionStorage.removeItem(LEGACY_SHARED_STOCK_IMAGE_STORAGE_KEY);
+          setSharedStockImage(sharedImage);
+          setStorageTab("fridge");
+          setMobileTab("storage");
+          setStockingOpen(true);
+        }
+
+        if (shareError) {
+          setWorkspaceError(shareError);
+        }
+      });
+    }
+
+    if (
+      searchParams.has("stockImageShared") ||
+      searchParams.has("stockImageError")
+    ) {
+      searchParams.delete("stockImageShared");
+      searchParams.delete("stockImageError");
+      const nextSearch = searchParams.toString();
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`,
+      );
+    }
+  }, []);
 
   // Save state to localStorage on every change; also debounce-save to DB when authenticated.
   useLayoutEffect(() => {
@@ -1094,7 +1171,7 @@ export function FoodPlannerApp() {
       <div className="flex h-svh items-center justify-center bg-muted/30">
         <LottieLoadingPanel
           src={LOTTIE_ANIMATION_SOURCES.planner}
-          title="Loading your ShelfChef"
+          title="Loading your Stockpot"
           description="Syncing your inventory, recipes, and meal plan."
           statusLabel="Loading"
           className="min-h-[16rem]"
@@ -1153,18 +1230,18 @@ export function FoodPlannerApp() {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xl">🍽️</span>
-              <h1 className="font-serif text-lg font-semibold">ShelfChef</h1>
+              <h1 className="font-serif text-lg font-semibold">Stockpot</h1>
               <Popover>
                 <PopoverTrigger
                   type="button"
-                  aria-label="What ShelfChef helps you do"
+                  aria-label="What Stockpot helps you do"
                   className="inline-flex size-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:outline-none"
                 >
                   <CircleHelp className="size-4" aria-hidden />
                 </PopoverTrigger>
                 <PopoverContent sideOffset={8} className="w-80 p-3">
                   <PopoverHeader>
-                    <PopoverTitle>What ShelfChef helps you do</PopoverTitle>
+                    <PopoverTitle>What Stockpot helps you do</PopoverTitle>
                     <PopoverDescription>
                       Stock your shelves, generate recipes from what you have,
                       and plan a full week of meals — all in one place.
@@ -1562,6 +1639,8 @@ export function FoodPlannerApp() {
           onOpenChange={setStockingOpen}
           onCommit={handleCommitStock}
           customStapleNames={state.customStapleNames}
+          sharedImage={sharedStockImage}
+          onSharedImageConsumed={() => setSharedStockImage(null)}
         />
         <HouseholdSettingsDialog
           open={householdSettingsOpen}

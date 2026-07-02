@@ -28,7 +28,7 @@ export default async function SignOutPage() {
               Sign out
             </Badge>
             <div className="space-y-1">
-              <CardTitle className="text-2xl">Leave ShelfChef?</CardTitle>
+              <CardTitle className="text-2xl">Leave Stockpot?</CardTitle>
               <CardDescription>
                 You can sign back in any time with the same provider.
               </CardDescription>

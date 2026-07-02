@@ -1,8 +1,25 @@
 {
-  "name": "food-planner-app",
+  "name": "stockpot",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "npm@10.8.2",
+  "engines": {
+    "node": ">=20.19.0 <21",
+    "npm": ">=10 <11"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=20.19.0 <21",
+      "onFail": "error"
+    },
+    "packageManager": {
+      "name": "npm",
+      "version": ">=10 <11",
+      "onFail": "error"
+    }
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",

@@ -1,4 +1,7 @@
-import { generateStructuredObject } from "../ai/structured";
+import {
+  generateStructuredObject,
+  generateStructuredObjectFromImage,
+} from "../ai/structured";
 import {
   parseStockApiResponseForReview,
   stockApiResponseSchema,
@@ -8,6 +11,19 @@ export async function generateStockParseResponse(
   prompt: string,
 ) {
   const response = await generateStructuredObject({
+    prompt,
+    schema: stockApiResponseSchema,
+  });
+
+  return parseStockApiResponseForReview(response);
+}
+
+export async function generateStockImageParseResponse(
+  prompt: string,
+  image: { data: string; mimeType: string },
+) {
+  const response = await generateStructuredObjectFromImage({
+    image,
     prompt,
     schema: stockApiResponseSchema,
   });
