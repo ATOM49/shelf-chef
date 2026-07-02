@@ -27,7 +27,7 @@ export const MCP_PROVIDERS: Record<string, McpProviderConfig> = {
   "notion-mcp": {
     key: "notion-mcp",
     label: "Notion",
-    mcpServerUrl: "https://mcp.notion.so",
+    mcpServerUrl: "https://mcp.notion.com/mcp",
     scopes: ["read_content", "update_content"],
   },
   "github-mcp": {
@@ -35,6 +35,13 @@ export const MCP_PROVIDERS: Record<string, McpProviderConfig> = {
     label: "GitHub",
     mcpServerUrl: "https://api.githubcopilot.com/mcp",
     scopes: ["read:user", "repo"],
+  },
+  "swiggy-instamart-mcp": {
+    key: "swiggy-instamart-mcp",
+    label: "Swiggy Instamart",
+    // Reference: https://mcp.swiggy.com/builders/docs/start/coding-agents/
+    mcpServerUrl: "https://mcp.swiggy.com/im",
+    scopes: ["mcp:tools"],
   },
 };
 

@@ -61,7 +61,7 @@ export async function invokeMcpTool(params: {
   toolName: string;
   toolArgs?: Record<string, unknown>;
 }): Promise<unknown> {
-  const connection = getConnection(params.userId, params.providerKey);
+  const connection = await getConnection(params.userId, params.providerKey);
   if (!connection) {
     throw new Error(
       `No OAuth connection found for provider "${params.providerKey}". ` +
@@ -115,4 +115,12 @@ export async function invokeMcpTool(params: {
   }
 
   return rpcResponse.result;
+}
+
+/** Maps an error message thrown by {@link invokeMcpTool} to an HTTP status code for API routes. */
+export function mcpErrorStatus(message: string): number {
+  if (message.includes("No OAuth connection") || message.includes("has expired")) {
+    return 401;
+  }
+  return 502;
 }

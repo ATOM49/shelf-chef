@@ -67,7 +67,20 @@ API routes under `app/api/**` are thin: parse/auth, call into `lib/`, return JSO
 
 ### MCP integrations
 
-`src/lib/mcp/` implements OAuth (PKCE) + tool invocation against external MCP servers, registered in `src/lib/mcp/providers.ts` (`MCP_PROVIDERS`). Adding a provider means adding an entry there plus `MCP_<KEY>_CLIENT_ID`/`_CLIENT_SECRET` env vars — routes under `app/api/integrations/mcp/[provider]/**` and the `/playground/mcp` UI are generic over the registry. Tokens are persisted via `token-store.ts`.
+`src/lib/mcp/` implements OAuth (PKCE) + tool invocation against external MCP servers, registered in `src/lib/mcp/providers.ts` (`MCP_PROVIDERS`). Adding a provider means adding an entry there plus `MCP_<KEY>_CLIENT_ID`/`_CLIENT_SECRET` env vars — routes under `app/api/integrations/mcp/[provider]/**` and the `/playground/mcp` UI are generic over the registry. Tokens are persisted via `token-store.ts`. `GET .../[provider]/status` returns `{ connected }` for client components that need to gate a UI action without server-rendering `listConnections`. `GET .../[provider]/connect` accepts an optional `?returnTo=/some/relative/path` (validated same-origin) so a provider can be connected from inside the app (e.g. the grocery cart) and land back there — the redirect target is threaded through `OAuthPendingState.returnTo`, not through the OAuth `redirect_uri` itself, since providers like Swiggy exact-match-allowlist that URI.
+
+#### Swiggy Instamart MCP (order the grocery cart)
+
+`swiggy-instamart-mcp` (`src/lib/mcp/providers.ts`) connects to `https://mcp.swiggy.com/im`; wrappers live in `src/lib/instamart-mcp/client.ts`, routes under `app/api/integrations/instamart/**`, UI in `components/planner/InstamartCartActions.tsx` + `InstamartOrderDialog.tsx` (rendered from `GroceryCartPanel.tsx`). Full docs: <https://mcp.swiggy.com/builders/docs/start/coding-agents/> (agent-readable index at `https://mcp.swiggy.com/builders/llms.txt`, tool reference under `/docs/reference/instamart/`).
+
+Rules carried over from Swiggy's own docs — keep following these when touching this integration, not just when it was written:
+
+- **Never invent tool names, parameters, or response fields.** Swiggy's docs only publish the outer `{ success, data, message }` / `{ success, error }` envelope for each tool — the `data` payload shape is intentionally undocumented. `src/lib/instamart-mcp/json-utils.ts` reads it defensively (search by key name) and the UI always falls back to showing raw JSON rather than assuming a field exists. If you need a new tool or field, fetch the relevant `https://mcp.swiggy.com/builders/docs/reference/instamart/<tool>.md` page and verify before coding against it — don't guess from this file or from training data.
+- **Always `search_products` before adding anything to cart**, and let the user pick the exact variant — never auto-select one. `update_cart` needs a `spinId`, which only comes from a search result.
+- **Never call `checkout` without explicit user confirmation** of the delivery address, items, and total (shown via `get_cart`). `InstamartOrderDialog` enforces this with a required confirmation checkbox before enabling the "Place order" button, and the API route additionally requires `confirm: true` in the body as a server-side backstop.
+- Installing/using this integration hits **production Swiggy** and can spend real money — there is no sandbox.
+- Run `clear_cart` before changing the delivery address, to avoid stock/serviceability mismatches.
+- Access tokens last 5 days and Swiggy does not issue refresh tokens in v1 — a 401 means the user must reconnect via the "Connect Swiggy Instamart" button, not retry.
 
 ### Prisma 7 specifics
 
