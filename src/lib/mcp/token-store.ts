@@ -41,6 +41,8 @@ export type OAuthPendingState = {
   state: string;
   redirectUri: string;
   resourceUri: string;
+  /** Relative in-app path to return to after the callback completes. */
+  returnTo?: string;
   createdAt: Date;
   expiresAt: Date;
 };
@@ -128,6 +130,7 @@ export async function createPendingState(
       state: params.state,
       redirectUri: params.redirectUri,
       resourceUri: params.resourceUri,
+      returnTo: params.returnTo ?? null,
       expiresAt: params.expiresAt,
     },
   });
@@ -194,6 +197,7 @@ type DbPendingState = {
   state: string;
   redirectUri: string;
   resourceUri: string;
+  returnTo: string | null;
   createdAt: Date;
   expiresAt: Date;
 };
@@ -207,6 +211,7 @@ function dbRowToPendingState(row: DbPendingState): OAuthPendingState {
     state: row.state,
     redirectUri: row.redirectUri,
     resourceUri: row.resourceUri,
+    returnTo: row.returnTo ?? undefined,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
   };

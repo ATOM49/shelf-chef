@@ -18,11 +18,14 @@ import { discoverAuthorizationServerMetadata } from "@/src/lib/mcp/discovery";
 import { exchangeCodeForToken } from "@/src/lib/mcp/oauth";
 import { consumePendingState, upsertConnection } from "@/src/lib/mcp/token-store";
 
-function buildPlaygroundRedirect(
+const DEFAULT_RETURN_TO = "/playground/mcp";
+
+function buildRedirect(
   request: NextRequest,
+  returnTo: string | undefined,
   query: Record<string, string>,
 ) {
-  const redirectUrl = new URL("/playground/mcp", request.nextUrl.origin);
+  const redirectUrl = new URL(returnTo ?? DEFAULT_RETURN_TO, request.nextUrl.origin);
 
   for (const [key, value] of Object.entries(query)) {
     redirectUrl.searchParams.set(key, value);
@@ -31,12 +34,13 @@ function buildPlaygroundRedirect(
   return NextResponse.redirect(redirectUrl);
 }
 
-function buildPlaygroundErrorRedirect(
+function buildErrorRedirect(
   request: NextRequest,
   providerKey: string,
   error: string,
+  returnTo?: string,
 ) {
-  return buildPlaygroundRedirect(request, {
+  return buildRedirect(request, returnTo, {
     error,
     provider: providerKey,
   });
@@ -62,36 +66,43 @@ export async function GET(
   const state = searchParams.get("state");
   const errorParam = searchParams.get("error");
 
+  // Consume the pending state as soon as we have one, so every error path
+  // below can still redirect back to wherever the flow was started from
+  // (e.g. the grocery cart) instead of always falling back to the playground.
+  const pending = state ? await consumePendingState(state) : undefined;
+  const returnTo = pending?.returnTo;
+
   // Authorization server reported an error
   if (errorParam) {
     const description = searchParams.get("error_description") ?? errorParam;
-    return buildPlaygroundErrorRedirect(request, providerKey, description);
+    return buildErrorRedirect(request, providerKey, description, returnTo);
   }
 
   if (!code || !state) {
-    return buildPlaygroundErrorRedirect(
+    return buildErrorRedirect(
       request,
       providerKey,
       "Missing code or state parameter.",
+      returnTo,
     );
   }
 
-  // Validate state and retrieve the pending PKCE verifier
-  const pending = await consumePendingState(state);
   if (!pending) {
-    return buildPlaygroundErrorRedirect(
+    return buildErrorRedirect(
       request,
       providerKey,
       "Invalid or expired state parameter.",
+      returnTo,
     );
   }
 
   // Ensure the callback is for the same user who initiated the flow
   if (pending.userId !== user.id) {
-    return buildPlaygroundErrorRedirect(
+    return buildErrorRedirect(
       request,
       providerKey,
       "State mismatch: user identity changed during OAuth flow.",
+      returnTo,
     );
   }
 
@@ -101,10 +112,11 @@ export async function GET(
     clientId = getClientId(providerKey);
     clientSecret = getClientSecret(providerKey);
   } catch {
-    return buildPlaygroundErrorRedirect(
+    return buildErrorRedirect(
       request,
       providerKey,
       `Provider "${providerKey}" is not configured (missing client credentials).`,
+      returnTo,
     );
   }
 
@@ -122,12 +134,13 @@ export async function GET(
     const asMeta = await discoverAuthorizationServerMetadata(issuer);
     tokenEndpoint = asMeta.token_endpoint;
   } catch (err) {
-    return buildPlaygroundErrorRedirect(
+    return buildErrorRedirect(
       request,
       providerKey,
       err instanceof Error
         ? `Failed to discover token endpoint: ${err.message}`
         : "Failed to discover token endpoint.",
+      returnTo,
     );
   }
 
@@ -143,12 +156,13 @@ export async function GET(
       clientSecret,
     });
   } catch (err) {
-    return buildPlaygroundErrorRedirect(
+    return buildErrorRedirect(
       request,
       providerKey,
       err instanceof Error
         ? `Token exchange failed: ${err.message}`
         : "Token exchange failed.",
+      returnTo,
     );
   }
 
@@ -169,7 +183,7 @@ export async function GET(
     tokenType: tokenResponse.token_type,
   });
 
-  return buildPlaygroundRedirect(request, {
+  return buildRedirect(request, returnTo, {
     connected: providerKey,
   });
 }

@@ -36,6 +36,13 @@ export const MCP_PROVIDERS: Record<string, McpProviderConfig> = {
     mcpServerUrl: "https://api.githubcopilot.com/mcp",
     scopes: ["read:user", "repo"],
   },
+  "swiggy-instamart-mcp": {
+    key: "swiggy-instamart-mcp",
+    label: "Swiggy Instamart",
+    // Reference: https://mcp.swiggy.com/builders/docs/start/coding-agents/
+    mcpServerUrl: "https://mcp.swiggy.com/im",
+    scopes: ["mcp:tools"],
+  },
 };
 
 /** Look up a provider by its key. Returns `undefined` for unknown keys. */

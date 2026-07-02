@@ -116,3 +116,11 @@ export async function invokeMcpTool(params: {
 
   return rpcResponse.result;
 }
+
+/** Maps an error message thrown by {@link invokeMcpTool} to an HTTP status code for API routes. */
+export function mcpErrorStatus(message: string): number {
+  if (message.includes("No OAuth connection") || message.includes("has expired")) {
+    return 401;
+  }
+  return 502;
+}

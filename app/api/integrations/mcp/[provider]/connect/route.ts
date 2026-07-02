@@ -22,6 +22,18 @@ import { createPendingState } from "@/src/lib/mcp/token-store";
 
 const PENDING_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+/**
+ * Only allow same-origin, relative paths as the post-connect redirect target,
+ * to avoid this becoming an open redirect.
+ */
+function sanitizeReturnTo(value: string | null): string | undefined {
+  if (!value) return undefined;
+  if (!value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) {
+    return undefined;
+  }
+  return value;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ provider: string }> },
@@ -67,6 +79,7 @@ export async function GET(
 
   const origin = request.nextUrl.origin;
   const redirectUri = `${origin}/api/integrations/mcp/${providerKey}/callback`;
+  const returnTo = sanitizeReturnTo(request.nextUrl.searchParams.get("returnTo"));
 
   const now = new Date();
   await createPendingState({
@@ -76,6 +89,7 @@ export async function GET(
     state,
     redirectUri,
     resourceUri: provider.mcpServerUrl,
+    returnTo,
     expiresAt: new Date(now.getTime() + PENDING_STATE_TTL_MS),
   });
 
