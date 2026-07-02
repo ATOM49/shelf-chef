@@ -48,6 +48,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 type Step = "input" | "preview";
 type PendingAction = "text" | "image" | PresetId;
+type PresetMode = "instant" | "ai";
 
 export type SharedStockImage = {
   dataUrl: string;
@@ -68,6 +69,10 @@ type StockingDialogProps = {
   customStapleNames?: readonly string[];
   sharedImage?: SharedStockImage | null;
   onSharedImageConsumed?: () => void;
+  /** Shown as a lightweight escape hatch for brand-new users with an empty inventory. */
+  isNewUser?: boolean;
+  /** Called when a new user chooses to skip stocking and go straight to planning. */
+  onSkipToPlanner?: () => void;
 };
 
 const MAX_STOCK_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -165,6 +170,8 @@ export function StockingDialog({
   customStapleNames = [],
   sharedImage = null,
   onSharedImageConsumed,
+  isNewUser = false,
+  onSkipToPlanner,
 }: StockingDialogProps) {
   const [step, setStep] = useState<Step>("input");
   const [freeText, setFreeText] = useState("");
@@ -177,6 +184,7 @@ export function StockingDialog({
     null,
   );
   const [isPending, setIsPending] = useState(false);
+  const [presetMode, setPresetMode] = useState<PresetMode>("instant");
   const consumedSharedImageRef = useRef<string | null>(null);
 
   const handleClose = () => {
@@ -188,7 +196,13 @@ export function StockingDialog({
       setStockedItems([]);
       setApiError(null);
       setPendingAction(null);
+      setPresetMode("instant");
     }, 300);
+  };
+
+  const handleSkipToPlanner = () => {
+    onSkipToPlanner?.();
+    handleClose();
   };
 
   const handleDialogOpenChange = (nextOpen: boolean) => {
@@ -303,7 +317,11 @@ export function StockingDialog({
   };
 
   const handlePresetSelect = (presetId: PresetId) => {
-    requestJsonReview("/api/stock/preset", { presetId }, presetId);
+    requestJsonReview(
+      "/api/stock/preset",
+      { presetId, useSeed: presetMode === "instant" },
+      presetId,
+    );
   };
 
   const handleImageFileChange = (file: File | null) => {
@@ -358,7 +376,7 @@ export function StockingDialog({
     );
   };
 
-  const pendingState = getStockPendingState(pendingAction);
+  const pendingState = getStockPendingState(pendingAction, presetMode);
   const trimmedInput = freeText.trim();
   const isTextPending = isPending && pendingAction === "text";
   const isImagePending = isPending && pendingAction === "image";
@@ -428,6 +446,10 @@ export function StockingDialog({
               onImageFileChange={handleImageFileChange}
               onClearImage={() => setSelectedImage(null)}
               onSelectPreset={handlePresetSelect}
+              presetMode={presetMode}
+              onPresetModeChange={setPresetMode}
+              isNewUser={isNewUser}
+              onSkipToPlanner={onSkipToPlanner ? handleSkipToPlanner : undefined}
             />
           ) : (
             <PreviewStep
@@ -513,7 +535,10 @@ export function StockingDialog({
   );
 }
 
-function getStockPendingState(pendingAction: PendingAction | null) {
+function getStockPendingState(
+  pendingAction: PendingAction | null,
+  presetMode: PresetMode,
+) {
   if (pendingAction === "text") {
     return {
       title: "Reading your stock note",
@@ -535,11 +560,19 @@ function getStockPendingState(pendingAction: PendingAction | null) {
   if (pendingAction) {
     const presetLabel = PRESET_METADATA[pendingAction].label;
 
+    if (presetMode === "ai") {
+      return {
+        title: `Generating the ${presetLabel} preset with AI`,
+        description:
+          "Asking the AI to build out a fresh kitchen full of items for this preset — almost ready to review!",
+        statusLabel: "Generating stock preset",
+      };
+    }
+
     return {
-      title: `Generating the ${presetLabel} preset`,
-      description:
-        "Building out a kitchen full of items for this preset — almost ready to review!",
-      statusLabel: "Generating stock preset",
+      title: `Loading the ${presetLabel} preset`,
+      description: "Pulling in a ready-made set of items for this preset — almost ready to review!",
+      statusLabel: "Loading stock preset",
     };
   }
 
@@ -562,6 +595,10 @@ type InputStepProps = {
   onImageFileChange: (file: File | null) => void;
   onClearImage: () => void;
   onSelectPreset: (presetId: PresetId) => void;
+  presetMode: PresetMode;
+  onPresetModeChange: (mode: PresetMode) => void;
+  isNewUser: boolean;
+  onSkipToPlanner?: () => void;
 };
 
 function InputStep({
@@ -574,6 +611,10 @@ function InputStep({
   onImageFileChange,
   onClearImage,
   onSelectPreset,
+  presetMode,
+  onPresetModeChange,
+  isNewUser,
+  onSkipToPlanner,
 }: InputStepProps) {
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -587,6 +628,25 @@ function InputStep({
       </DialogHeader>
 
       <div className="grid gap-6 pt-2">
+        {isNewUser && onSkipToPlanner ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed bg-muted/30 px-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              New here? You can stock up now, or jump straight to planning and
+              add items later.
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={isPending}
+              onClick={onSkipToPlanner}
+              className="shrink-0"
+            >
+              Skip — start planning →
+            </Button>
+          </div>
+        ) : null}
+
         <p className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">Tip:</span> Common
           kitchen staples — water, salt, oil, pepper, and sugar — are always
@@ -683,14 +743,43 @@ function InputStep({
         </div>
         
         <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
-          <div>
-            <p className="text-sm font-semibold font-serif">
-              Start from a kitchen preset
-            </p>
-            <p className="text-xs text-muted-foreground">
-              AI-generated presets designed for urban Indian kitchens. Select
-              one to generate fridge and pantry items, then review the result.
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold font-serif">
+                Start from a kitchen preset
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {presetMode === "instant"
+                  ? "Ready-made presets for urban Indian kitchens. Select one to instantly fill fridge and pantry items, then review the result."
+                  : "Ask the AI to generate a fresh set of fridge and pantry items tailored to this preset, then review the result."}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-1 rounded-lg border bg-background p-0.5">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => onPresetModeChange("instant")}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+                  presetMode === "instant"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Instant
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => onPresetModeChange("ai")}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+                  presetMode === "ai"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                ✨ AI-generated
+              </button>
+            </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2" aria-busy={isPending}>
             {PRESET_ORDER.map((presetId) => {
@@ -723,7 +812,11 @@ function InputStep({
                           className="size-3 animate-spin"
                           aria-hidden
                         />
-                        <span>Generating review...</span>
+                        <span>
+                          {presetMode === "instant"
+                            ? "Loading review..."
+                            : "Generating review..."}
+                        </span>
                       </div>
                     ) : (
                       <></>
