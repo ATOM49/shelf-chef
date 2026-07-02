@@ -203,7 +203,7 @@ export function FoodPlannerApp() {
   const [householdsError, setHouseholdsError] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
-  const hasAutoOpenedStockingRef = useRef(false);
+  const [prevIsInitializing, setPrevIsInitializing] = useState(isInitializing);
   const [storageTab, setStorageTab] = useState<StorageTab>("fridge");
   const [stockingOpen, setStockingOpen] = useState(false);
   const [sharedStockImage, setSharedStockImage] =
@@ -492,16 +492,15 @@ export function FoodPlannerApp() {
       );
     }
   }, []);
-  // Auto-open the stocking dialog once for new users who have an empty inventory.
-  useEffect(() => {
-    if (isInitializing || hasAutoOpenedStockingRef.current) {
-      return;
-    }
-    if (state.inventory.length === 0) {
-      hasAutoOpenedStockingRef.current = true;
+  // Auto-open the stocking dialog once for new users who have an empty inventory,
+  // as soon as initial load finishes. Adjusted during render (rather than in a
+  // useEffect) per https://react.dev/learn/you-might-not-need-an-effect.
+  if (isInitializing !== prevIsInitializing) {
+    setPrevIsInitializing(isInitializing);
+    if (!isInitializing && state.inventory.length === 0) {
       setStockingOpen(true);
     }
-  }, [isInitializing, state.inventory.length]);
+  }
 
   // Save state to localStorage on every change; also debounce-save to DB when authenticated.
   useLayoutEffect(() => {
@@ -1654,6 +1653,8 @@ export function FoodPlannerApp() {
           customStapleNames={state.customStapleNames}
           sharedImage={sharedStockImage}
           onSharedImageConsumed={() => setSharedStockImage(null)}
+          isNewUser={state.inventory.length === 0}
+          onSkipToPlanner={() => setMobileTab("planner")}
         />
         <HouseholdSettingsDialog
           open={householdSettingsOpen}
