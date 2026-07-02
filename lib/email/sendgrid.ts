@@ -32,7 +32,7 @@ export async function sendHouseholdInviteEmail({
       personalizations: [
         {
           to: [{ email: to }],
-          subject: `You’ve been invited to join ${householdName} on ShelfChef`,
+          subject: `You’ve been invited to join ${householdName} on Stockpot`,
         },
       ],
       from: { email: from },
@@ -40,7 +40,7 @@ export async function sendHouseholdInviteEmail({
         {
           type: "text/plain",
           value: [
-            `You’ve been invited to join the ${householdName} household on ShelfChef.`,
+            `You’ve been invited to join the ${householdName} household on Stockpot.`,
             "",
             `Accept your invite: ${inviteUrl}`,
             "",

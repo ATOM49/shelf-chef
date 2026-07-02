@@ -16,12 +16,15 @@ import type {
 import { PLANNED_MEAL_TYPES, RECIPE_MEAL_TYPES } from "@/lib/planner/types";
 import { DEFAULT_WORKSPACE, parseSerializedWorkspace, serializeWorkspace, type Workspace } from "@/lib/households/shared";
 
-const APP_STORAGE_KEY = "food-planner-app-state-v2";
+const APP_STORAGE_KEY = "stockpot-app-state-v2";
+const LEGACY_APP_STORAGE_KEYS = ["food-planner-app-state-v2"];
 const LEGACY_STORAGE_KEY = "food-planner-fridge-layout";
 const FALLBACK_CATEGORY: InventoryCategory = "other";
 
-const ACTIVE_WORKSPACE_KEY = "food-planner-active-workspace-v1";
-const WORKSPACE_STORAGE_PREFIX = "food-planner-workspace-state-v1";
+const ACTIVE_WORKSPACE_KEY = "stockpot-active-workspace-v1";
+const LEGACY_ACTIVE_WORKSPACE_KEYS = ["food-planner-active-workspace-v1"];
+const WORKSPACE_STORAGE_PREFIX = "stockpot-workspace-state-v1";
+const LEGACY_WORKSPACE_STORAGE_PREFIXES = ["food-planner-workspace-state-v1"];
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -283,9 +286,17 @@ export function loadAppState(): AppState {
       if (parsed) return parsed;
     }
 
-    const legacyState = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (legacyState) {
-      const migrated = migrateLegacyLayout(JSON.parse(legacyState));
+    for (const legacyKey of LEGACY_APP_STORAGE_KEYS) {
+      const legacyAppState = localStorage.getItem(legacyKey);
+      if (legacyAppState) {
+        const parsed = reviveAppState(JSON.parse(legacyAppState));
+        if (parsed) return parsed;
+      }
+    }
+
+    const legacyLayout = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacyLayout) {
+      const migrated = migrateLegacyLayout(JSON.parse(legacyLayout));
       if (migrated) return migrated;
     }
   } catch {
@@ -314,6 +325,9 @@ export function clearAppState() {
 
   try {
     localStorage.removeItem(APP_STORAGE_KEY);
+    for (const legacyKey of LEGACY_APP_STORAGE_KEYS) {
+      localStorage.removeItem(legacyKey);
+    }
     localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch {
     // ignore storage failures
@@ -324,13 +338,31 @@ function getWorkspaceStorageKey(workspace: Workspace) {
   return `${WORKSPACE_STORAGE_PREFIX}:${serializeWorkspace(workspace)}`;
 }
 
+function getLegacyWorkspaceStorageKeys(workspace: Workspace) {
+  return LEGACY_WORKSPACE_STORAGE_PREFIXES.map(
+    (prefix) => `${prefix}:${serializeWorkspace(workspace)}`,
+  );
+}
+
 export function loadWorkspacePreference(): Workspace {
   if (typeof window === "undefined") {
     return DEFAULT_WORKSPACE;
   }
 
   try {
-    return parseSerializedWorkspace(localStorage.getItem(ACTIVE_WORKSPACE_KEY));
+    const activeWorkspace = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+    if (activeWorkspace) {
+      return parseSerializedWorkspace(activeWorkspace);
+    }
+
+    for (const legacyKey of LEGACY_ACTIVE_WORKSPACE_KEYS) {
+      const legacyWorkspace = localStorage.getItem(legacyKey);
+      if (legacyWorkspace) {
+        return parseSerializedWorkspace(legacyWorkspace);
+      }
+    }
+
+    return DEFAULT_WORKSPACE;
   } catch {
     return DEFAULT_WORKSPACE;
   }
@@ -358,6 +390,14 @@ export function loadWorkspaceAppState(workspace: Workspace): AppState {
     if (workspaceState) {
       const parsed = reviveAppState(JSON.parse(workspaceState));
       if (parsed) return parsed;
+    }
+
+    for (const legacyKey of getLegacyWorkspaceStorageKeys(workspace)) {
+      const legacyWorkspaceState = localStorage.getItem(legacyKey);
+      if (legacyWorkspaceState) {
+        const parsed = reviveAppState(JSON.parse(legacyWorkspaceState));
+        if (parsed) return parsed;
+      }
     }
 
     if (workspace.type === "personal") {
@@ -393,6 +433,9 @@ export function clearWorkspaceAppState(workspace: Workspace) {
 
   try {
     localStorage.removeItem(getWorkspaceStorageKey(workspace));
+    for (const legacyKey of getLegacyWorkspaceStorageKeys(workspace)) {
+      localStorage.removeItem(legacyKey);
+    }
     if (workspace.type === "personal") {
       clearAppState();
     }

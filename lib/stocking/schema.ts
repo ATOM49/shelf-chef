@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PRESET_ORDER } from "@/lib/inventory/presets";
 import { INVENTORY_CATEGORIES, INVENTORY_UNITS } from "@/lib/inventory/types";
+import { normalizeIngredientName } from "@/lib/inventory/normalize";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MARKUP_LIKE_TEXT_PATTERN = /```|<[^>]+>/;
@@ -8,6 +9,14 @@ const MAX_REVIEW_ITEMS = 80;
 const DEFAULT_QUANTITY = 1;
 const DEFAULT_UNIT = "count";
 const DEFAULT_CATEGORY = "other";
+const MAX_STOCK_IMAGE_BASE64_LENGTH = 12_000_000;
+const ACCEPTED_STOCK_IMAGE_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+] as const;
 
 const UNIT_ALIASES: Record<string, (typeof INVENTORY_UNITS)[number]> = {
   cup: "cup",
@@ -98,6 +107,12 @@ export const stockTextRequestSchema = z.object({
   stapleNames: z.array(z.string().trim()).optional(),
 }).strict();
 
+export const stockImageRequestSchema = z.object({
+  imageBase64: z.string().trim().min(1).max(MAX_STOCK_IMAGE_BASE64_LENGTH),
+  imageMimeType: z.enum(ACCEPTED_STOCK_IMAGE_MIME_TYPES),
+  stapleNames: z.array(z.string().trim()).optional(),
+}).strict();
+
 export const stockPresetRequestSchema = z.object({
   presetId: z.enum(PRESET_ORDER),
   stapleNames: z.array(z.string().trim()).optional(),
@@ -119,7 +134,9 @@ export function parseStockApiResponseForReview(payload: unknown) {
     throw new Error("AI returned an invalid stock response. Try again.");
   }
 
-  const items = normalizeStockItemsForReview(parsed.data.items);
+  const items = mergeDuplicateStockItemsForReview(
+    normalizeStockItemsForReview(parsed.data.items),
+  );
   if (items.length === 0) {
     throw new Error("AI didn't return any usable stock items. Try again.");
   }
@@ -132,6 +149,94 @@ function normalizeStockItemsForReview(items: Array<z.infer<typeof stockReviewIte
   return items
     .map((item) => normalizeStockReviewItem(item))
     .filter((item): item is z.infer<typeof stockReviewItemSchema> => item != null);
+}
+
+function mergeDuplicateStockItemsForReview(
+  items: Array<z.infer<typeof stockReviewItemSchema>>,
+) {
+  const merged: Array<z.infer<typeof stockReviewItemSchema>> = [];
+  const itemIndexByName = new Map<string, number>();
+
+  for (const item of items) {
+    const key = normalizeIngredientName(item.name);
+    const existingIndex = itemIndexByName.get(key);
+    if (typeof existingIndex === "undefined") {
+      itemIndexByName.set(key, merged.length);
+      merged.push(item);
+      continue;
+    }
+
+    merged[existingIndex] = mergeStockReviewItems(merged[existingIndex], item);
+  }
+
+  return merged;
+}
+
+function mergeStockReviewItems(
+  existing: z.infer<typeof stockReviewItemSchema>,
+  duplicate: z.infer<typeof stockReviewItemSchema>,
+) {
+  const convertedQuantity = convertQuantityToUnit(
+    duplicate.quantity,
+    duplicate.unit,
+    existing.unit,
+  );
+  const canAddQuantity = convertedQuantity != null;
+
+  return {
+    ...existing,
+    emoji: existing.emoji ?? duplicate.emoji,
+    quantity: canAddQuantity
+      ? existing.quantity + convertedQuantity
+      : existing.quantity,
+    expiresAt: earliestDate(existing.expiresAt, duplicate.expiresAt),
+    flagged:
+      existing.flagged ||
+      duplicate.flagged ||
+      !canAddQuantity ||
+      existing.category !== duplicate.category ||
+      existing.storageType !== duplicate.storageType,
+  };
+}
+
+function convertQuantityToUnit(
+  quantity: number,
+  fromUnit: z.infer<typeof stockReviewItemSchema>["unit"],
+  toUnit: z.infer<typeof stockReviewItemSchema>["unit"],
+) {
+  if (fromUnit === toUnit) {
+    return quantity;
+  }
+
+  if (fromUnit === "kg" && toUnit === "g") {
+    return quantity * 1000;
+  }
+
+  if (fromUnit === "g" && toUnit === "kg") {
+    return quantity / 1000;
+  }
+
+  if (fromUnit === "l" && toUnit === "ml") {
+    return quantity * 1000;
+  }
+
+  if (fromUnit === "ml" && toUnit === "l") {
+    return quantity / 1000;
+  }
+
+  return null;
+}
+
+function earliestDate(first?: string, second?: string) {
+  if (!first) {
+    return second;
+  }
+
+  if (!second) {
+    return first;
+  }
+
+  return first <= second ? first : second;
 }
 
 function normalizeStockReviewItem(item: z.infer<typeof stockReviewItemExtractionSchema>) {

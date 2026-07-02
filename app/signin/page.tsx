@@ -8,7 +8,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { auth, providerMap, signIn } from "@/src/auth";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { auth, devSignIn, isDevLoginEnabled, providerMap, signIn } from "@/src/auth";
 import { redirect } from "next/navigation";
 
 type SignInSearchParams = Promise<{
@@ -21,8 +23,9 @@ function getSingleValue(value: string | string[] | undefined) {
 }
 
 const SIGN_IN_ERROR_MESSAGES: Record<string, string> = {
-  AccessDenied: "Hmm, this account isn't authorized for ShelfChef.",
+  AccessDenied: "Hmm, this account isn't authorized for Stockpot.",
   Configuration: "Something's off on our end — authentication isn't set up correctly.",
+  CredentialsSignin: "Invalid dev login email or password.",
   Default: "Sign-in didn't work. Give it another go!",
   OAuthAccountNotLinked:
     "This email is already linked to a different sign-in method.",
@@ -58,7 +61,7 @@ export default async function SignInPage({
               Sign in
             </Badge>
             <div className="space-y-1">
-              <CardTitle className="text-2xl">Welcome back to ShelfChef</CardTitle>
+              <CardTitle className="text-2xl">Welcome back to Stockpot</CardTitle>
               <CardDescription>
                 Sign in to get cooking — your pantry and planner are waiting.
               </CardDescription>
@@ -85,6 +88,42 @@ export default async function SignInPage({
                 </form>
               ))}
             </div>
+            {isDevLoginEnabled ? (
+              <>
+                <div className="flex items-center gap-3 text-xs uppercase text-muted-foreground">
+                  <div className="h-px flex-1 bg-border" />
+                  Dev only
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                <form
+                  className="grid gap-3"
+                  action={async (formData: FormData) => {
+                    "use server";
+                    try {
+                      await devSignIn(
+                        String(formData.get("email") ?? ""),
+                        String(formData.get("password") ?? ""),
+                      );
+                    } catch {
+                      redirect(`/signin?error=CredentialsSignin`);
+                    }
+                    redirect(callbackUrl);
+                  }}
+                >
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="email">Email</Label>
+                    <Input id="email" name="email" type="email" required />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="password">Password</Label>
+                    <Input id="password" name="password" type="password" required />
+                  </div>
+                  <Button type="submit" variant="outline" className="w-full justify-center" size="lg">
+                    Dev sign in
+                  </Button>
+                </form>
+              </>
+            ) : null}
           </CardContent>
           <CardFooter className="justify-start text-sm text-muted-foreground">
             We&apos;ll take you back to where you were once you&apos;re in.
