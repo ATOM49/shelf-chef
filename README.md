@@ -2,7 +2,7 @@
 
 **Live App:** [https://shelf-chef-zeta.vercel.app/](https://shelf-chef-zeta.vercel.app/)
 
-![Stockpot Screenshot](https://github.com/user-attachments/assets/b067d3ab-6d7f-4003-8f5d-67528d4de9ff)
+![Stockpot Screenshot](docs/screenshot.png)
 
 Stockpot is an AI-powered kitchen management app that helps you track your pantry inventory, plan weekly meals, generate recipes, and build grocery lists — all in one place.
 
