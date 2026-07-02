@@ -2,7 +2,8 @@ import { INVENTORY_UNITS } from "@/lib/inventory/types";
 import { buildInventoryUnitHints } from "@/lib/inventory/units";
 import {
   PLANNER_WEEK_DAYS,
-  type CustomRecipeGenerationRequest,
+  type DishRecipeGenerationRequest,
+  type IngredientRecipeGenerationRequest,
   type PlannerGenerationRequest,
   type Recipe,
 } from "@/lib/planner/types";
@@ -147,12 +148,51 @@ Current inventory:
 ${inventoryLines}`;
 }
 
-export function buildCustomRecipeGenerationPrompt({
+export function buildDishRecipeGenerationPrompt({
+  dishName,
+  preferences,
+  recipeBook,
+}: DishRecipeGenerationRequest) {
+  const today = new Date().toISOString().split("T")[0];
+  const preferenceSummary = preferences.trim() || "No additional preferences supplied.";
+  const recipeBookLines = summarizeRecipeBook(recipeBook);
+
+  return `You are a home kitchen recipe assistant.
+
+Today's date: ${today}
+
+Use Google Search grounding when helpful to keep the recipe realistic, authentic, and commonly cooked.
+
+Generate exactly one recipe for the specific requested dish, using your own culinary knowledge of how this dish is traditionally or commonly made.
+
+Requirements:
+- Return JSON only with a top-level recipes array containing exactly one recipe.
+- Generate the standard, authentic version of the requested dish. Use the ingredients and quantities that a real recipe for this dish would call for.
+- Do NOT omit, substitute, or scale down ingredients based on what a home cook might already have on hand — assume nothing about their pantry. List every ingredient the dish actually needs, even ones the user probably doesn't have; missing ingredients will be handled separately by a shopping list.
+- Respect the user's freeform preferences (for example dietary restrictions, spice level, serving size) only when they don't conflict with making an authentic version of the dish.
+- Do not generate a duplicate of an existing recipe-book entry.
+- Allowed units: ${INVENTORY_UNITS.join(", ")}.
+- Include: title, mealType, servings, tags, ingredients.
+- Include cuisine and instructions when you can do so confidently.
+- Keep each instruction step under about 200 characters. Split a long step into multiple shorter steps instead of one long paragraph.
+- For referenceUrl: only include it when you are highly confident the exact URL is real and accessible. Only use https:// links from well-known cooking sites. If in doubt, omit referenceUrl entirely.
+- Keep the recipe practical for a home kitchen, but do not distort it just to avoid ingredients a shopper might need to buy.
+
+Requested dish name: ${dishName.trim()}
+
+User preferences:
+${preferenceSummary}
+
+Existing recipe book:
+${recipeBookLines}`;
+}
+
+export function buildIngredientRecipeGenerationPrompt({
   inventory,
   preferences,
   dishName,
   recipeBook,
-}: CustomRecipeGenerationRequest) {
+}: IngredientRecipeGenerationRequest) {
   const today = new Date().toISOString().split("T")[0];
   const inventoryUnitHints = buildInventoryUnitHints(inventory);
   const inventoryLines =

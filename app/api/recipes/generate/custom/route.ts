@@ -2,7 +2,10 @@ import type { NextRequest } from "next/server";
 import { isLlmConfigurationError } from "@/lib/ai/structured";
 import { getRecipeDedupeKey, mergeRecipes } from "@/lib/appState";
 import { generateCustomRecipeResponse } from "@/lib/planner/generate";
-import { buildCustomRecipeGenerationPrompt } from "@/lib/planner/prompts";
+import {
+  buildDishRecipeGenerationPrompt,
+  buildIngredientRecipeGenerationPrompt,
+} from "@/lib/planner/prompts";
 import {
   customRecipeGenerateRequestSchema,
   parseCustomRecipeGenerationApiResponse,
@@ -22,10 +25,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const response = await generateCustomRecipeResponse(
-      buildCustomRecipeGenerationPrompt(parsedRequest.data),
-      parsedRequest.data.inventory,
-    );
+    const requestData = parsedRequest.data;
+    const prompt =
+      requestData.mode === "dish"
+        ? buildDishRecipeGenerationPrompt(requestData)
+        : buildIngredientRecipeGenerationPrompt(requestData);
+    const inventoryForGeneration = requestData.mode === "dish" ? [] : requestData.inventory;
+
+    const response = await generateCustomRecipeResponse(prompt, inventoryForGeneration);
     const generatedRecipe = {
       ...response.recipe,
       source: "user-saved" as const,

@@ -109,12 +109,24 @@ export type PlannerGenerationRequest = {
   recipeBook: Recipe[];
 };
 
-export type CustomRecipeGenerationRequest = {
+export type DishRecipeGenerationRequest = {
+  mode: "dish";
+  dishName: string;
+  preferences: string;
+  recipeBook: Recipe[];
+};
+
+export type IngredientRecipeGenerationRequest = {
+  mode: "ingredients";
   inventory: PlannerInventoryContextItem[];
   preferences: string;
   dishName?: string;
   recipeBook: Recipe[];
 };
+
+export type CustomRecipeGenerationRequest =
+  | DishRecipeGenerationRequest
+  | IngredientRecipeGenerationRequest;
 
 export type PlannerMealSlot = {
   day: PlannerWeekDay;

@@ -34,7 +34,10 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { RecipeBookDialog } from "@/components/planner/RecipeBookDialog";
+import {
+  RecipeBookDialog,
+  type CreateRecipePayload,
+} from "@/components/planner/RecipeBookDialog";
 import {
   Drawer,
   DrawerClose,
@@ -783,24 +786,29 @@ export function FoodPlannerApp() {
   );
 
   const handleCreateCustomRecipe = useCallback(
-    async (payload: {
-      inventoryItemIds: string[];
-      preferences: string;
-      dishName: string;
-    }) => {
-      const inventorySubset = state.inventory
-        .filter((item) => payload.inventoryItemIds.includes(item.id))
-        .map(toPlannerInventoryPayload);
+    async (payload: CreateRecipePayload) => {
+      const requestBody =
+        payload.mode === "dish"
+          ? {
+              mode: "dish" as const,
+              dishName: payload.dishName.trim(),
+              preferences: payload.preferences,
+              recipeBook: state.recipes,
+            }
+          : {
+              mode: "ingredients" as const,
+              inventory: state.inventory
+                .filter((item) => payload.inventoryItemIds.includes(item.id))
+                .map(toPlannerInventoryPayload),
+              preferences: payload.preferences,
+              dishName: payload.dishName?.trim() || undefined,
+              recipeBook: state.recipes,
+            };
 
       const response = await fetch("/api/recipes/generate/custom", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          inventory: inventorySubset,
-          preferences: payload.preferences,
-          dishName: payload.dishName.trim() || undefined,
-          recipeBook: state.recipes,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -821,22 +829,12 @@ export function FoodPlannerApp() {
   );
 
   const handleGenerateAndSwap = useCallback(
-    async (dishName: string) => {
-      const allInventoryIds = state.inventory.map((item) => item.id);
-      const recipeId = await handleCreateCustomRecipe({
-        inventoryItemIds: allInventoryIds,
-        preferences: state.planner.preferences,
-        dishName,
-      });
+    async (payload: CreateRecipePayload) => {
+      const recipeId = await handleCreateCustomRecipe(payload);
 
       applyRecipeToRecipeBookTarget(recipeId);
     },
-    [
-      state.inventory,
-      state.planner.preferences,
-      handleCreateCustomRecipe,
-      applyRecipeToRecipeBookTarget,
-    ],
+    [handleCreateCustomRecipe, applyRecipeToRecipeBookTarget],
   );
 
   const handleDeleteCustomRecipe = useCallback((recipeId: string) => {

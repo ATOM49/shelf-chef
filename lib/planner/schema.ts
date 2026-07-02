@@ -36,6 +36,7 @@ const MAX_RECIPE_BOOK_RECIPES = 240;
 const MAX_TAGS = 10;
 const MAX_INGREDIENTS = 20;
 const MAX_INSTRUCTIONS = 12;
+const MAX_INSTRUCTION_LENGTH = 240;
 const DEFAULT_INGREDIENT_UNIT = "count";
 const DEFAULT_INGREDIENT_QUANTITY = 1;
 
@@ -117,7 +118,10 @@ const recipeSchema = z.object({
   servings: z.number().int().positive().max(100).optional(),
   tags: z.array(z.string().trim().min(1).max(40)).max(MAX_TAGS),
   ingredients: z.array(recipeIngredientSchema).min(1).max(MAX_INGREDIENTS),
-  instructions: z.array(z.string().trim().min(1).max(240)).max(MAX_INSTRUCTIONS).optional(),
+  instructions: z
+    .array(z.string().trim().min(1).max(MAX_INSTRUCTION_LENGTH))
+    .max(MAX_INSTRUCTIONS)
+    .optional(),
   referenceUrl: z.string().url().startsWith("https://").optional(),
   source: z.enum(["user-requested", "user-saved"]),
 }).strict();
@@ -156,12 +160,25 @@ export const plannerGenerateRequestSchema = z.object({
   recipeBook: z.array(recipeSchema).max(MAX_RECIPE_BOOK_RECIPES),
 }).strict();
 
-export const customRecipeGenerateRequestSchema = z.object({
-  inventory: z.array(plannerInventoryContextItemSchema).min(0).max(60),
+const dishRecipeGenerateRequestSchema = z.object({
+  mode: z.literal("dish"),
+  dishName: z.string().trim().min(1).max(120),
+  preferences: z.string().trim().max(4000),
+  recipeBook: z.array(recipeSchema).max(MAX_RECIPE_BOOK_RECIPES),
+}).strict();
+
+const ingredientRecipeGenerateRequestSchema = z.object({
+  mode: z.literal("ingredients"),
+  inventory: z.array(plannerInventoryContextItemSchema).min(1).max(60),
   preferences: z.string().trim().max(4000),
   dishName: z.string().trim().min(1).max(120).optional(),
   recipeBook: z.array(recipeSchema).max(MAX_RECIPE_BOOK_RECIPES),
 }).strict();
+
+export const customRecipeGenerateRequestSchema = z.discriminatedUnion("mode", [
+  dishRecipeGenerateRequestSchema,
+  ingredientRecipeGenerateRequestSchema,
+]);
 
 export const recipeGenerationApiResponseSchema = z.object({
   recipes: z.array(recipeSchema).min(1).max(MAX_RECIPE_BOOK_RECIPES),
@@ -716,7 +733,10 @@ function normalizeTagList(value: unknown) {
 }
 
 function normalizeInstructionList(value: unknown) {
-  return normalizeStringList(value, { maxItems: MAX_INSTRUCTIONS });
+  return normalizeStringList(value, {
+    maxItems: MAX_INSTRUCTIONS,
+    maxLength: MAX_INSTRUCTION_LENGTH,
+  });
 }
 
 function normalizeStringList(
@@ -725,6 +745,7 @@ function normalizeStringList(
     lowercase?: boolean;
     transform?: (value: string) => string;
     maxItems: number;
+    maxLength?: number;
   },
 ) {
   const rawValues = Array.isArray(value)
@@ -748,6 +769,10 @@ function normalizeStringList(
 
     if (options.transform) {
       normalized = options.transform(normalized);
+    }
+
+    if (options.maxLength && normalized.length > options.maxLength) {
+      normalized = normalized.slice(0, options.maxLength).trim();
     }
 
     if (!normalized || seen.has(normalized)) {

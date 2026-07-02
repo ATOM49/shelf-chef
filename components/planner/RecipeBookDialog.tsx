@@ -29,6 +29,10 @@ import type { InventoryItem } from "@/lib/inventory/types";
 import type { PlannedMealType, Recipe } from "@/lib/planner/types";
 import { validateRecipeAgainstInventory } from "@/lib/planner/validation";
 
+export type CreateRecipePayload =
+  | { mode: "dish"; dishName: string; preferences: string }
+  | { mode: "ingredients"; inventoryItemIds: string[]; preferences: string; dishName?: string };
+
 type RecipeBookDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -37,12 +41,8 @@ type RecipeBookDialogProps = {
   mode?: "browse" | "swap";
   swapMealType?: PlannedMealType;
   onSelectRecipe?: (recipeId: string) => void;
-  onGenerateAndSwap?: (dishName: string) => Promise<void>;
-  onCreateCustomRecipe: (payload: {
-    inventoryItemIds: string[];
-    preferences: string;
-    dishName: string;
-  }) => Promise<string>;
+  onGenerateAndSwap?: (payload: CreateRecipePayload) => Promise<void>;
+  onCreateCustomRecipe: (payload: CreateRecipePayload) => Promise<string>;
   onDeleteRecipe: (recipeId: string) => void;
 };
 
@@ -115,7 +115,6 @@ function RecipeBookBrowse({
   onBrowseStateChange,
   onViewRecipe,
   onSelectRecipe,
-  onGenerateAndSwap,
 }: {
   recipes: Recipe[];
   inventory: InventoryItem[];
@@ -125,36 +124,15 @@ function RecipeBookBrowse({
   onBrowseStateChange: (nextState: RecipeBrowseState) => void;
   onViewRecipe: (recipeId: string) => void;
   onSelectRecipe?: (recipeId: string) => void;
-  onGenerateAndSwap?: (dishName: string) => Promise<void>;
 }) {
   const { searchTerm, selectedTags } = browseState;
   const effectiveMealTypeFilter: PlannedMealType | "all" =
     mode === "swap" ? swapMealType ?? "all" : "all";
 
-  const [generateDishName, setGenerateDishName] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generateError, setGenerateError] = useState<string | null>(null);
   const normalizedSelectedTags = useMemo(
     () => selectedTags.map(normalizeTag),
     [selectedTags],
   );
-
-  async function handleGenerateAndSwap() {
-    const name = generateDishName.trim();
-    if (!name || !onGenerateAndSwap) return;
-    setIsGenerating(true);
-    setGenerateError(null);
-    try {
-      await onGenerateAndSwap(name);
-      setGenerateDishName("");
-    } catch (err) {
-      setGenerateError(
-        err instanceof Error ? err.message : "Unable to generate recipe right now.",
-      );
-    } finally {
-      setIsGenerating(false);
-    }
-  }
 
   const validationByRecipeId = useMemo(
     () =>
@@ -290,38 +268,6 @@ function RecipeBookBrowse({
           )}
         </div>
       </div>
-      {mode === "swap" && onGenerateAndSwap ? (
-        <div className="border-b px-6 py-4">
-          <div className="rounded-xl border bg-muted/30 p-4">
-            <h4 className="text-sm font-semibold text-foreground">Generate a specific dish</h4>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Type any dish name and generate a new recipe for this slot.
-            </p>
-            <div className="mt-3 flex gap-2">
-              <Input
-                placeholder="e.g. Prawn fried rice, Tacos, Shakshuka"
-                value={generateDishName}
-                onChange={(e) => setGenerateDishName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleGenerateAndSwap()}
-                disabled={isGenerating}
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                onClick={handleGenerateAndSwap}
-                disabled={isGenerating || !generateDishName.trim()}
-              >
-                {isGenerating ? "Generating…" : "Generate"}
-              </Button>
-            </div>
-            {generateError ? (
-              <div className="mt-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {generateError}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
       <ScrollArea className="min-h-0 flex-1 px-6 py-4">
         {filteredRecipes.length === 0 ? (
           <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
@@ -362,17 +308,20 @@ function RecipeBookBrowse({
 
 function RecipeBookCreate({
   inventory,
+  dialogMode,
   onCreateCustomRecipe,
+  onGenerateAndSwap,
   onRecipeCreated,
 }: {
   inventory: InventoryItem[];
-  onCreateCustomRecipe: (payload: {
-    inventoryItemIds: string[];
-    preferences: string;
-    dishName: string;
-  }) => Promise<string>;
+  dialogMode: "browse" | "swap";
+  onCreateCustomRecipe: (payload: CreateRecipePayload) => Promise<string>;
+  onGenerateAndSwap?: (payload: CreateRecipePayload) => Promise<void>;
   onRecipeCreated: (recipeId: string) => void;
 }) {
+  const [createMode, setCreateMode] = useState<"dish" | "ingredients">(
+    dialogMode === "swap" ? "dish" : "ingredients",
+  );
   const [inventorySearch, setInventorySearch] = useState("");
   const [selectedInventoryItemIds, setSelectedInventoryItemIds] = useState<string[]>([]);
   const [dishName, setDishName] = useState("");
@@ -393,27 +342,42 @@ function RecipeBookCreate({
   }, [inventory, inventorySearch]);
 
   const selectedCount = selectedInventoryItemIds.length;
+  const isDishMode = createMode === "dish";
+  const canSubmit = isDishMode ? dishName.trim().length > 0 : selectedCount > 0;
 
   async function handleSubmit() {
-    if (selectedInventoryItemIds.length === 0) {
+    if (isDishMode && !dishName.trim()) {
+      setSubmitError("Enter a dish name to generate a recipe.");
+      return;
+    }
+    if (!isDishMode && selectedInventoryItemIds.length === 0) {
       setSubmitError("Pick at least one inventory item to build the recipe from.");
       return;
     }
+
+    const payload: CreateRecipePayload = isDishMode
+      ? { mode: "dish", dishName: dishName.trim(), preferences }
+      : {
+          mode: "ingredients",
+          inventoryItemIds: selectedInventoryItemIds,
+          preferences,
+          dishName: dishName.trim() || undefined,
+        };
 
     setIsSubmitting(true);
     setSubmitError(null);
 
     try {
-      const recipeId = await onCreateCustomRecipe({
-        inventoryItemIds: selectedInventoryItemIds,
-        preferences,
-        dishName,
-      });
+      if (dialogMode === "swap" && onGenerateAndSwap) {
+        await onGenerateAndSwap(payload);
+      } else {
+        const recipeId = await onCreateCustomRecipe(payload);
+        onRecipeCreated(recipeId);
+      }
       setDishName("");
       setPreferences("");
       setSelectedInventoryItemIds([]);
       setInventorySearch("");
-      onRecipeCreated(recipeId);
     } catch (error) {
       setSubmitError(
         error instanceof Error ? error.message : "Unable to generate a recipe right now.",
@@ -431,15 +395,50 @@ function RecipeBookCreate({
     );
   }
 
+  const submitLabel = dialogMode === "swap" ? "Generate & use for this meal" : "Save recipe to book";
+
   return (
     <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
       <div className="flex min-h-0 flex-1 flex-col px-6 py-4">
         <div className="grid gap-3">
+          <div className="flex gap-1 rounded-lg border bg-muted/30 p-1">
+            <button
+              type="button"
+              onClick={() => setCreateMode("dish")}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                isDishMode
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Create a Recipe
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreateMode("ingredients")}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                !isDishMode
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Put together a meal
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {isDishMode
+              ? "Tell us the dish and we'll generate an authentic recipe using our own knowledge — regardless of what's in your kitchen. Anything missing will show up in your shopping list once this recipe is used in a plan."
+              : "Pick ingredients you already have and we'll build a recipe around them."}
+          </p>
           <div className="grid gap-1.5">
             <Label htmlFor="custom-recipe-name">Dish name</Label>
             <Input
               id="custom-recipe-name"
-              placeholder="Optional, for example Spinach paneer toast"
+              placeholder={
+                isDishMode
+                  ? "e.g. Shakshuka, Pad Thai, Chicken Tikka Masala"
+                  : "Optional, for example Spinach paneer toast"
+              }
               value={dishName}
               onChange={(event) => setDishName(event.target.value)}
             />
@@ -461,78 +460,82 @@ function RecipeBookCreate({
           ) : null}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm text-muted-foreground">
-              Selected inventory items: {selectedCount}
+              {isDishMode ? null : `Selected inventory items: ${selectedCount}`}
             </div>
-            <Button type="button" onClick={handleSubmit} disabled={isSubmitting || selectedCount === 0}>
-              {isSubmitting ? "Generating recipe..." : "Save recipe to book"}
+            <Button type="button" onClick={handleSubmit} disabled={isSubmitting || !canSubmit}>
+              {isSubmitting ? "Generating recipe..." : submitLabel}
             </Button>
           </div>
         </div>
       </div>
-      <Separator orientation="vertical" className="hidden xl:block" />
-      <div className="flex min-h-0 flex-1 flex-col px-6 py-4">
-        <div className="grid gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <Label htmlFor="custom-recipe-inventory-search">Inventory subset</Label>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedInventoryItemIds(filteredInventory.map((item) => item.id))}
-                disabled={filteredInventory.length === 0}
-              >
-                Select visible
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedInventoryItemIds([])}
-                disabled={selectedInventoryItemIds.length === 0}
-              >
-                Clear
-              </Button>
-            </div>
-          </div>
-          <Input
-            id="custom-recipe-inventory-search"
-            placeholder="Filter inventory items"
-            value={inventorySearch}
-            onChange={(event) => setInventorySearch(event.target.value)}
-          />
-        </div>
-        <ScrollArea className="mt-4 min-h-0 flex-1 pr-2">
-          <div className="grid gap-2 pb-4">
-            {filteredInventory.map((item) => {
-              const isSelected = selectedInventoryItemIds.includes(item.id);
-              return (
-                <ItemCard
-                  key={item.id}
-                  name={item.name}
-                  emoji={item.emoji}
-                  quantityLabel={formatItemQuantity(item.quantity, item.unit)}
-                  detail={`${item.category}${item.expiresAt ? ` · expires ${item.expiresAt}` : ""}`}
-                  selected={isSelected}
-                  onClick={() => toggleInventoryItem(item.id)}
-                  leading={
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={() => toggleInventoryItem(item.id)}
-                      aria-label={`Select ${item.name}`}
-                    />
-                  }
-                />
-              );
-            })}
-            {filteredInventory.length === 0 ? (
-              <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-                No items match — try a different search.
+      {isDishMode ? null : (
+        <>
+          <Separator orientation="vertical" className="hidden xl:block" />
+          <div className="flex min-h-0 flex-1 flex-col px-6 py-4">
+            <div className="grid gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="custom-recipe-inventory-search">Inventory subset</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedInventoryItemIds(filteredInventory.map((item) => item.id))}
+                    disabled={filteredInventory.length === 0}
+                  >
+                    Select visible
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedInventoryItemIds([])}
+                    disabled={selectedInventoryItemIds.length === 0}
+                  >
+                    Clear
+                  </Button>
+                </div>
               </div>
-            ) : null}
+              <Input
+                id="custom-recipe-inventory-search"
+                placeholder="Filter inventory items"
+                value={inventorySearch}
+                onChange={(event) => setInventorySearch(event.target.value)}
+              />
+            </div>
+            <ScrollArea className="mt-4 min-h-0 flex-1 pr-2">
+              <div className="grid gap-2 pb-4">
+                {filteredInventory.map((item) => {
+                  const isSelected = selectedInventoryItemIds.includes(item.id);
+                  return (
+                    <ItemCard
+                      key={item.id}
+                      name={item.name}
+                      emoji={item.emoji}
+                      quantityLabel={formatItemQuantity(item.quantity, item.unit)}
+                      detail={`${item.category}${item.expiresAt ? ` · expires ${item.expiresAt}` : ""}`}
+                      selected={isSelected}
+                      onClick={() => toggleInventoryItem(item.id)}
+                      leading={
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleInventoryItem(item.id)}
+                          aria-label={`Select ${item.name}`}
+                        />
+                      }
+                    />
+                  );
+                })}
+                {filteredInventory.length === 0 ? (
+                  <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+                    No items match — try a different search.
+                  </div>
+                ) : null}
+              </div>
+            </ScrollArea>
           </div>
-        </ScrollArea>
-      </div>
+        </>
+      )}
     </div>
   );
 }
@@ -587,7 +590,6 @@ export function RecipeBookDialog({
     selectedTags: [],
   });
   const [view, setView] = useState<DialogView>("browse");
-  const showCreateView = mode === "browse";
   const selectedRecipe = useMemo(
     () => recipes.find((recipe) => recipe.id === selectedRecipeId),
     [recipes, selectedRecipeId],
@@ -637,7 +639,7 @@ export function RecipeBookDialog({
       ? `Pick a ${swapMealType ?? "saved"} recipe from your book to fill this slot.`
       : view === "detail"
         ? "Check ingredients, instructions, and cookability right here."
-        : "Browse your saved recipes, see what you can cook today, and create new ones from your pantry.";
+        : "Browse your saved recipes, see what you can cook today, and create new ones — by dish or by pantry.";
 
   return (
     <Drawer open={open} onOpenChange={handleDrawerOpenChange} direction="left">
@@ -654,7 +656,7 @@ export function RecipeBookDialog({
               </Button>
             </DrawerClose>
           </div>
-          {showCreateView && view !== "detail" ? (
+          {view !== "detail" ? (
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -683,10 +685,12 @@ export function RecipeBookDialog({
               onBack={handleBackToBrowse}
               onDeleteRecipe={handleDeleteRecipe}
             />
-          ) : view === "create" && showCreateView ? (
+          ) : view === "create" ? (
             <RecipeBookCreate
               inventory={inventory}
+              dialogMode={mode}
               onCreateCustomRecipe={onCreateCustomRecipe}
+              onGenerateAndSwap={onGenerateAndSwap}
               onRecipeCreated={handleRecipeCreated}
             />
           ) : (
@@ -699,7 +703,6 @@ export function RecipeBookDialog({
               onBrowseStateChange={setBrowseState}
               onViewRecipe={handleViewRecipe}
               onSelectRecipe={onSelectRecipe}
-              onGenerateAndSwap={onGenerateAndSwap}
             />
           )}
         </div>
