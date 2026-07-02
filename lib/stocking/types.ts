@@ -32,6 +32,7 @@ export type StockImageRequest = {
 export type StockPresetRequest = {
   presetId: PresetId;
   stapleNames?: string[];
+  useSeed?: boolean;
 };
 
 export type StockApiResponse = {

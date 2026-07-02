@@ -143,14 +143,6 @@ export function WeeklyPlanList({
     onMoveMealSlot(activeData.mealId, overData.day, overData.mealType);
   }
 
-  if (meals.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-        Hit &apos;Create plan&apos; to build your week and see what&apos;s cookable!
-      </div>
-    );
-  }
-
   return (
     <>
       <DndContext
@@ -159,6 +151,11 @@ export function WeeklyPlanList({
         onDragEnd={handleDragEnd}
       >
         <div className="flex h-full w-full min-h-0 flex-col rounded-xl border bg-muted/20 p-3">
+          {meals.length === 0 ? (
+            <div className="mb-3 shrink-0 rounded-xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              Hit &apos;Create plan&apos; to build your week and see what&apos;s cookable!
+            </div>
+          ) : null}
           <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
             <div
               className={`grid ${GRID_MIN_WIDTH}`}
