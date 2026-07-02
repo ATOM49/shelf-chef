@@ -21,7 +21,7 @@ function getSingleValue(value: string | string[] | undefined) {
 }
 
 const SIGN_IN_ERROR_MESSAGES: Record<string, string> = {
-  AccessDenied: "Hmm, this account isn't authorized for ShelfChef.",
+  AccessDenied: "Hmm, this account isn't authorized for Stockpot.",
   Configuration: "Something's off on our end — authentication isn't set up correctly.",
   Default: "Sign-in didn't work. Give it another go!",
   OAuthAccountNotLinked:
@@ -58,7 +58,7 @@ export default async function SignInPage({
               Sign in
             </Badge>
             <div className="space-y-1">
-              <CardTitle className="text-2xl">Welcome back to ShelfChef</CardTitle>
+              <CardTitle className="text-2xl">Welcome back to Stockpot</CardTitle>
               <CardDescription>
                 Sign in to get cooking — your pantry and planner are waiting.
               </CardDescription>

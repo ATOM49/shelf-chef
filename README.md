@@ -1,10 +1,10 @@
-# ShelfChef
+# Stockpot
 
 **Live App:** [https://shelf-chef-zeta.vercel.app/](https://shelf-chef-zeta.vercel.app/)
 
-![ShelfChef Screenshot](https://github.com/user-attachments/assets/b067d3ab-6d7f-4003-8f5d-67528d4de9ff)
+![Stockpot Screenshot](https://github.com/user-attachments/assets/b067d3ab-6d7f-4003-8f5d-67528d4de9ff)
 
-ShelfChef is an AI-powered kitchen management app that helps you track your pantry inventory, plan weekly meals, generate recipes, and build grocery lists — all in one place.
+Stockpot is an AI-powered kitchen management app that helps you track your pantry inventory, plan weekly meals, generate recipes, and build grocery lists — all in one place.
 
 ## Features
 
@@ -12,7 +12,7 @@ ShelfChef is an AI-powered kitchen management app that helps you track your pant
 - **AI stocking** — Describe what you have and let Gemini automatically populate your shelves. Use preset stocking options for common household setups.
 - **Weekly meal planner** — Generate a full week of AI-suggested meals (Lunch & Dinner) based on what's in your inventory. See at a glance which meals are ready to cook and which are missing ingredients.
 - **Recipe book** — Save and browse recipes generated for your plan. Each recipe links to a reference source and lists required ingredients.
-- **Voice recipe generation** — Record a voice note describing a dish; ShelfChef transcribes it and generates a structured recipe.
+- **Voice recipe generation** — Record a voice note describing a dish; Stockpot transcribes it and generates a structured recipe.
 - **Grocery list** — Automatically build a shopping list from the missing ingredients across your weekly plan.
 - **Household support** — Create and switch between multiple households, each with their own inventory and plan.
 - **MCP integrations** — Connect external tools via OAuth (Notion, GitHub) through the MCP playground at `/playground/mcp`.

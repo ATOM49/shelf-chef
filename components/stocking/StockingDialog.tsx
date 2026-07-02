@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { LoaderCircle, XIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ImagePlus, LoaderCircle, Trash2, XIcon } from "lucide-react";
 import { generateId } from "@/lib/id";
 import type { StockingItemDraft } from "@/lib/appState";
 import {
@@ -15,6 +15,7 @@ import { parseStockApiResponseForReview } from "@/lib/stocking/schema";
 import { INVENTORY_CATEGORIES, INVENTORY_UNITS } from "@/lib/inventory/types";
 import type {
   StockApiResponse,
+  StockImageRequest,
   StockPresetRequest,
   StockedItem,
   StockTextRequest,
@@ -46,14 +47,114 @@ import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { Textarea } from "@/components/ui/textarea";
 
 type Step = "input" | "preview";
-type PendingAction = "text" | PresetId;
+type PendingAction = "text" | "image" | PresetId;
+
+export type SharedStockImage = {
+  dataUrl: string;
+  fileName?: string;
+};
+
+type SelectedStockImage = {
+  base64: string;
+  dataUrl: string;
+  fileName: string;
+  mimeType: string;
+};
 
 type StockingDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCommit: (items: StockingItemDraft[]) => void;
   customStapleNames?: readonly string[];
+  sharedImage?: SharedStockImage | null;
+  onSharedImageConsumed?: () => void;
 };
+
+const MAX_STOCK_IMAGE_BYTES = 8 * 1024 * 1024;
+const ACCEPTED_STOCK_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+
+async function fileToSelectedStockImage(file: File): Promise<SelectedStockImage> {
+  if (file.size > MAX_STOCK_IMAGE_BYTES) {
+    throw new Error("Images must be smaller than 8 MB.");
+  }
+
+  const mimeType = normalizeImageMimeType(file);
+  if (!ACCEPTED_STOCK_IMAGE_TYPES.has(mimeType)) {
+    throw new Error("Choose a JPEG, PNG, WebP, HEIC, or HEIF image.");
+  }
+
+  const dataUrl = await readFileAsDataUrl(file);
+  return selectedStockImageFromDataUrl(dataUrl, file.name || "Selected image");
+}
+
+function selectedStockImageFromDataUrl(
+  dataUrl: string,
+  fileName: string,
+): SelectedStockImage {
+  const match = dataUrl.match(/^data:([^;]+);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) {
+    throw new Error("Shared image data could not be read.");
+  }
+
+  const mimeType = match[1].toLowerCase();
+  if (!ACCEPTED_STOCK_IMAGE_TYPES.has(mimeType)) {
+    throw new Error("Choose a JPEG, PNG, WebP, HEIC, or HEIF image.");
+  }
+
+  return {
+    base64: match[2],
+    dataUrl,
+    fileName,
+    mimeType,
+  };
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("Image could not be read."));
+    });
+    reader.addEventListener("error", () => {
+      reject(new Error("Image could not be read."));
+    });
+    reader.readAsDataURL(file);
+  });
+}
+
+function normalizeImageMimeType(file: File) {
+  if (file.type) {
+    return file.type.toLowerCase();
+  }
+
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  switch (extension) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "heic":
+      return "image/heic";
+    case "heif":
+      return "image/heif";
+    default:
+      return "application/octet-stream";
+  }
+}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -62,21 +163,28 @@ export function StockingDialog({
   onOpenChange,
   onCommit,
   customStapleNames = [],
+  sharedImage = null,
+  onSharedImageConsumed,
 }: StockingDialogProps) {
   const [step, setStep] = useState<Step>("input");
   const [freeText, setFreeText] = useState("");
+  const [selectedImage, setSelectedImage] = useState<SelectedStockImage | null>(
+    null,
+  );
   const [stockedItems, setStockedItems] = useState<StockedItem[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(
     null,
   );
   const [isPending, setIsPending] = useState(false);
+  const consumedSharedImageRef = useRef<string | null>(null);
 
   const handleClose = () => {
     onOpenChange(false);
     setTimeout(() => {
       setStep("input");
       setFreeText("");
+      setSelectedImage(null);
       setStockedItems([]);
       setApiError(null);
       setPendingAction(null);
@@ -95,7 +203,7 @@ export function StockingDialog({
     handleClose();
   };
 
-  const requestReview = (
+  const requestJsonReview = (
     endpoint: string,
     request: StockTextRequest | StockPresetRequest,
     nextPendingAction: PendingAction,
@@ -138,17 +246,89 @@ export function StockingDialog({
     })();
   };
 
+  const requestImageReview = useCallback(
+    (
+      image: SelectedStockImage,
+      nextPendingAction: PendingAction = "image",
+    ) => {
+      const stapleNames = getAllStapleNames(customStapleNames);
+      const stapleSet = new Set(stapleNames.map(normalizeIngredientName));
+      const request: StockImageRequest = {
+        imageBase64: image.base64,
+        imageMimeType: image.mimeType,
+        stapleNames,
+      };
+
+      setApiError(null);
+      setPendingAction(nextPendingAction);
+      setIsPending(true);
+      void (async () => {
+        try {
+          const res = await fetch("/api/stock/image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(request),
+          });
+          if (!res.ok) {
+            const err = (await res.json()) as { error?: string };
+            throw new Error(err.error ?? `HTTP ${res.status}`);
+          }
+          const rawData = (await res.json()) as StockApiResponse;
+          const data = parseStockApiResponseForReview(rawData);
+          const filtered = data.items.filter(
+            (item) => !stapleSet.has(normalizeIngredientName(item.name)),
+          );
+          setStockedItems(
+            filtered.map((item) => ({ ...item, id: generateId() })),
+          );
+          setStep("preview");
+        } catch (err) {
+          setApiError(err instanceof Error ? err.message : "Unknown error");
+        } finally {
+          setPendingAction(null);
+          setIsPending(false);
+        }
+      })();
+    },
+    [customStapleNames],
+  );
+
   const handleAnalyze = () => {
     const input = freeText.trim();
     if (!input) {
       return;
     }
 
-    requestReview("/api/stock", { input }, "text");
+    requestJsonReview("/api/stock", { input }, "text");
   };
 
   const handlePresetSelect = (presetId: PresetId) => {
-    requestReview("/api/stock/preset", { presetId }, presetId);
+    requestJsonReview("/api/stock/preset", { presetId }, presetId);
+  };
+
+  const handleImageFileChange = (file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const image = await fileToSelectedStockImage(file);
+        setSelectedImage(image);
+        setApiError(null);
+      } catch (err) {
+        setSelectedImage(null);
+        setApiError(err instanceof Error ? err.message : "Unknown error");
+      }
+    })();
+  };
+
+  const handleImageAnalyze = () => {
+    if (!selectedImage) {
+      return;
+    }
+
+    requestImageReview(selectedImage);
   };
 
   const handleCommit = () => {
@@ -181,6 +361,31 @@ export function StockingDialog({
   const pendingState = getStockPendingState(pendingAction);
   const trimmedInput = freeText.trim();
   const isTextPending = isPending && pendingAction === "text";
+  const isImagePending = isPending && pendingAction === "image";
+
+  useEffect(() => {
+    if (!open || !sharedImage || consumedSharedImageRef.current === sharedImage.dataUrl) {
+      return;
+    }
+
+    try {
+      const image = selectedStockImageFromDataUrl(
+        sharedImage.dataUrl,
+        sharedImage.fileName ?? "Shared image",
+      );
+      consumedSharedImageRef.current = sharedImage.dataUrl;
+      queueMicrotask(() => {
+        setSelectedImage(image);
+        requestImageReview(image);
+        onSharedImageConsumed?.();
+      });
+    } catch (err) {
+      queueMicrotask(() => {
+        setApiError(err instanceof Error ? err.message : "Unknown error");
+        onSharedImageConsumed?.();
+      });
+    }
+  }, [onSharedImageConsumed, open, requestImageReview, sharedImage]);
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
@@ -219,6 +424,9 @@ export function StockingDialog({
               isPending={isPending}
               pendingAction={pendingAction}
               apiError={apiError}
+              selectedImage={selectedImage}
+              onImageFileChange={handleImageFileChange}
+              onClearImage={() => setSelectedImage(null)}
               onSelectPreset={handlePresetSelect}
             />
           ) : (
@@ -236,6 +444,25 @@ export function StockingDialog({
             <>
               <Button type="button" variant="outline" onClick={handleClose}>
                 Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!selectedImage || isPending}
+                aria-busy={isImagePending}
+                onClick={handleImageAnalyze}
+              >
+                {isImagePending ? (
+                  <>
+                    <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                    <span>Analyzing image...</span>
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus className="size-4" aria-hidden />
+                    <span>Review image</span>
+                  </>
+                )}
               </Button>
               <Button
                 type="button"
@@ -296,6 +523,15 @@ function getStockPendingState(pendingAction: PendingAction | null) {
     };
   }
 
+  if (pendingAction === "image") {
+    return {
+      title: "Reading your stock image",
+      description:
+        "Scanning the image for groceries and suggesting where each item belongs.",
+      statusLabel: "Analyzing stock image",
+    };
+  }
+
   if (pendingAction) {
     const presetLabel = PRESET_METADATA[pendingAction].label;
 
@@ -322,6 +558,9 @@ type InputStepProps = {
   isPending: boolean;
   pendingAction: PendingAction | null;
   apiError: string | null;
+  selectedImage: SelectedStockImage | null;
+  onImageFileChange: (file: File | null) => void;
+  onClearImage: () => void;
   onSelectPreset: (presetId: PresetId) => void;
 };
 
@@ -331,8 +570,13 @@ function InputStep({
   isPending,
   pendingAction,
   apiError,
+  selectedImage,
+  onImageFileChange,
+  onClearImage,
   onSelectPreset,
 }: InputStepProps) {
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <>
       <DialogHeader className="px-0 pb-2 pt-0">
@@ -370,6 +614,72 @@ function InputStep({
             Natural language, loose lists, and mixed formatting are all fine. AI
             will extract the items and suggest storage details.
           </p>
+        </div>
+
+        <div className="grid gap-3 rounded-lg border bg-background p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold font-serif">
+                Add from an image
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Upload or share a receipt, grocery list, order screenshot, or
+                pantry photo.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              onClick={() => imageInputRef.current?.click()}
+            >
+              <ImagePlus className="size-4" aria-hidden />
+              <span>Choose image</span>
+            </Button>
+          </div>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            className="sr-only"
+            disabled={isPending}
+            onChange={(event) => {
+              onImageFileChange(event.target.files?.[0] ?? null);
+              event.currentTarget.value = "";
+            }}
+          />
+          {selectedImage ? (
+            <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-2">
+              <div
+                aria-hidden
+                className="size-14 rounded-md border object-cover"
+                style={{
+                  backgroundImage: `url(${selectedImage.dataUrl})`,
+                  backgroundPosition: "center",
+                  backgroundSize: "cover",
+                }}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">
+                  {selectedImage.fileName}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Ready to review from image
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Remove selected stock image"
+                disabled={isPending}
+                onClick={onClearImage}
+              >
+                <Trash2 className="size-4" aria-hidden />
+              </Button>
+            </div>
+          ) : null}
         </div>
         
         <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
