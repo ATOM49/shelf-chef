@@ -32,7 +32,7 @@ Parsing rules:
 - Split combined phrases into separate items.
 - Ignore non-food chatter and headings.
 - Keep the output order aligned with the order items appear in the raw input.
-- If the same ingredient appears more than once in the raw input, keep each occurrence so the client can merge duplicates deliberately later.
+- If the same ingredient appears more than once, return a single item and combine the quantity using the best unit you can infer.
 
 For each item:
 1. Choose one representative food emoji for the item (e.g. eggs -> 🥚, milk -> 🥛, spinach -> 🥬); omit emoji if uncertain.
@@ -48,6 +48,49 @@ For each item:
 
 Raw input to parse and enrich:
 ${input.trim()}
+
+Return JSON with one enriched item object per parsed food item.`;
+}
+
+export function buildStockImagePrompt(stapleNames: string[] = []): string {
+  const today = new Date().toISOString().split("T")[0];
+  const exclusionClause = buildStapleExclusionClause(stapleNames);
+
+  return `You are a smart kitchen inventory assistant. Inspect the attached image and extract distinct food inventory items that the user likely wants to add to their kitchen stock.
+
+Today's date: ${today}
+
+Allowed units: ${INVENTORY_UNITS.join(", ")}
+Allowed categories: ${INVENTORY_CATEGORIES.join(", ")}
+${exclusionClause}
+The image may be a grocery receipt, shopping list, pantry/fridge photo, delivery order screenshot, or a picture of groceries. Extract only food or kitchen inventory items that are visible or clearly named.
+
+Image reading rules:
+- Prefer explicit item names from visible text when the image is a receipt, order, or list.
+- For fridge, pantry, or grocery photos, include only recognizable food items.
+- Ignore totals, prices, discounts, dates, store names, payment details, packaging text that is not an item, and non-food items.
+- Keep the output order aligned with the order items appear in the image when possible.
+- If multiple units of the same ingredient are visible, return a single item and set quantity to the combined best guess from the image (e.g. two milk cartons -> quantity 2 count, two 500 ml cartons -> quantity 1000 ml).
+
+Storage type rules:
+- "fridge": perishables, dairy, eggs, fresh produce, meat, fish, open drinks, leftovers
+- "pantry": dry goods, grains, canned goods, spices, oils, flour, sugar, cereals
+
+Shelf naming guidelines:
+- Fridge shelves: "Dairy", "Produce", "Meat & Fish", "Beverages", "Leftovers & Condiments"
+- Pantry shelves: "Dry Goods & Grains", "Canned Goods", "Spices & Herbs", "Oils & Condiments", "Baking"
+
+For each item:
+1. Choose one representative food emoji for the item (e.g. eggs -> 🥚, milk -> 🥛, spinach -> 🥬); omit emoji if uncertain.
+2. Parse the ingredient name and clean obvious typos.
+3. If quantity is not given, infer a sensible default (e.g. 1 for count items, 500 for ml/g items).
+4. Pick the best unit from the allowed list.
+5. Assign the most fitting category.
+6. Decide fridge vs. pantry.
+7. Suggest a shelf name.
+8. Estimate expiresAt (YYYY-MM-DD) based on typical shelf life from today and omit the field for shelf-stable dry goods, spices, and canned items.
+9. Set flagged: true when the image is unclear, the item is partially obscured, or you cannot confidently assign all fields.
+10. If a field is genuinely unknown, return the item anyway, omit that field instead of inventing a random value, and keep flagged: true.
 
 Return JSON with one enriched item object per parsed food item.`;
 }

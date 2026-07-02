@@ -1,4 +1,5 @@
 import { ChatAnthropic } from "@langchain/anthropic";
+import { HumanMessage, type ContentBlock } from "@langchain/core/messages";
 import { ChatGoogle } from "@langchain/google";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
@@ -80,6 +81,14 @@ type StructuredLlmOptions<TSchema extends z.ZodTypeAny> = {
   grounding?: TavilyGroundingOptions;
 };
 
+type StructuredImageOptions<TSchema extends z.ZodTypeAny> =
+  StructuredLlmOptions<TSchema> & {
+    image: {
+      data: string;
+      mimeType: string;
+    };
+  };
+
 type ResolvedModelConfig = {
   provider: SupportedLlmProvider;
   model: string;
@@ -106,6 +115,19 @@ export async function generateStructuredObject<TSchema extends z.ZodTypeAny>(
 
   return runStructuredGenerationGraph(groundedPrompt, (prompt) =>
     invokeStructuredModel(prompt, options.schema, config),
+  );
+}
+
+export async function generateStructuredObjectFromImage<TSchema extends z.ZodTypeAny>(
+  options: StructuredImageOptions<TSchema>,
+): Promise<z.infer<TSchema>> {
+  const config = resolveModelConfig({
+    prompt: options.prompt,
+    schema: options.schema,
+  });
+
+  return runStructuredGenerationGraph(options.prompt, (prompt) =>
+    invokeStructuredImageModel(prompt, options.schema, config, options.image),
   );
 }
 
@@ -219,6 +241,22 @@ async function invokeStructuredModel<TSchema extends z.ZodTypeAny>(
   }
 }
 
+async function invokeStructuredImageModel<TSchema extends z.ZodTypeAny>(
+  prompt: string,
+  schema: TSchema,
+  config: ResolvedModelConfig,
+  image: StructuredImageOptions<TSchema>["image"],
+) {
+  switch (config.provider) {
+    case "gemini":
+      return invokeGeminiStructuredImageModel(prompt, schema, config, image);
+    case "openai":
+      return invokeOpenAIStructuredImageModel(prompt, schema, config, image);
+    case "anthropic":
+      return invokeAnthropicStructuredImageModel(prompt, schema, config, image);
+  }
+}
+
 async function invokeGeminiStructuredModel<TSchema extends z.ZodTypeAny>(
   prompt: string,
   schema: TSchema,
@@ -253,6 +291,26 @@ async function invokeGeminiStructuredModel<TSchema extends z.ZodTypeAny>(
   return parseStructuredResponse(schema, parseJsonText(extractResponseText(response)));
 }
 
+async function invokeGeminiStructuredImageModel<TSchema extends z.ZodTypeAny>(
+  prompt: string,
+  schema: TSchema,
+  config: ResolvedModelConfig,
+  image: StructuredImageOptions<TSchema>["image"],
+) {
+  ensureApiKey(config);
+
+  const model = new ChatGoogle({
+    apiKey: config.apiKey,
+    maxRetries: DEFAULT_MAX_RETRIES,
+    model: config.model,
+    responseSchema: schema,
+    temperature: DEFAULT_TEMPERATURE,
+  });
+
+  const response = await model.invoke([buildImageMessage(prompt, image)]);
+  return parseStructuredResponse(schema, parseJsonText(extractResponseText(response)));
+}
+
 async function invokeOpenAIStructuredModel<TSchema extends z.ZodTypeAny>(
   prompt: string,
   schema: TSchema,
@@ -269,6 +327,26 @@ async function invokeOpenAIStructuredModel<TSchema extends z.ZodTypeAny>(
 
   const structuredModel = model.withStructuredOutput(schema);
   const response = await structuredModel.invoke(prompt);
+  return parseStructuredResponse(schema, response);
+}
+
+async function invokeOpenAIStructuredImageModel<TSchema extends z.ZodTypeAny>(
+  prompt: string,
+  schema: TSchema,
+  config: ResolvedModelConfig,
+  image: StructuredImageOptions<TSchema>["image"],
+) {
+  ensureApiKey(config);
+
+  const model = new ChatOpenAI({
+    apiKey: config.apiKey,
+    maxRetries: DEFAULT_MAX_RETRIES,
+    model: config.model,
+    temperature: DEFAULT_TEMPERATURE,
+  });
+
+  const structuredModel = model.withStructuredOutput(schema);
+  const response = await structuredModel.invoke([buildImageMessage(prompt, image)]);
   return parseStructuredResponse(schema, response);
 }
 
@@ -291,6 +369,26 @@ async function invokeAnthropicStructuredModel<TSchema extends z.ZodTypeAny>(
   return parseStructuredResponse(schema, response);
 }
 
+async function invokeAnthropicStructuredImageModel<TSchema extends z.ZodTypeAny>(
+  prompt: string,
+  schema: TSchema,
+  config: ResolvedModelConfig,
+  image: StructuredImageOptions<TSchema>["image"],
+) {
+  ensureApiKey(config);
+
+  const model = new ChatAnthropic({
+    apiKey: config.apiKey,
+    maxRetries: DEFAULT_MAX_RETRIES,
+    model: config.model,
+    temperature: DEFAULT_TEMPERATURE,
+  });
+
+  const structuredModel = model.withStructuredOutput(schema);
+  const response = await structuredModel.invoke([buildImageMessage(prompt, image)]);
+  return parseStructuredResponse(schema, response);
+}
+
 function parseStructuredResponse<TSchema extends z.ZodTypeAny>(
   schema: TSchema,
   response: unknown,
@@ -301,6 +399,18 @@ function parseStructuredResponse<TSchema extends z.ZodTypeAny>(
   }
 
   return parsed.data;
+}
+
+function buildImageMessage(
+  prompt: string,
+  image: { data: string; mimeType: string },
+) {
+  const contentBlocks: Array<ContentBlock.Text | ContentBlock.Multimodal.Image> = [
+    { type: "text", text: prompt },
+    { type: "image", mimeType: image.mimeType, data: image.data },
+  ];
+
+  return new HumanMessage({ contentBlocks });
 }
 
 function buildPromptStructuredJsonRequest<TSchema extends z.ZodTypeAny>(

@@ -43,7 +43,7 @@ const fontMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "ShelfChef – Inventory and Meal Planning",
+  title: "Stockpot – Inventory and Meal Planning",
   description:
     "Manage fridge inventory, generate a weekly dinner plan, validate ingredients, and deduct stock when meals are cooked.",
 };

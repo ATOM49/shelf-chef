@@ -56,7 +56,10 @@ import { StorageEditorPanel } from "@/components/storage/StorageEditorPanel";
 import { StaplesPanel } from "@/components/storage/StaplesPanel";
 import { GroceryCartPanel } from "@/components/planner/GroceryCartPanel";
 import { PlannerSidebar } from "@/components/planner/PlannerSidebar";
-import { StockingDialog } from "@/components/stocking/StockingDialog";
+import {
+  StockingDialog,
+  type SharedStockImage,
+} from "@/components/stocking/StockingDialog";
 import {
   appReducer,
   arePlannerConfigsEqual,
@@ -103,6 +106,7 @@ import {
   LogOut,
   MoreHorizontal,
   PackagePlus,
+  RefreshCw,
   Settings2,
   ShoppingCart,
   SlidersHorizontal,
@@ -127,6 +131,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 type MobileTab = "storage" | "planner";
 type StorageTab = "fridge" | "pantry" | "staples";
@@ -144,6 +149,35 @@ function formatCartItemQuantity(quantity: number) {
   return Number.isInteger(quantity) ? quantity : quantity.toFixed(1);
 }
 
+const PULL_THRESHOLD = 72;
+const PULL_DAMPING_FACTOR = 0.4;
+const SHARED_STOCK_IMAGE_STORAGE_KEY = "stockpot:shared-stock-image";
+const LEGACY_SHARED_STOCK_IMAGE_STORAGE_KEY = "shelfchef:shared-stock-image";
+
+function parseSharedStockImagePayload(value: string): SharedStockImage | null {
+  try {
+    const parsed = JSON.parse(value) as {
+      dataUrl?: unknown;
+      fileName?: unknown;
+    };
+
+    if (
+      typeof parsed.dataUrl !== "string" ||
+      !parsed.dataUrl.startsWith("data:image/")
+    ) {
+      return null;
+    }
+
+    return {
+      dataUrl: parsed.dataUrl,
+      fileName:
+        typeof parsed.fileName === "string" ? parsed.fileName : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function FoodPlannerApp() {
   const [activeWorkspace, setActiveWorkspace] = useState<Workspace>(() =>
     loadWorkspacePreference(),
@@ -158,7 +192,9 @@ export function FoodPlannerApp() {
   const loadingDbStateRef = useRef(false);
   const isDbStateLoadedRef = useRef(false);
   const loadedWorkspaceKeyRef = useRef<string | null>(null);
-  const dbSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const dbSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
 
   const { data: session, status: sessionStatus } = useSession();
 
@@ -167,8 +203,11 @@ export function FoodPlannerApp() {
   const [householdsError, setHouseholdsError] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [prevIsInitializing, setPrevIsInitializing] = useState(isInitializing);
   const [storageTab, setStorageTab] = useState<StorageTab>("fridge");
   const [stockingOpen, setStockingOpen] = useState(false);
+  const [sharedStockImage, setSharedStockImage] =
+    useState<SharedStockImage | null>(null);
   const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
   const [selectedCell, setSelectedCell] = useState<
     { shelfId: string; cellId: string } | undefined
@@ -192,6 +231,11 @@ export function FoodPlannerApp() {
   const [plannerApiError, setPlannerApiError] = useState<string | null>(null);
   const [isPlannerPending, setIsPlannerPending] = useState(false);
   const [cartCopyError, setCartCopyError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const isRefreshingRef = useRef(false);
+  const touchStartYRef = useRef(0);
+  const isPullActiveRef = useRef(false);
   const fridgeInventory = state.inventory.filter(
     (item) => item.storageId === state.fridge.id,
   );
@@ -220,7 +264,9 @@ export function FoodPlannerApp() {
   const canUseClipboard =
     typeof navigator !== "undefined" && !!navigator.clipboard?.writeText;
   const activeHousehold = isHouseholdWorkspace(activeWorkspace)
-    ? households.find((household) => household.id === activeWorkspace.householdId)
+    ? households.find(
+        (household) => household.id === activeWorkspace.householdId,
+      )
     : undefined;
   const activeWorkspaceLabel = activeHousehold?.name ?? "Personal workspace";
 
@@ -251,7 +297,9 @@ export function FoodPlannerApp() {
     setHouseholdsError(null);
 
     const normalized = normalizeWorkspace(activeWorkspace, data.households);
-    if (serializeWorkspace(normalized) !== serializeWorkspace(activeWorkspace)) {
+    if (
+      serializeWorkspace(normalized) !== serializeWorkspace(activeWorkspace)
+    ) {
       setActiveWorkspace(normalized);
     }
 
@@ -287,9 +335,11 @@ export function FoodPlannerApp() {
     if (sessionStatus === "unauthenticated") {
       isDbStateLoadedRef.current = true;
       loadedWorkspaceKeyRef.current = serializeWorkspace(DEFAULT_WORKSPACE);
-      setHouseholds([]);
-      setHouseholdsReady(true);
-      setIsInitializing(false);
+      queueMicrotask(() => {
+        setHouseholds([]);
+        setHouseholdsReady(true);
+        setIsInitializing(false);
+      });
       return;
     }
 
@@ -303,7 +353,9 @@ export function FoodPlannerApp() {
       } catch (error) {
         if (!isCancelled) {
           setHouseholdsError(
-            error instanceof Error ? error.message : "Unable to load households",
+            error instanceof Error
+              ? error.message
+              : "Unable to load households",
           );
         }
       } finally {
@@ -329,9 +381,12 @@ export function FoodPlannerApp() {
 
     const normalizedWorkspace = normalizeWorkspace(activeWorkspace, households);
     if (
-      serializeWorkspace(normalizedWorkspace) !== serializeWorkspace(activeWorkspace)
+      serializeWorkspace(normalizedWorkspace) !==
+      serializeWorkspace(activeWorkspace)
     ) {
-      setActiveWorkspace(normalizedWorkspace);
+      queueMicrotask(() => {
+        setActiveWorkspace(normalizedWorkspace);
+      });
       return;
     }
 
@@ -342,21 +397,26 @@ export function FoodPlannerApp() {
     loadedWorkspaceKeyRef.current = null;
     isDbStateLoadedRef.current = false;
     loadingDbStateRef.current = true;
-    setWorkspaceError(null);
-    setIsInitializing(true);
-    dispatch({ type: "LOAD_STATE", state: localState });
+    queueMicrotask(() => {
+      setWorkspaceError(null);
+      setIsInitializing(true);
+      dispatch({ type: "LOAD_STATE", state: localState });
+    });
 
     void (async () => {
       try {
         const response = await fetch(buildStateUrl(normalizedWorkspace));
-        const data = (await response.json()) as { error?: string; state?: unknown };
+        const data = (await response.json()) as {
+          error?: string;
+          state?: unknown;
+        };
 
         if (!response.ok) {
           throw new Error(data.error ?? "Unable to load workspace state");
         }
 
         const revived = data.state
-          ? parsePersistedAppState(data.state) ?? createDefaultAppState()
+          ? (parsePersistedAppState(data.state) ?? createDefaultAppState())
           : createDefaultAppState();
 
         if (!isCancelled) {
@@ -383,7 +443,64 @@ export function FoodPlannerApp() {
     return () => {
       isCancelled = true;
     };
-  }, [activeWorkspace, buildStateUrl, households, householdsReady, sessionStatus]);
+  }, [
+    activeWorkspace,
+    buildStateUrl,
+    households,
+    householdsReady,
+    sessionStatus,
+  ]);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const sharedImagePayload =
+      sessionStorage.getItem(SHARED_STOCK_IMAGE_STORAGE_KEY) ??
+      sessionStorage.getItem(LEGACY_SHARED_STOCK_IMAGE_STORAGE_KEY);
+    const sharedImage = sharedImagePayload
+      ? parseSharedStockImagePayload(sharedImagePayload)
+      : null;
+    const shareError = searchParams.get("stockImageError");
+
+    if (sharedImage || shareError) {
+      queueMicrotask(() => {
+        if (sharedImage) {
+          sessionStorage.removeItem(SHARED_STOCK_IMAGE_STORAGE_KEY);
+          sessionStorage.removeItem(LEGACY_SHARED_STOCK_IMAGE_STORAGE_KEY);
+          setSharedStockImage(sharedImage);
+          setStorageTab("fridge");
+          setMobileTab("storage");
+          setStockingOpen(true);
+        }
+
+        if (shareError) {
+          setWorkspaceError(shareError);
+        }
+      });
+    }
+
+    if (
+      searchParams.has("stockImageShared") ||
+      searchParams.has("stockImageError")
+    ) {
+      searchParams.delete("stockImageShared");
+      searchParams.delete("stockImageError");
+      const nextSearch = searchParams.toString();
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`,
+      );
+    }
+  }, []);
+  // Auto-open the stocking dialog once for new users who have an empty inventory,
+  // as soon as initial load finishes. Adjusted during render (rather than in a
+  // useEffect) per https://react.dev/learn/you-might-not-need-an-effect.
+  if (isInitializing !== prevIsInitializing) {
+    setPrevIsInitializing(isInitializing);
+    if (!isInitializing && state.inventory.length === 0) {
+      setStockingOpen(true);
+    }
+  }
 
   // Save state to localStorage on every change; also debounce-save to DB when authenticated.
   useLayoutEffect(() => {
@@ -698,7 +815,11 @@ export function FoodPlannerApp() {
       }
       setRecipeBookState({ open: false, mode: "browse" });
     },
-    [recipeBookState.mealId, recipeBookState.fillDay, recipeBookState.fillMealType],
+    [
+      recipeBookState.mealId,
+      recipeBookState.fillDay,
+      recipeBookState.fillMealType,
+    ],
   );
 
   const handleCreateCustomRecipe = useCallback(
@@ -756,7 +877,11 @@ export function FoodPlannerApp() {
       });
 
       if (recipeBookState.mealId) {
-        dispatch({ type: "REPLACE_PLANNED_MEAL", mealId: recipeBookState.mealId, recipeId });
+        dispatch({
+          type: "REPLACE_PLANNED_MEAL",
+          mealId: recipeBookState.mealId,
+          recipeId,
+        });
       } else if (recipeBookState.fillDay && recipeBookState.fillMealType) {
         dispatch({
           type: "ADD_MEAL_TO_SLOT",
@@ -792,6 +917,82 @@ export function FoodPlannerApp() {
   const handleReset = () => {
     setResetDialogOpen(true);
   };
+
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshingRef.current || sessionStatus !== "authenticated") return;
+
+    isRefreshingRef.current = true;
+    setIsRefreshing(true);
+    try {
+      const freshHouseholds = await refreshHouseholds();
+      const normalizedWorkspace = normalizeWorkspace(activeWorkspace, freshHouseholds);
+      const response = await fetch(buildStateUrl(normalizedWorkspace));
+      const data = (await response.json()) as { error?: string; state?: unknown };
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to load workspace state");
+      }
+
+      const revived = data.state
+        ? parsePersistedAppState(data.state) ?? createDefaultAppState()
+        : createDefaultAppState();
+
+      loadingDbStateRef.current = true;
+      dispatch({ type: "LOAD_STATE", state: revived });
+    } catch (error) {
+      if (error instanceof Error) {
+        setWorkspaceError(error.message);
+      }
+    } finally {
+      isRefreshingRef.current = false;
+      setIsRefreshing(false);
+    }
+  }, [sessionStatus, refreshHouseholds, activeWorkspace, buildStateUrl]);
+
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      touchStartYRef.current = e.touches[0].clientY;
+      isPullActiveRef.current = false;
+    },
+    [],
+  );
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (isRefreshingRef.current) return;
+
+      const delta = e.touches[0].clientY - touchStartYRef.current;
+      if (delta <= 0) {
+        setPullDistance(0);
+        isPullActiveRef.current = false;
+        return;
+      }
+
+      // Don't activate if a scrollable ancestor is already scrolled down
+      let el = e.target as HTMLElement | null;
+      while (el) {
+        if (el.scrollTop > 0) {
+          setPullDistance(0);
+          isPullActiveRef.current = false;
+          return;
+        }
+        el = el.parentElement;
+      }
+
+      const clamped = Math.min(delta, PULL_THRESHOLD * 2);
+      setPullDistance(clamped);
+      isPullActiveRef.current = delta >= PULL_THRESHOLD;
+    },
+    [],
+  );
+
+  const handleTouchEnd = useCallback(() => {
+    if (isPullActiveRef.current && !isRefreshingRef.current) {
+      void handleRefresh();
+    }
+    setPullDistance(0);
+    isPullActiveRef.current = false;
+  }, [handleRefresh]);
 
   const handleConfirmReset = () => {
     resetPendingRef.current = true;
@@ -840,7 +1041,7 @@ export function FoodPlannerApp() {
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 pb-3">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-semibold text-foreground">
+              <h2 className="font-serif text-lg font-semibold text-foreground">
                 This week&apos;s plan
               </h2>
               {isPlanStale ? (
@@ -982,7 +1183,7 @@ export function FoodPlannerApp() {
       <div className="flex h-svh items-center justify-center bg-muted/30">
         <LottieLoadingPanel
           src={LOTTIE_ANIMATION_SOURCES.planner}
-          title="Loading your ShelfChef"
+          title="Loading your Stockpot"
           description="Syncing your inventory, recipes, and meal plan."
           statusLabel="Loading"
           className="min-h-[16rem]"
@@ -994,24 +1195,65 @@ export function FoodPlannerApp() {
   }
 
   return (
-    <div className="h-svh overflow-hidden bg-muted/30">
-      <div className="mx-auto flex h-full max-w-screen-2xl flex-col p-3 md:p-4">
+    <div
+      className="relative h-svh overflow-hidden bg-muted/30"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Pull-to-refresh indicator (mobile only) */}
+      {(pullDistance > 0 || isRefreshing) && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 z-50 flex items-center justify-center md:hidden"
+          style={{
+            height: isRefreshing ? 48 : Math.min(pullDistance, PULL_THRESHOLD),
+            opacity: isRefreshing ? 1 : Math.min(pullDistance / PULL_THRESHOLD, 1),
+          }}
+        >
+          {isRefreshing ? (
+            <LoaderCircle className="size-5 animate-spin text-primary" />
+          ) : (
+            <RefreshCw
+              className={cn(
+                "size-5 transition-colors",
+                pullDistance >= PULL_THRESHOLD
+                  ? "text-primary"
+                  : "text-muted-foreground",
+              )}
+              style={{
+                transform: `rotate(${Math.min((pullDistance / PULL_THRESHOLD) * 180, 180)}deg)`,
+              }}
+            />
+          )}
+        </div>
+      )}
+      <div
+        className="mx-auto flex h-full max-w-screen-2xl flex-col p-3 md:p-4"
+        style={
+          pullDistance > 0
+            ? {
+                transform: `translateY(${Math.min(pullDistance * PULL_DAMPING_FACTOR, PULL_THRESHOLD * PULL_DAMPING_FACTOR)}px)`,
+              }
+            : undefined
+        }
+      >
         <header className="shrink-0 rounded-xl border bg-card px-4 py-3 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xl">🍽️</span>
-              <h1 className="text-lg font-semibold">ShelfChef</h1>
+              <h1 className="font-serif text-lg font-semibold">Stockpot</h1>
               <Popover>
                 <PopoverTrigger
                   type="button"
-                  aria-label="What ShelfChef helps you do"
+                  aria-label="What Stockpot helps you do"
                   className="inline-flex size-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:outline-none"
                 >
                   <CircleHelp className="size-4" aria-hidden />
                 </PopoverTrigger>
                 <PopoverContent sideOffset={8} className="w-80 p-3">
                   <PopoverHeader>
-                    <PopoverTitle>What ShelfChef helps you do</PopoverTitle>
+                    <PopoverTitle>What Stockpot helps you do</PopoverTitle>
                     <PopoverDescription>
                       Stock your shelves, generate recipes from what you have,
                       and plan a full week of meals — all in one place.
@@ -1033,7 +1275,9 @@ export function FoodPlannerApp() {
                     <SelectValue>{activeWorkspaceLabel}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="personal">👤 Personal workspace</SelectItem>
+                    <SelectItem value="personal">
+                      👤 Personal workspace
+                    </SelectItem>
                     {households.map((household) => (
                       <SelectItem
                         key={household.id}
@@ -1049,11 +1293,16 @@ export function FoodPlannerApp() {
                     type="button"
                     aria-label="Household settings"
                     onClick={() => setHouseholdSettingsOpen(true)}
-                    className={buttonVariants({ variant: "outline", size: "icon-sm" })}
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "icon-sm",
+                    })}
                   >
                     <Settings2 className="size-4" aria-hidden />
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">Household settings</TooltipContent>
+                  <TooltipContent side="bottom">
+                    Household settings
+                  </TooltipContent>
                 </Tooltip>
                 <Button
                   type="button"
@@ -1084,7 +1333,10 @@ export function FoodPlannerApp() {
                   <DropdownMenuTrigger
                     type="button"
                     aria-label="More options"
-                    className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                    className={buttonVariants({
+                      variant: "ghost",
+                      size: "icon-sm",
+                    })}
                   >
                     <MoreHorizontal className="size-4" aria-hidden />
                   </DropdownMenuTrigger>
@@ -1094,6 +1346,16 @@ export function FoodPlannerApp() {
                       Sign out
                     </DropdownMenuLinkItem>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => void handleRefresh()}
+                      disabled={isRefreshing}
+                    >
+                      <RefreshCw
+                        className={cn("size-4", isRefreshing && "animate-spin")}
+                        aria-hidden
+                      />
+                      Refresh data
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       variant="destructive"
                       onClick={handleReset}
@@ -1137,11 +1399,19 @@ export function FoodPlannerApp() {
                 <DropdownMenuTrigger
                   type="button"
                   aria-label="More options"
-                  className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                  className={buttonVariants({
+                    variant: "ghost",
+                    size: "icon-sm",
+                  })}
                 >
                   <MoreHorizontal className="size-4" aria-hidden />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent side="bottom" align="end" sideOffset={6} className="w-56">
+                <DropdownMenuContent
+                  side="bottom"
+                  align="end"
+                  sideOffset={6}
+                  className="w-56"
+                >
                   <DropdownMenuLabel>Workspace</DropdownMenuLabel>
                   <DropdownMenuRadioGroup
                     value={serializeWorkspace(activeWorkspace)}
@@ -1162,7 +1432,9 @@ export function FoodPlannerApp() {
                     ))}
                   </DropdownMenuRadioGroup>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setHouseholdSettingsOpen(true)}>
+                  <DropdownMenuItem
+                    onClick={() => setHouseholdSettingsOpen(true)}
+                  >
                     <Settings2 className="size-4" aria-hidden />
                     Household settings
                   </DropdownMenuItem>
@@ -1173,9 +1445,16 @@ export function FoodPlannerApp() {
                   </DropdownMenuLinkItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    variant="destructive"
-                    onClick={handleReset}
+                    onClick={() => void handleRefresh()}
+                    disabled={isRefreshing}
                   >
+                    <RefreshCw
+                      className={cn("size-4", isRefreshing && "animate-spin")}
+                      aria-hidden
+                    />
+                    Refresh data
+                  </DropdownMenuItem>
+                  <DropdownMenuItem variant="destructive" onClick={handleReset}>
                     <Trash2 className="size-4" aria-hidden />
                     Reset workspace
                   </DropdownMenuItem>
@@ -1185,7 +1464,7 @@ export function FoodPlannerApp() {
           </div>
         </header>
 
-        {(householdsError || workspaceError) ? (
+        {householdsError || workspaceError ? (
           <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {householdsError ?? workspaceError}
           </div>
@@ -1333,7 +1612,8 @@ export function FoodPlannerApp() {
                       )}
                     </div>
                     <p className="shrink-0 text-xs text-muted-foreground">
-                      Add some items to your shelves and the AI will help organize everything!
+                      Add some items to your shelves and the AI will help
+                      organize everything!
                     </p>
                   </div>
                 </TabsContent>
@@ -1371,6 +1651,10 @@ export function FoodPlannerApp() {
           onOpenChange={setStockingOpen}
           onCommit={handleCommitStock}
           customStapleNames={state.customStapleNames}
+          sharedImage={sharedStockImage}
+          onSharedImageConsumed={() => setSharedStockImage(null)}
+          isNewUser={state.inventory.length === 0}
+          onSkipToPlanner={() => setMobileTab("planner")}
         />
         <HouseholdSettingsDialog
           open={householdSettingsOpen}
@@ -1437,7 +1721,9 @@ export function FoodPlannerApp() {
                 type="button"
                 className="w-full"
                 onClick={() => handleCopyCartSection(state.planner.groceryCart)}
-                disabled={state.planner.groceryCart.length === 0 || !canUseClipboard}
+                disabled={
+                  state.planner.groceryCart.length === 0 || !canUseClipboard
+                }
               >
                 <Copy className="size-4" aria-hidden="true" />
                 Copy shopping list
@@ -1475,8 +1761,8 @@ export function FoodPlannerApp() {
             <AlertDialogHeader>
               <AlertDialogTitle>Clear the weekly plan?</AlertDialogTitle>
               <AlertDialogDescription>
-                Your current plan and shopping cart will be cleared.
-                Your saved preferences will stay in place.
+                Your current plan and shopping cart will be cleared. Your saved
+                preferences will stay in place.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -1499,7 +1785,8 @@ export function FoodPlannerApp() {
                 Reset the app to default state?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Everything gets wiped — fridge, pantry, plan, and cart. A fresh start!
+                Everything gets wiped — fridge, pantry, plan, and cart. A fresh
+                start!
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

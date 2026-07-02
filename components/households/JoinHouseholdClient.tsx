@@ -104,7 +104,7 @@ export function JoinHouseholdClient({ token }: { token: string }) {
               Household invite
             </Badge>
             <div className="space-y-1">
-              <CardTitle className="text-2xl">Join a ShelfChef household</CardTitle>
+              <CardTitle className="text-2xl">Join a Stockpot household</CardTitle>
               <CardDescription>
                 Accepting this invite keeps your personal workspace and adds a new shared household workspace.
               </CardDescription>

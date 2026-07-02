@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { LoaderCircle, XIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ImagePlus, LoaderCircle, Trash2, XIcon } from "lucide-react";
 import { generateId } from "@/lib/id";
 import type { StockingItemDraft } from "@/lib/appState";
 import {
@@ -15,6 +15,7 @@ import { parseStockApiResponseForReview } from "@/lib/stocking/schema";
 import { INVENTORY_CATEGORIES, INVENTORY_UNITS } from "@/lib/inventory/types";
 import type {
   StockApiResponse,
+  StockImageRequest,
   StockPresetRequest,
   StockedItem,
   StockTextRequest,
@@ -25,6 +26,7 @@ import {
   DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -45,14 +47,119 @@ import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { Textarea } from "@/components/ui/textarea";
 
 type Step = "input" | "preview";
-type PendingAction = "text" | PresetId;
+type PendingAction = "text" | "image" | PresetId;
+type PresetMode = "instant" | "ai";
+
+export type SharedStockImage = {
+  dataUrl: string;
+  fileName?: string;
+};
+
+type SelectedStockImage = {
+  base64: string;
+  dataUrl: string;
+  fileName: string;
+  mimeType: string;
+};
 
 type StockingDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCommit: (items: StockingItemDraft[]) => void;
   customStapleNames?: readonly string[];
+  sharedImage?: SharedStockImage | null;
+  onSharedImageConsumed?: () => void;
+  /** Shown as a lightweight escape hatch for brand-new users with an empty inventory. */
+  isNewUser?: boolean;
+  /** Called when a new user chooses to skip stocking and go straight to planning. */
+  onSkipToPlanner?: () => void;
 };
+
+const MAX_STOCK_IMAGE_BYTES = 8 * 1024 * 1024;
+const ACCEPTED_STOCK_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+
+async function fileToSelectedStockImage(file: File): Promise<SelectedStockImage> {
+  if (file.size > MAX_STOCK_IMAGE_BYTES) {
+    throw new Error("Images must be smaller than 8 MB.");
+  }
+
+  const mimeType = normalizeImageMimeType(file);
+  if (!ACCEPTED_STOCK_IMAGE_TYPES.has(mimeType)) {
+    throw new Error("Choose a JPEG, PNG, WebP, HEIC, or HEIF image.");
+  }
+
+  const dataUrl = await readFileAsDataUrl(file);
+  return selectedStockImageFromDataUrl(dataUrl, file.name || "Selected image");
+}
+
+function selectedStockImageFromDataUrl(
+  dataUrl: string,
+  fileName: string,
+): SelectedStockImage {
+  const match = dataUrl.match(/^data:([^;]+);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) {
+    throw new Error("Shared image data could not be read.");
+  }
+
+  const mimeType = match[1].toLowerCase();
+  if (!ACCEPTED_STOCK_IMAGE_TYPES.has(mimeType)) {
+    throw new Error("Choose a JPEG, PNG, WebP, HEIC, or HEIF image.");
+  }
+
+  return {
+    base64: match[2],
+    dataUrl,
+    fileName,
+    mimeType,
+  };
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("Image could not be read."));
+    });
+    reader.addEventListener("error", () => {
+      reject(new Error("Image could not be read."));
+    });
+    reader.readAsDataURL(file);
+  });
+}
+
+function normalizeImageMimeType(file: File) {
+  if (file.type) {
+    return file.type.toLowerCase();
+  }
+
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  switch (extension) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "heic":
+      return "image/heic";
+    case "heif":
+      return "image/heif";
+    default:
+      return "application/octet-stream";
+  }
+}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -61,25 +168,41 @@ export function StockingDialog({
   onOpenChange,
   onCommit,
   customStapleNames = [],
+  sharedImage = null,
+  onSharedImageConsumed,
+  isNewUser = false,
+  onSkipToPlanner,
 }: StockingDialogProps) {
   const [step, setStep] = useState<Step>("input");
   const [freeText, setFreeText] = useState("");
+  const [selectedImage, setSelectedImage] = useState<SelectedStockImage | null>(
+    null,
+  );
   const [stockedItems, setStockedItems] = useState<StockedItem[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(
     null,
   );
   const [isPending, setIsPending] = useState(false);
+  const [presetMode, setPresetMode] = useState<PresetMode>("instant");
+  const consumedSharedImageRef = useRef<string | null>(null);
 
   const handleClose = () => {
     onOpenChange(false);
     setTimeout(() => {
       setStep("input");
       setFreeText("");
+      setSelectedImage(null);
       setStockedItems([]);
       setApiError(null);
       setPendingAction(null);
+      setPresetMode("instant");
     }, 300);
+  };
+
+  const handleSkipToPlanner = () => {
+    onSkipToPlanner?.();
+    handleClose();
   };
 
   const handleDialogOpenChange = (nextOpen: boolean) => {
@@ -94,7 +217,7 @@ export function StockingDialog({
     handleClose();
   };
 
-  const requestReview = (
+  const requestJsonReview = (
     endpoint: string,
     request: StockTextRequest | StockPresetRequest,
     nextPendingAction: PendingAction,
@@ -137,17 +260,93 @@ export function StockingDialog({
     })();
   };
 
+  const requestImageReview = useCallback(
+    (
+      image: SelectedStockImage,
+      nextPendingAction: PendingAction = "image",
+    ) => {
+      const stapleNames = getAllStapleNames(customStapleNames);
+      const stapleSet = new Set(stapleNames.map(normalizeIngredientName));
+      const request: StockImageRequest = {
+        imageBase64: image.base64,
+        imageMimeType: image.mimeType,
+        stapleNames,
+      };
+
+      setApiError(null);
+      setPendingAction(nextPendingAction);
+      setIsPending(true);
+      void (async () => {
+        try {
+          const res = await fetch("/api/stock/image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(request),
+          });
+          if (!res.ok) {
+            const err = (await res.json()) as { error?: string };
+            throw new Error(err.error ?? `HTTP ${res.status}`);
+          }
+          const rawData = (await res.json()) as StockApiResponse;
+          const data = parseStockApiResponseForReview(rawData);
+          const filtered = data.items.filter(
+            (item) => !stapleSet.has(normalizeIngredientName(item.name)),
+          );
+          setStockedItems(
+            filtered.map((item) => ({ ...item, id: generateId() })),
+          );
+          setStep("preview");
+        } catch (err) {
+          setApiError(err instanceof Error ? err.message : "Unknown error");
+        } finally {
+          setPendingAction(null);
+          setIsPending(false);
+        }
+      })();
+    },
+    [customStapleNames],
+  );
+
   const handleAnalyze = () => {
     const input = freeText.trim();
     if (!input) {
       return;
     }
 
-    requestReview("/api/stock", { input }, "text");
+    requestJsonReview("/api/stock", { input }, "text");
   };
 
   const handlePresetSelect = (presetId: PresetId) => {
-    requestReview("/api/stock/preset", { presetId }, presetId);
+    requestJsonReview(
+      "/api/stock/preset",
+      { presetId, useSeed: presetMode === "instant" },
+      presetId,
+    );
+  };
+
+  const handleImageFileChange = (file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const image = await fileToSelectedStockImage(file);
+        setSelectedImage(image);
+        setApiError(null);
+      } catch (err) {
+        setSelectedImage(null);
+        setApiError(err instanceof Error ? err.message : "Unknown error");
+      }
+    })();
+  };
+
+  const handleImageAnalyze = () => {
+    if (!selectedImage) {
+      return;
+    }
+
+    requestImageReview(selectedImage);
   };
 
   const handleCommit = () => {
@@ -177,82 +376,169 @@ export function StockingDialog({
     );
   };
 
-  const pendingState = getStockPendingState(pendingAction);
+  const pendingState = getStockPendingState(pendingAction, presetMode);
+  const trimmedInput = freeText.trim();
+  const isTextPending = isPending && pendingAction === "text";
+  const isImagePending = isPending && pendingAction === "image";
+
+  useEffect(() => {
+    if (!open || !sharedImage || consumedSharedImageRef.current === sharedImage.dataUrl) {
+      return;
+    }
+
+    try {
+      const image = selectedStockImageFromDataUrl(
+        sharedImage.dataUrl,
+        sharedImage.fileName ?? "Shared image",
+      );
+      consumedSharedImageRef.current = sharedImage.dataUrl;
+      queueMicrotask(() => {
+        setSelectedImage(image);
+        requestImageReview(image);
+        onSharedImageConsumed?.();
+      });
+    } catch (err) {
+      queueMicrotask(() => {
+        setApiError(err instanceof Error ? err.message : "Unknown error");
+        onSharedImageConsumed?.();
+      });
+    }
+  }, [onSharedImageConsumed, open, requestImageReview, sharedImage]);
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={handleDialogOpenChange}
-    >
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent
         aria-busy={isPending}
         showCloseButton={false}
-        className="w-full overflow-y-auto p-0"
+        className="w-full p-0"
       >
-        <div className="relative flex min-h-0 flex-1 flex-col p-6">
-          <div className="absolute right-2 top-2 z-20">
-            <DialogClose
-              render={
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="Close stocking dialog"
-                  disabled={isPending}
-                >
-                  <XIcon className="size-4" aria-hidden />
-                </Button>
-              }
+        <div className="absolute right-2 top-2 z-20">
+          <DialogClose
+            render={
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Close stocking dialog"
+                disabled={isPending}
+              >
+                <XIcon className="size-4" aria-hidden />
+              </Button>
+            }
+          />
+        </div>
+
+        <div
+          className={
+            isPending
+              ? "flex-1 overflow-y-auto p-6 pointer-events-none select-none opacity-30"
+              : "flex-1 overflow-y-auto p-6"
+          }
+        >
+          {step === "input" ? (
+            <InputStep
+              freeText={freeText}
+              onFreeTextChange={setFreeText}
+              isPending={isPending}
+              pendingAction={pendingAction}
+              apiError={apiError}
+              selectedImage={selectedImage}
+              onImageFileChange={handleImageFileChange}
+              onClearImage={() => setSelectedImage(null)}
+              onSelectPreset={handlePresetSelect}
+              presetMode={presetMode}
+              onPresetModeChange={setPresetMode}
+              isNewUser={isNewUser}
+              onSkipToPlanner={onSkipToPlanner ? handleSkipToPlanner : undefined}
+            />
+          ) : (
+            <PreviewStep
+              items={stockedItems}
+              onUpdateItem={updateStockedItem}
+            />
+          )}
+        </div>
+
+        <DialogFooter
+          className={isPending ? "pointer-events-none select-none opacity-30" : undefined}
+        >
+          {step === "input" ? (
+            <>
+              <Button type="button" variant="outline" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!selectedImage || isPending}
+                aria-busy={isImagePending}
+                onClick={handleImageAnalyze}
+              >
+                {isImagePending ? (
+                  <>
+                    <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                    <span>Analyzing image...</span>
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus className="size-4" aria-hidden />
+                    <span>Review image</span>
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                disabled={!trimmedInput || isPending}
+                aria-busy={isTextPending}
+                onClick={handleAnalyze}
+              >
+                {isTextPending ? (
+                  <>
+                    <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                    <span>Analyzing list...</span>
+                  </>
+                ) : (
+                  "Review stock suggestions"
+                )}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button type="button" variant="outline" onClick={() => setStep("input")}>
+                ← Back
+              </Button>
+              <Button
+                type="button"
+                disabled={stockedItems.length === 0}
+                onClick={handleCommit}
+              >
+                Add {stockedItems.length} item{stockedItems.length !== 1 ? "s" : ""} to inventory
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+
+        {isPending ? (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-popover/92 p-4 supports-backdrop-filter:backdrop-blur-sm">
+            <LottieLoadingPanel
+              src={LOTTIE_ANIMATION_SOURCES.stock}
+              title={pendingState.title}
+              description={pendingState.description}
+              statusLabel={pendingState.statusLabel}
+              className="min-h-[28rem]"
+              panelClassName="max-w-xl"
             />
           </div>
-
-          <div
-            className={
-              isPending
-                ? "pointer-events-none select-none opacity-30"
-                : undefined
-            }
-          >
-            {step === "input" ? (
-              <InputStep
-                freeText={freeText}
-                onFreeTextChange={setFreeText}
-                isPending={isPending}
-                pendingAction={pendingAction}
-                apiError={apiError}
-                onAnalyze={handleAnalyze}
-                onSelectPreset={handlePresetSelect}
-                onClose={handleClose}
-              />
-            ) : (
-              <PreviewStep
-                items={stockedItems}
-                onUpdateItem={updateStockedItem}
-                onBack={() => setStep("input")}
-                onCommit={handleCommit}
-              />
-            )}
-          </div>
-
-          {isPending ? (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-popover/92 p-4 supports-backdrop-filter:backdrop-blur-sm">
-              <LottieLoadingPanel
-                src={LOTTIE_ANIMATION_SOURCES.stock}
-                title={pendingState.title}
-                description={pendingState.description}
-                statusLabel={pendingState.statusLabel}
-                className="min-h-[28rem]"
-                panelClassName="max-w-xl"
-              />
-            </div>
-          ) : null}
-        </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   );
 }
 
-function getStockPendingState(pendingAction: PendingAction | null) {
+function getStockPendingState(
+  pendingAction: PendingAction | null,
+  presetMode: PresetMode,
+) {
   if (pendingAction === "text") {
     return {
       title: "Reading your stock note",
@@ -262,14 +548,31 @@ function getStockPendingState(pendingAction: PendingAction | null) {
     };
   }
 
+  if (pendingAction === "image") {
+    return {
+      title: "Reading your stock image",
+      description:
+        "Scanning the image for groceries and suggesting where each item belongs.",
+      statusLabel: "Analyzing stock image",
+    };
+  }
+
   if (pendingAction) {
     const presetLabel = PRESET_METADATA[pendingAction].label;
 
+    if (presetMode === "ai") {
+      return {
+        title: `Generating the ${presetLabel} preset with AI`,
+        description:
+          "Asking the AI to build out a fresh kitchen full of items for this preset — almost ready to review!",
+        statusLabel: "Generating stock preset",
+      };
+    }
+
     return {
-      title: `Generating the ${presetLabel} preset`,
-      description:
-        "Building out a kitchen full of items for this preset — almost ready to review!",
-      statusLabel: "Generating stock preset",
+      title: `Loading the ${presetLabel} preset`,
+      description: "Pulling in a ready-made set of items for this preset — almost ready to review!",
+      statusLabel: "Loading stock preset",
     };
   }
 
@@ -288,9 +591,14 @@ type InputStepProps = {
   isPending: boolean;
   pendingAction: PendingAction | null;
   apiError: string | null;
-  onAnalyze: () => void;
+  selectedImage: SelectedStockImage | null;
+  onImageFileChange: (file: File | null) => void;
+  onClearImage: () => void;
   onSelectPreset: (presetId: PresetId) => void;
-  onClose: () => void;
+  presetMode: PresetMode;
+  onPresetModeChange: (mode: PresetMode) => void;
+  isNewUser: boolean;
+  onSkipToPlanner?: () => void;
 };
 
 function InputStep({
@@ -299,12 +607,16 @@ function InputStep({
   isPending,
   pendingAction,
   apiError,
-  onAnalyze,
+  selectedImage,
+  onImageFileChange,
+  onClearImage,
   onSelectPreset,
-  onClose,
+  presetMode,
+  onPresetModeChange,
+  isNewUser,
+  onSkipToPlanner,
 }: InputStepProps) {
-  const trimmedInput = freeText.trim();
-  const isTextPending = isPending && pendingAction === "text";
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   return (
     <>
@@ -316,21 +628,158 @@ function InputStep({
       </DialogHeader>
 
       <div className="grid gap-6 pt-2">
+        {isNewUser && onSkipToPlanner ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed bg-muted/30 px-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              New here? You can stock up now, or jump straight to planning and
+              add items later.
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={isPending}
+              onClick={onSkipToPlanner}
+              className="shrink-0"
+            >
+              Skip — start planning →
+            </Button>
+          </div>
+        ) : null}
+
         <p className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">Tip:</span> Common
           kitchen staples — water, salt, oil, pepper, and sugar — are always
           assumed to be in stock. Visit the{" "}
-          <span className="font-medium text-foreground">🧂 Staples</span> tab
-          to see the full list or add your own (e.g. cumin, turmeric).
+          <span className="font-medium text-foreground">🧂 Staples</span> tab to
+          see the full list or add your own (e.g. cumin, turmeric).
         </p>
 
+        <div className="grid gap-1.5">
+          <Label htmlFor="stock-freetext">
+            Describe what you want to stock
+          </Label>
+          <Textarea
+            id="stock-freetext"
+            rows={6}
+            disabled={isPending}
+            placeholder={
+              "I bought eggs, milk, yogurt, spinach, rice, olive oil, and a few spices for the pantry."
+            }
+            value={freeText}
+            onChange={(e) => onFreeTextChange(e.target.value)}
+            className="text-sm"
+          />
+          <p className="text-xs text-muted-foreground">
+            Natural language, loose lists, and mixed formatting are all fine. AI
+            will extract the items and suggest storage details.
+          </p>
+        </div>
+
+        <div className="grid gap-3 rounded-lg border bg-background p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold font-serif">
+                Add from an image
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Upload or share a receipt, grocery list, order screenshot, or
+                pantry photo.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              onClick={() => imageInputRef.current?.click()}
+            >
+              <ImagePlus className="size-4" aria-hidden />
+              <span>Choose image</span>
+            </Button>
+          </div>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            className="sr-only"
+            disabled={isPending}
+            onChange={(event) => {
+              onImageFileChange(event.target.files?.[0] ?? null);
+              event.currentTarget.value = "";
+            }}
+          />
+          {selectedImage ? (
+            <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-2">
+              <div
+                aria-hidden
+                className="size-14 rounded-md border object-cover"
+                style={{
+                  backgroundImage: `url(${selectedImage.dataUrl})`,
+                  backgroundPosition: "center",
+                  backgroundSize: "cover",
+                }}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">
+                  {selectedImage.fileName}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Ready to review from image
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Remove selected stock image"
+                disabled={isPending}
+                onClick={onClearImage}
+              >
+                <Trash2 className="size-4" aria-hidden />
+              </Button>
+            </div>
+          ) : null}
+        </div>
+        
         <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
-          <div>
-            <p className="text-sm font-medium">Start from a kitchen preset</p>
-            <p className="text-xs text-muted-foreground">
-              AI-generated presets designed for urban Indian kitchens. Select
-              one to generate fridge and pantry items, then review the result.
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold font-serif">
+                Start from a kitchen preset
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {presetMode === "instant"
+                  ? "Ready-made presets for urban Indian kitchens. Select one to instantly fill fridge and pantry items, then review the result."
+                  : "Ask the AI to generate a fresh set of fridge and pantry items tailored to this preset, then review the result."}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-1 rounded-lg border bg-background p-0.5">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => onPresetModeChange("instant")}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+                  presetMode === "instant"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Instant
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => onPresetModeChange("ai")}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+                  presetMode === "ai"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                ✨ AI-generated
+              </button>
+            </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2" aria-busy={isPending}>
             {PRESET_ORDER.map((presetId) => {
@@ -356,17 +805,21 @@ function InputStep({
                   <span className="mt-1 block text-xs text-muted-foreground">
                     {meta.description}
                   </span>
-                  <span className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-foreground">
+                  <span>
                     {isActive && isPending ? (
-                      <>
+                      <div className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-foreground">
                         <LoaderCircle
                           className="size-3 animate-spin"
                           aria-hidden
                         />
-                        <span>Generating review...</span>
-                      </>
+                        <span>
+                          {presetMode === "instant"
+                            ? "Loading review..."
+                            : "Generating review..."}
+                        </span>
+                      </div>
                     ) : (
-                      <span>Generate from preset</span>
+                      <></>
                     )}
                   </span>
                 </button>
@@ -375,62 +828,11 @@ function InputStep({
           </div>
         </div>
 
-        <div className="grid gap-1.5">
-          <Label htmlFor="stock-freetext">
-            Describe what you want to stock
-          </Label>
-          <Textarea
-            id="stock-freetext"
-            rows={6}
-            disabled={isPending}
-            placeholder={
-              "I bought eggs, milk, yogurt, spinach, rice, olive oil, and a few spices for the pantry."
-            }
-            value={freeText}
-            onChange={(e) => onFreeTextChange(e.target.value)}
-            className="text-sm"
-          />
-          <p className="text-xs text-muted-foreground">
-            Natural language, loose lists, and mixed formatting are all fine. AI
-            will extract the items and suggest storage details.
-          </p>
-        </div>
-
         {apiError ? (
           <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {apiError}
           </p>
         ) : null}
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {isTextPending
-              ? "Parsing your note into inventory rows…"
-              : trimmedInput
-                ? "AI will read this note and lay out inventory rows for you to review."
-                : "Paste a note or use a preset to get started."}
-          </p>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={!trimmedInput || isPending}
-              aria-busy={isTextPending}
-              onClick={onAnalyze}
-            >
-              {isTextPending ? (
-                <>
-                  <LoaderCircle className="size-4 animate-spin" aria-hidden />
-                  <span>Analyzing list...</span>
-                </>
-              ) : (
-                "Review stock suggestions"
-              )}
-            </Button>
-          </div>
-        </div>
       </div>
     </>
   );
@@ -445,15 +847,11 @@ type PreviewStepProps = {
     field: K,
     value: StockedItem[K],
   ) => void;
-  onBack: () => void;
-  onCommit: () => void;
 };
 
 function PreviewStep({
   items,
   onUpdateItem,
-  onBack,
-  onCommit,
 }: PreviewStepProps) {
   const flaggedCount = items.filter((i) => i.flagged).length;
 
@@ -506,19 +904,6 @@ function PreviewStep({
               ))}
             </tbody>
           </table>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Button type="button" variant="outline" onClick={onBack}>
-            ← Back
-          </Button>
-          <Button
-            type="button"
-            disabled={items.length === 0}
-            onClick={onCommit}
-          >
-            Add {items.length} item{items.length !== 1 ? "s" : ""} to inventory
-          </Button>
         </div>
       </div>
     </>
