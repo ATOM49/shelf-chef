@@ -49,7 +49,7 @@ database configuration.
 AUTH_SECRET=your-auth-secret
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
-DATABASE_URL=postgres://user:password@host:5432/database?sslmode=require
+DATABASE_URL=postgres://user:password@host:5432/database?sslmode=verify-full
 ```
 
 For Google OAuth, add this callback URL in the Google Cloud Console:
