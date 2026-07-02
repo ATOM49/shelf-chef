@@ -396,9 +396,11 @@ export function FoodPlannerApp() {
     loadedWorkspaceKeyRef.current = null;
     isDbStateLoadedRef.current = false;
     loadingDbStateRef.current = true;
-    setWorkspaceError(null);
-    setIsInitializing(true);
-    dispatch({ type: "LOAD_STATE", state: localState });
+    queueMicrotask(() => {
+      setWorkspaceError(null);
+      setIsInitializing(true);
+      dispatch({ type: "LOAD_STATE", state: localState });
+    });
 
     void (async () => {
       try {

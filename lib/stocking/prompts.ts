@@ -32,7 +32,7 @@ Parsing rules:
 - Split combined phrases into separate items.
 - Ignore non-food chatter and headings.
 - Keep the output order aligned with the order items appear in the raw input.
-- If the same ingredient appears more than once in the raw input, keep each occurrence so the client can merge duplicates deliberately later.
+- If the same ingredient appears more than once, return a single item and combine the quantity using the best unit you can infer.
 
 For each item:
 1. Choose one representative food emoji for the item (e.g. eggs -> 🥚, milk -> 🥛, spinach -> 🥬); omit emoji if uncertain.
@@ -70,7 +70,7 @@ Image reading rules:
 - For fridge, pantry, or grocery photos, include only recognizable food items.
 - Ignore totals, prices, discounts, dates, store names, payment details, packaging text that is not an item, and non-food items.
 - Keep the output order aligned with the order items appear in the image when possible.
-- If multiple units of the same ingredient are visible as separate packages, keep each occurrence so the client can merge duplicates deliberately later.
+- If multiple units of the same ingredient are visible, return a single item and set quantity to the combined best guess from the image (e.g. two milk cartons -> quantity 2 count, two 500 ml cartons -> quantity 1000 ml).
 
 Storage type rules:
 - "fridge": perishables, dairy, eggs, fresh produce, meat, fish, open drinks, leftovers
