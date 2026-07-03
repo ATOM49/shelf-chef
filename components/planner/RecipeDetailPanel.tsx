@@ -20,20 +20,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ArrowLeft, ExternalLink, Trash2 } from "lucide-react";
+import {
+  formatMealTypeLabel,
+  formatSourceLabel,
+} from "@/components/entities/RecipeCard";
 import type {
   IngredientMatch,
   MealValidation,
   PlannedMeal,
   Recipe,
 } from "@/lib/planner/types";
-
-function formatMealTypeLabel(mealType: Recipe["mealType"]) {
-  return mealType.charAt(0).toUpperCase() + mealType.slice(1);
-}
-
-function formatSourceLabel(source: Recipe["source"]) {
-  return source === "user-saved" ? "saved" : "generated";
-}
 
 function describeMatch(match: IngredientMatch) {
   if (match.status === "staple") {

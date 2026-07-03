@@ -1,9 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ItemCard } from "@/components/entities/ItemCard";
+import { formatItemQuantity } from "@/components/entities/item-status";
+import {
+  RecipeCard,
+  formatMealTypeLabel,
+  formatSourceLabel,
+} from "@/components/entities/RecipeCard";
 import { RecipeDetailPanel } from "@/components/planner/RecipeDetailPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Drawer,
   DrawerClose,
@@ -60,14 +68,6 @@ const MEAL_TYPE_FILTERS: RecipeMealTypeFilter[] = [
   "dinner",
   "snack",
 ];
-
-function formatSourceLabel(source: RecipeSource) {
-  return source === "user-saved" ? "saved" : "generated";
-}
-
-function formatMealTypeLabel(mealType: Recipe["mealType"]) {
-  return mealType.charAt(0).toUpperCase() + mealType.slice(1);
-}
 
 function matchesSearch(recipe: Recipe, searchTerm: string) {
   const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -270,108 +270,38 @@ function RecipeBookBrowse({
         </div>
       ) : null}
       <ScrollArea className="min-h-0 flex-1 px-6 py-4">
-        <div className="grid gap-3 pb-4">
-          {filteredRecipes.length === 0 ? (
-            <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-              No recipes found — try adjusting the filters.
-            </div>
-          ) : null}
-          {filteredRecipes.map((recipe) => {
-            const validation = validationByRecipeId.get(recipe.id);
-            const availabilityLabel = validation?.canCook
-              ? "Can cook from current inventory"
-              : validation && (validation.lowItems.length > 0 || validation.missingItems.length > 0)
-                ? `${validation.lowItems.length + validation.missingItems.length} ingredient gaps`
-                : "Needs inventory review";
-            const availabilityVariant = validation?.canCook ? "default" : "outline";
-
-            return (
-              <div
+        {filteredRecipes.length === 0 ? (
+          <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+            No recipes found — try adjusting the filters.
+          </div>
+        ) : (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-3 pb-4">
+            {filteredRecipes.map((recipe) => (
+              <RecipeCard
                 key={recipe.id}
-                className={`rounded-2xl border bg-background p-4 shadow-sm transition-colors hover:border-border/80 ${mode === "browse" ? "cursor-pointer" : ""}`}
-                role={mode === "browse" ? "button" : undefined}
-                tabIndex={mode === "browse" ? 0 : undefined}
-                onClick={mode === "browse" ? () => onViewRecipe(recipe.id) : undefined}
-                onKeyDown={
-                  mode === "browse"
-                    ? (event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          onViewRecipe(recipe.id);
-                        }
-                      }
-                    : undefined
-                }
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  {mode === "browse" ? (
-                    <div className="min-w-0 flex-1 space-y-2 text-left">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-semibold text-foreground">{recipe.title}</h3>
-                        <Badge variant="outline">{formatMealTypeLabel(recipe.mealType)}</Badge>
-                        <Badge variant="secondary">{formatSourceLabel(recipe.source)}</Badge>
-                        <Badge variant={availabilityVariant}>{availabilityLabel}</Badge>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {recipe.cuisine ? `${recipe.cuisine} cuisine` : "Kitchen staple"}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-semibold text-foreground">{recipe.title}</h3>
-                        <Badge variant="outline">{formatMealTypeLabel(recipe.mealType)}</Badge>
-                        <Badge variant="secondary">{formatSourceLabel(recipe.source)}</Badge>
-                        <Badge variant={availabilityVariant}>{availabilityLabel}</Badge>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {recipe.cuisine ? `${recipe.cuisine} cuisine` : "Kitchen staple"}
-                      </div>
-                    </div>
-                  )}
-                  {mode === "swap" && onSelectRecipe ? (
-                    <Button type="button" onClick={() => onSelectRecipe(recipe.id)}>
+                recipe={recipe}
+                showSource
+                maxTags={2}
+                validation={validationByRecipeId.get(recipe.id)}
+                maxValidationItems={2}
+                onOpen={mode === "browse" ? () => onViewRecipe(recipe.id) : undefined}
+                className="aspect-square"
+                footer={
+                  mode === "swap" && onSelectRecipe ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => onSelectRecipe(recipe.id)}
+                    >
                       Use this recipe
                     </Button>
-                  ) : null}
-                </div>
-                {recipe.tags.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {recipe.tags.map((tag) => (
-                      <Badge key={`${recipe.id}-${tag}`} variant="outline">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
-                  <div>
-                    Ingredients: {recipe.ingredients.map((ingredient) => ingredient.name).join(", ")}
-                  </div>
-                  {validation && !validation.canCook && validation.missingItems.length > 0 ? (
-                    <div>Missing: {validation.missingItems.join(", ")}</div>
-                  ) : null}
-                  {validation && validation.lowItems.length > 0 ? (
-                    <div>Low stock: {validation.lowItems.join(", ")}</div>
-                  ) : null}
-                </div>
-                {recipe.referenceUrl ? (
-                  <div className="mt-3">
-                    <a
-                      href={recipe.referenceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-primary hover:underline"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      Open recipe source
-                    </a>
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
+                  ) : undefined
+                }
+              />
+            ))}
+          </div>
+        )}
       </ScrollArea>
     </div>
   );
@@ -524,26 +454,22 @@ function RecipeBookCreate({
             {filteredInventory.map((item) => {
               const isSelected = selectedInventoryItemIds.includes(item.id);
               return (
-                <label
+                <ItemCard
                   key={item.id}
-                  className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 transition-colors ${
-                    isSelected ? "border-primary/40 bg-primary/5" : "bg-background hover:bg-muted/40"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggleInventoryItem(item.id)}
-                    className="mt-1"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium text-foreground">{item.emoji ? `${item.emoji} ` : ""}{item.name}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {item.quantity} {item.unit} · {item.category}
-                      {item.expiresAt ? ` · expires ${item.expiresAt}` : ""}
-                    </div>
-                  </div>
-                </label>
+                  name={item.name}
+                  emoji={item.emoji}
+                  quantityLabel={formatItemQuantity(item.quantity, item.unit)}
+                  detail={`${item.category}${item.expiresAt ? ` · expires ${item.expiresAt}` : ""}`}
+                  selected={isSelected}
+                  onClick={() => toggleInventoryItem(item.id)}
+                  leading={
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={() => toggleInventoryItem(item.id)}
+                      aria-label={`Select ${item.name}`}
+                    />
+                  }
+                />
               );
             })}
             {filteredInventory.length === 0 ? (

@@ -202,7 +202,7 @@ export function WeeklyPlanList({
 
         <DragOverlay>
           {activeMeal ? (
-            <div className="w-40 md:w-auto md:min-w-48">
+            <div className="w-44 md:w-auto md:min-w-48">
               <MealCard
                 meal={activeMeal}
                 isSelected={false}
@@ -271,7 +271,7 @@ function MealSlot({
   return (
     <div
       ref={setNodeRef}
-      className={`min-h-36 border-r border-b p-2 transition-colors last:border-r-0 ${isOver ? "bg-muted/60" : "bg-muted/10"}`}
+      className={`min-h-48 border-r border-b p-2 transition-colors last:border-r-0 ${isOver ? "bg-muted/60" : "bg-muted/10"}`}
     >
       {slot.meal ? (
         <DraggableMealCard

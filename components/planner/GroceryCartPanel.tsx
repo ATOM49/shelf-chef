@@ -1,8 +1,20 @@
 "use client";
 
-import { Copy } from "lucide-react";
+import { CookingPot, Copy } from "lucide-react";
 
+import { ItemCard } from "@/components/entities/ItemCard";
+import { formatItemQuantity } from "@/components/entities/item-status";
+import { RecipeBadge } from "@/components/entities/RecipeBadge";
+import { badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import type { GroceryCartItem } from "@/lib/planner/types";
 
 type Props = {
@@ -12,11 +24,6 @@ type Props = {
   onCopyLowStock: () => void;
   canUseClipboard: boolean;
 };
-
-function formatQuantity(qty: number, unit: GroceryCartItem["unit"]): string {
-  const rounded = Number.isInteger(qty) ? qty : qty.toFixed(1);
-  return `${rounded} ${unit}`;
-}
 
 export function GroceryCartPanel({
   items,
@@ -31,87 +38,96 @@ export function GroceryCartPanel({
   const lowStock = items.filter((i) => i.reason === "low");
 
   return (
-    <section className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-4">
-      <div>
-        <h3 className="text-sm font-semibold text-foreground">Grocery cart</h3>
-        <p className="text-xs text-muted-foreground">Check off items as you buy them — they&apos;ll be added to the Groceries shelf in your pantry.</p>
-      </div>
-
-      {required.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-destructive">
-              Missing
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Copy missing items to clipboard"
-              onClick={onCopyMissing}
-              disabled={!canUseClipboard}
-            >
-              <Copy className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
-          {required.map((item) => (
-            <GroceryRow key={item.id} item={item} onToggle={onToggle} />
-          ))}
+    <TooltipProvider>
+      <section className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-4">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Grocery cart</h3>
+          <p className="text-xs text-muted-foreground">Check off items as you buy them — they&apos;ll be added to the Groceries shelf in your pantry.</p>
         </div>
-      )}
 
-      {lowStock.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-              Low stock top-ups
+        {required.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-destructive">
+                Missing
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Copy missing items to clipboard"
+                onClick={onCopyMissing}
+                disabled={!canUseClipboard}
+              >
+                <Copy className="size-4" aria-hidden="true" />
+              </Button>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Copy low stock items to clipboard"
-              onClick={onCopyLowStock}
-              disabled={!canUseClipboard}
-            >
-              <Copy className="size-4" aria-hidden="true" />
-            </Button>
+            {required.map((item) => (
+              <GroceryRow key={item.id} item={item} onToggle={onToggle} />
+            ))}
           </div>
-          {lowStock.map((item) => (
-            <GroceryRow key={item.id} item={item} onToggle={onToggle} />
-          ))}
-        </div>
-      )}
-    </section>
+        )}
+
+        {lowStock.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                Low stock top-ups
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Copy low stock items to clipboard"
+                onClick={onCopyLowStock}
+                disabled={!canUseClipboard}
+              >
+                <Copy className="size-4" aria-hidden="true" />
+              </Button>
+            </div>
+            {lowStock.map((item) => (
+              <GroceryRow key={item.id} item={item} onToggle={onToggle} />
+            ))}
+          </div>
+        )}
+      </section>
+    </TooltipProvider>
   );
 }
 
 function GroceryRow({ item, onToggle }: { item: GroceryCartItem; onToggle: (id: string) => void }) {
   return (
-    <label
-      className={`flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 transition-opacity ${
-        item.checked ? "opacity-50 line-through" : ""
-      }`}
-    >
-      <input
-        type="checkbox"
-        className="mt-0.5 accent-zinc-800"
-        checked={item.checked}
-        onChange={() => onToggle(item.id)}
-      />
-      <div className="flex flex-col">
-        <span className="text-sm font-medium text-foreground">
-          {item.displayName}{" "}
-          <span className="font-normal text-muted-foreground">
-            — {formatQuantity(item.neededQuantity, item.unit)}
-          </span>
-        </span>
-        {item.recipeTitles.length > 0 && (
-          <span className="text-xs text-muted-foreground">
-            For: {item.recipeTitles.join(", ")}
-          </span>
-        )}
-      </div>
-    </label>
+    <ItemCard
+      name={item.displayName}
+      quantityLabel={formatItemQuantity(item.neededQuantity, item.unit)}
+      status={item.reason}
+      muted={item.checked}
+      onClick={() => onToggle(item.id)}
+      leading={
+        <Checkbox
+          checked={item.checked}
+          onCheckedChange={() => onToggle(item.id)}
+          aria-label={`Mark ${item.displayName} as bought`}
+        />
+      }
+      trailing={
+        item.recipeTitles.length > 0 ? (
+          <Tooltip>
+            <TooltipTrigger
+              className={cn(badgeVariants({ variant: "outline" }), "cursor-help")}
+              aria-label={`Needed for ${item.recipeTitles.length} ${item.recipeTitles.length === 1 ? "recipe" : "recipes"}`}
+            >
+              <CookingPot aria-hidden />
+              {item.recipeTitles.length}
+            </TooltipTrigger>
+            <TooltipContent className="flex-wrap justify-center gap-1.5">
+              {item.recipeTitles.map((title) => (
+                <RecipeBadge key={title} title={title} />
+              ))}
+            </TooltipContent>
+          </Tooltip>
+        ) : undefined
+      }
+    />
   );
 }
