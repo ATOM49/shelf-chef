@@ -15,7 +15,11 @@ function pickBestInventoryItem(
   ingredientQuantity: number,
   ingredientUnit: InventoryUnit,
 ) {
-  const namedMatches = inventory.filter((item) => item.normalizedName === normalizedName);
+  const namedMatches = inventory.filter(
+    // Re-normalize with the current normalizer so items persisted under an
+    // older scheme still match freshly-normalized recipe ingredient names.
+    (item) => normalizeIngredientName(item.normalizedName || item.name) === normalizedName,
+  );
   if (namedMatches.length === 0) {
     return {
       item: undefined,
@@ -98,6 +102,10 @@ function summarizeNamedMatches(
   };
 }
 
+function pickInventoryEmoji(namedMatches: InventoryItem[]) {
+  return namedMatches.find((item) => item.emoji?.trim())?.emoji;
+}
+
 export function validateRecipeAgainstInventory(
   recipe: Recipe,
   inventory: InventoryItem[],
@@ -118,6 +126,7 @@ export function validateRecipeAgainstInventory(
       ingredient.quantity,
       ingredient.unit,
     );
+    const inventoryEmoji = pickInventoryEmoji(namedMatches);
 
     if (!item || !resolvedNeeded) {
       const availableSummary = summarizeNamedMatches(namedMatches, normalizedName, ingredient.unit);
@@ -125,6 +134,7 @@ export function validateRecipeAgainstInventory(
       if (namedMatches.length === 0 && !hasUnitMismatch && isStapleOrCustom(normalizedName, customStapleNames)) {
         return {
           ingredientName: ingredient.name,
+          emoji: inventoryEmoji ?? ingredient.emoji,
           normalizedName,
           neededQuantity: ingredient.quantity,
           neededUnit: ingredient.unit,
@@ -143,6 +153,7 @@ export function validateRecipeAgainstInventory(
 
       return {
         ingredientName: ingredient.name,
+        emoji: inventoryEmoji ?? ingredient.emoji,
         normalizedName,
         neededQuantity: ingredient.quantity,
         neededUnit: ingredient.unit,
@@ -161,6 +172,7 @@ export function validateRecipeAgainstInventory(
 
     return {
       ingredientName: ingredient.name,
+      emoji: item.emoji ?? ingredient.emoji,
       normalizedName,
       neededQuantity: ingredient.quantity,
       neededUnit: ingredient.unit,

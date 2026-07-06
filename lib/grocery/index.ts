@@ -11,6 +11,7 @@ import type { GroceryCartItem, PlannedMeal } from "@/lib/planner/types";
 
 type AggregatedNeed = {
   normalizedName: string;
+  emoji?: string;
   displayName: string;
   totalNeededInDisplayUnit: number;
   displayUnit: InventoryUnit;
@@ -18,6 +19,10 @@ type AggregatedNeed = {
   recipeIds: Set<string>;
   recipeTitles: Set<string>;
 };
+
+function pickInventoryEmoji(items: InventoryItem[]) {
+  return items.find((item) => item.emoji?.trim())?.emoji;
+}
 
 function resolveCartDisplayUnit(
   normalizedName: string,
@@ -65,8 +70,11 @@ export function buildGroceryCartFromMeals(
   const inventoryByName = new Map<string, InventoryItem[]>();
 
   for (const item of inventory) {
-    const existing = inventoryByName.get(item.normalizedName) ?? [];
-    inventoryByName.set(item.normalizedName, [...existing, item]);
+    // Re-normalize with the current normalizer so items persisted under an
+    // older scheme still key the same way as freshly-normalized recipe names.
+    const inventoryKey = normalizeIngredientName(item.normalizedName || item.name);
+    const existing = inventoryByName.get(inventoryKey) ?? [];
+    inventoryByName.set(inventoryKey, [...existing, item]);
   }
 
   for (const meal of meals) {
@@ -102,11 +110,13 @@ export function buildGroceryCartFromMeals(
         existing.totalNeededInDisplayUnit += resolvedQuantity;
         existing.hasNamedInventory =
           existing.hasNamedInventory || resolvedDisplay.hasNamedInventory;
+        existing.emoji ??= pickInventoryEmoji(matchingInventory) ?? ingredient.emoji;
         existing.recipeIds.add(meal.recipe.id);
         existing.recipeTitles.add(meal.recipe.title);
       } else {
         needsMap.set(normalizedName, {
           normalizedName,
+          emoji: pickInventoryEmoji(matchingInventory) ?? ingredient.emoji,
           displayName: ingredient.name,
           totalNeededInDisplayUnit: resolvedQuantity,
           displayUnit: resolvedDisplay.displayUnit,
@@ -133,6 +143,7 @@ export function buildGroceryCartFromMeals(
 
     cartItems.push({
       id: generateId(),
+      emoji: need.emoji,
       normalizedName,
       displayName: need.displayName,
       neededQuantity: Number(shortage.toFixed(2)),

@@ -1,9 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { ChefHat } from "lucide-react";
 
 import { isInteractiveTarget } from "@/components/entities/card-interaction";
-import { MealValidationSummary } from "@/components/planner/MealValidationSummary";
+import { MealValidationIndicator } from "@/components/planner/MealValidationSummary";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -20,25 +21,21 @@ export function formatMealTypeLabel(mealType: Recipe["mealType"]) {
   return mealType.charAt(0).toUpperCase() + mealType.slice(1);
 }
 
-export function formatSourceLabel(source: Recipe["source"]) {
-  return source === "user-saved" ? "saved" : "generated";
-}
-
 type RecipeCardData = Pick<Recipe, "title" | "mealType"> &
-  Partial<Pick<Recipe, "cuisine" | "servings" | "source" | "tags">>;
+  Partial<Pick<Recipe, "cuisine" | "servings" | "tags">>;
 
 type RecipeCardProps = {
   recipe: RecipeCardData;
-  /** Shows the saved/generated badge next to the meal type. */
-  showSource?: boolean;
+  /** Shows the meal type badge in the header row. */
+  showMealType?: boolean;
+  /** Adds the meal type to the tag row. */
+  includeMealTypeTag?: boolean;
   /** How many tag badges to render (0 hides tags). */
   maxTags?: number;
   /** Extra contextual chips appended to the header badge row. */
   badges?: ReactNode;
-  /** Renders the availability summary (Ready / Missing / Low + gap badges). */
+  /** Flags missing/low ingredients with a compact icon callout in the header. */
   validation?: MealValidation;
-  /** Caps the number of gap badges in the availability summary. */
-  maxValidationItems?: number;
   /** Makes the whole card clickable (nested controls still work). */
   onOpen?: () => void;
   selected?: boolean;
@@ -55,11 +52,11 @@ type RecipeCardProps = {
  */
 export function RecipeCard({
   recipe,
-  showSource = false,
+  showMealType = true,
+  includeMealTypeTag = false,
   maxTags = 0,
   badges,
   validation,
-  maxValidationItems,
   onOpen,
   selected = false,
   dragging = false,
@@ -67,8 +64,19 @@ export function RecipeCard({
   className,
 }: RecipeCardProps) {
   const interactive = Boolean(onOpen);
-  const visibleTags = maxTags > 0 ? (recipe.tags ?? []).slice(0, maxTags) : [];
-  const hiddenTagCount = (recipe.tags?.length ?? 0) - visibleTags.length;
+  const showValidation = validation !== undefined && !validation.canCook;
+  const hasHeaderBadges = showMealType || Boolean(badges) || showValidation;
+  const cardTags = includeMealTypeTag
+    ? [
+        formatMealTypeLabel(recipe.mealType),
+        ...(recipe.tags ?? []).filter(
+          (tag) =>
+            tag.trim().toLowerCase() !== recipe.mealType.trim().toLowerCase(),
+        ),
+      ]
+    : (recipe.tags ?? []);
+  const visibleTags = maxTags > 0 ? cardTags.slice(0, maxTags) : [];
+  const hiddenTagCount = cardTags.length - visibleTags.length;
 
   return (
     <Card
@@ -103,41 +111,40 @@ export function RecipeCard({
       }
     >
       <CardHeader>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="outline">{formatMealTypeLabel(recipe.mealType)}</Badge>
-          {showSource && recipe.source ? (
-            <Badge variant="secondary">{formatSourceLabel(recipe.source)}</Badge>
-          ) : null}
-          {badges}
-        </div>
+        {hasHeaderBadges ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {showMealType ? (
+              <Badge variant="outline">{formatMealTypeLabel(recipe.mealType)}</Badge>
+            ) : null}
+            {badges}
+            {showValidation && validation ? (
+              <MealValidationIndicator validation={validation} className="ml-auto" />
+            ) : null}
+          </div>
+        ) : null}
         <CardTitle className="line-clamp-2 font-serif" title={recipe.title}>
           {recipe.title}
         </CardTitle>
-        <CardDescription className="line-clamp-1">
-          {recipe.cuisine ? `${recipe.cuisine} cuisine` : "Kitchen staple"}
-          {recipe.servings ? ` · ${recipe.servings} servings` : ""}
+        <CardDescription className="flex items-center gap-1.5">
+          <ChefHat className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="truncate">
+            {recipe.cuisine ?? "Kitchen staple"}
+            {recipe.servings ? ` · ${recipe.servings} servings` : ""}
+          </span>
         </CardDescription>
       </CardHeader>
-      {validation || visibleTags.length > 0 ? (
-        <CardContent className="space-y-2">
-          {visibleTags.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
-              {visibleTags.map((tag) => (
-                <Badge key={tag} variant="outline" className="max-w-full">
-                  <span className="truncate">{tag}</span>
-                </Badge>
-              ))}
-              {hiddenTagCount > 0 ? (
-                <Badge variant="ghost">+{hiddenTagCount}</Badge>
-              ) : null}
-            </div>
-          ) : null}
-          {validation ? (
-            <MealValidationSummary
-              validation={validation}
-              maxItems={maxValidationItems}
-            />
-          ) : null}
+      {visibleTags.length > 0 ? (
+        <CardContent>
+          <div className="flex flex-wrap gap-1">
+            {visibleTags.map((tag) => (
+              <Badge key={tag} variant="outline" className="max-w-full">
+                <span className="truncate">{tag}</span>
+              </Badge>
+            ))}
+            {hiddenTagCount > 0 ? (
+              <Badge variant="ghost">+{hiddenTagCount}</Badge>
+            ) : null}
+          </div>
         </CardContent>
       ) : null}
       {footer ? (

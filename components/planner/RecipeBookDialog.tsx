@@ -6,7 +6,6 @@ import { formatItemQuantity } from "@/components/entities/item-status";
 import {
   RecipeCard,
   formatMealTypeLabel,
-  formatSourceLabel,
 } from "@/components/entities/RecipeCard";
 import { RecipeDetailPanel } from "@/components/planner/RecipeDetailPanel";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { XIcon } from "lucide-react";
 import type { InventoryItem } from "@/lib/inventory/types";
-import type { PlannedMealType, Recipe, RecipeSource } from "@/lib/planner/types";
+import type { PlannedMealType, Recipe } from "@/lib/planner/types";
 import { validateRecipeAgainstInventory } from "@/lib/planner/validation";
 
 type RecipeBookDialogProps = {
@@ -47,27 +46,44 @@ type RecipeBookDialogProps = {
   onDeleteRecipe: (recipeId: string) => void;
 };
 
-type RecipeSourceFilter = RecipeSource | "all";
-type RecipeMealTypeFilter = Recipe["mealType"] | "all";
 type DialogView = "browse" | "detail" | "create";
 type RecipeBrowseState = {
   searchTerm: string;
-  mealTypeFilter: RecipeMealTypeFilter;
-  sourceFilter: RecipeSourceFilter;
+  selectedTags: string[];
 };
 
-const SOURCE_FILTERS: RecipeSourceFilter[] = [
-  "all",
-  "user-requested",
-  "user-saved",
-];
-const MEAL_TYPE_FILTERS: RecipeMealTypeFilter[] = [
-  "all",
-  "breakfast",
-  "lunch",
-  "dinner",
-  "snack",
-];
+const MEAL_TYPE_TAG_ORDER = new Map<Recipe["mealType"], number>([
+  ["breakfast", 0],
+  ["lunch", 1],
+  ["dinner", 2],
+  ["snack", 3],
+]);
+
+function normalizeTag(tag: string) {
+  return tag.trim().toLowerCase();
+}
+
+function getRecipeTagLabels(recipe: Recipe) {
+  const labels = [
+    formatMealTypeLabel(recipe.mealType),
+    ...recipe.tags,
+  ].filter((tag) => tag.trim().length > 0);
+  const seen = new Set<string>();
+
+  return labels.filter((tag) => {
+    const normalizedTag = normalizeTag(tag);
+    if (seen.has(normalizedTag)) {
+      return false;
+    }
+
+    seen.add(normalizedTag);
+    return true;
+  });
+}
+
+function getRecipeTagSet(recipe: Recipe) {
+  return new Set(getRecipeTagLabels(recipe).map(normalizeTag));
+}
 
 function matchesSearch(recipe: Recipe, searchTerm: string) {
   const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -111,13 +127,17 @@ function RecipeBookBrowse({
   onSelectRecipe?: (recipeId: string) => void;
   onGenerateAndSwap?: (dishName: string) => Promise<void>;
 }) {
-  const { mealTypeFilter, searchTerm, sourceFilter } = browseState;
-  const effectiveMealTypeFilter =
-    mode === "swap" ? swapMealType ?? "all" : mealTypeFilter;
+  const { searchTerm, selectedTags } = browseState;
+  const effectiveMealTypeFilter: PlannedMealType | "all" =
+    mode === "swap" ? swapMealType ?? "all" : "all";
 
   const [generateDishName, setGenerateDishName] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const normalizedSelectedTags = useMemo(
+    () => selectedTags.map(normalizeTag),
+    [selectedTags],
+  );
 
   async function handleGenerateAndSwap() {
     const name = generateDishName.trim();
@@ -147,15 +167,52 @@ function RecipeBookBrowse({
     [inventory, recipes],
   );
 
+  const tagFilters = useMemo(() => {
+    const tagByNormalized = new Map<string, string>();
+
+    for (const recipe of recipes) {
+      for (const tag of getRecipeTagLabels(recipe)) {
+        const normalizedTag = normalizeTag(tag);
+        if (!tagByNormalized.has(normalizedTag)) {
+          tagByNormalized.set(normalizedTag, tag);
+        }
+      }
+    }
+
+    return [...tagByNormalized.values()].sort((left, right) => {
+      const leftMealType = left.toLowerCase() as Recipe["mealType"];
+      const rightMealType = right.toLowerCase() as Recipe["mealType"];
+      const leftMealOrder = MEAL_TYPE_TAG_ORDER.get(leftMealType);
+      const rightMealOrder = MEAL_TYPE_TAG_ORDER.get(rightMealType);
+
+      if (leftMealOrder !== undefined || rightMealOrder !== undefined) {
+        return (leftMealOrder ?? 99) - (rightMealOrder ?? 99);
+      }
+
+      return left.localeCompare(right, "en-US");
+    });
+  }, [recipes]);
+
+  function toggleTagFilter(tag: string) {
+    onBrowseStateChange({
+      ...browseState,
+      selectedTags: selectedTags.includes(tag)
+        ? selectedTags.filter((selectedTag) => selectedTag !== tag)
+        : [...selectedTags, tag],
+    });
+  }
+
   const filteredRecipes = useMemo(() => {
     const visibleRecipes = recipes.filter((recipe) => {
       const matchesMealType =
         effectiveMealTypeFilter === "all"
           ? true
           : recipe.mealType === effectiveMealTypeFilter;
-      const matchesSource =
-        sourceFilter === "all" ? true : recipe.source === sourceFilter;
-      return matchesMealType && matchesSource && matchesSearch(recipe, searchTerm);
+      const recipeTags = getRecipeTagSet(recipe);
+      const matchesTags = normalizedSelectedTags.every((tag) =>
+        recipeTags.has(tag),
+      );
+      return matchesMealType && matchesTags && matchesSearch(recipe, searchTerm);
     });
 
     return [...visibleRecipes].sort((left, right) => {
@@ -173,7 +230,13 @@ function RecipeBookBrowse({
         left.title.localeCompare(right.title, "en-US")
       );
     });
-  }, [effectiveMealTypeFilter, recipes, searchTerm, sourceFilter, validationByRecipeId]);
+  }, [
+    effectiveMealTypeFilter,
+    normalizedSelectedTags,
+    recipes,
+    searchTerm,
+    validationByRecipeId,
+  ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -195,20 +258,28 @@ function RecipeBookBrowse({
         <div className="grid gap-2">
           {mode === "browse" ? (
             <div className="flex flex-wrap gap-2">
-              {MEAL_TYPE_FILTERS.map((filter) => (
+              <Button
+                type="button"
+                size="sm"
+                variant={selectedTags.length === 0 ? "default" : "outline"}
+                onClick={() =>
+                  onBrowseStateChange({
+                    ...browseState,
+                    selectedTags: [],
+                  })
+                }
+              >
+                All tags
+              </Button>
+              {tagFilters.map((tag) => (
                 <Button
-                  key={filter}
+                  key={tag}
                   type="button"
                   size="sm"
-                  variant={mealTypeFilter === filter ? "default" : "outline"}
-                  onClick={() =>
-                    onBrowseStateChange({
-                      ...browseState,
-                      mealTypeFilter: filter,
-                    })
-                  }
+                  variant={selectedTags.includes(tag) ? "default" : "outline"}
+                  onClick={() => toggleTagFilter(tag)}
                 >
-                  {filter === "all" ? "All meals" : formatMealTypeLabel(filter)}
+                  {tag}
                 </Button>
               ))}
             </div>
@@ -217,24 +288,6 @@ function RecipeBookBrowse({
               <Badge variant="outline">Swapping {formatMealTypeLabel(swapMealType ?? "dinner")}</Badge>
             </div>
           )}
-          <div className="flex flex-wrap gap-2">
-            {SOURCE_FILTERS.map((filter) => (
-              <Button
-                key={filter}
-                type="button"
-                size="sm"
-                variant={sourceFilter === filter ? "default" : "outline"}
-                onClick={() =>
-                  onBrowseStateChange({
-                    ...browseState,
-                    sourceFilter: filter,
-                  })
-                }
-              >
-                {filter === "all" ? "All sources" : formatSourceLabel(filter)}
-              </Button>
-            ))}
-          </div>
         </div>
       </div>
       {mode === "swap" && onGenerateAndSwap ? (
@@ -280,10 +333,10 @@ function RecipeBookBrowse({
               <RecipeCard
                 key={recipe.id}
                 recipe={recipe}
-                showSource
-                maxTags={2}
+                showMealType={false}
+                includeMealTypeTag
+                maxTags={3}
                 validation={validationByRecipeId.get(recipe.id)}
-                maxValidationItems={2}
                 onOpen={mode === "browse" ? () => onViewRecipe(recipe.id) : undefined}
                 className="aspect-square"
                 footer={
@@ -531,8 +584,7 @@ export function RecipeBookDialog({
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>();
   const [browseState, setBrowseState] = useState<RecipeBrowseState>({
     searchTerm: "",
-    mealTypeFilter: "all",
-    sourceFilter: "all",
+    selectedTags: [],
   });
   const [view, setView] = useState<DialogView>("browse");
   const showCreateView = mode === "browse";

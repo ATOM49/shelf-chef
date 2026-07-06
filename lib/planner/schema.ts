@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { normalizeIngredientName } from "@/lib/inventory/normalize";
+import {
+  cleanIngredientDisplayName,
+  normalizeIngredientName,
+} from "@/lib/inventory/normalize";
 import { INVENTORY_UNITS } from "@/lib/inventory/types";
 import {
   buildInventoryUnitHints,
@@ -100,6 +103,7 @@ const WEEK_DAY_ALIASES: Record<string, PlannerWeekDay> = {
 const recipeIngredientSchema = z.object({
   name: z.string().trim().min(1).max(120),
   normalizedName: z.string().trim().min(1).max(120),
+  emoji: z.string().trim().emoji().optional(),
   quantity: z.number().finite().positive().max(100000),
   unit: z.enum(INVENTORY_UNITS),
   optional: z.boolean().optional(),
@@ -182,6 +186,7 @@ const maybeStringListSchema = z.union([z.array(z.string().nullable()), z.string(
 const recipeIngredientExtractionSchema = z.object({
   name: maybeStringSchema,
   normalizedName: maybeStringSchema,
+  emoji: maybeStringSchema,
   quantity: maybeNumberSchema,
   unit: maybeStringSchema,
   optional: z.union([z.boolean(), z.string()]).nullable().optional(),
@@ -457,10 +462,14 @@ function normalizeIngredient(
   ingredient: z.infer<typeof recipeIngredientExtractionSchema>,
   inventoryUnitHintMap: Map<string, InventoryUnitHint>,
 ) {
-  const name = normalizeText(ingredient.name);
-  if (!name || looksLikeMalformedText(name)) {
+  const rawName = normalizeText(ingredient.name);
+  if (!rawName || looksLikeMalformedText(rawName)) {
     return null;
   }
+
+  // Keep the user-facing name standard (no "chopped"/"fresh"/"…, slit" noise)
+  // so it reads cleanly and lines up with its normalized inventory key.
+  const name = cleanIngredientDisplayName(rawName) || rawName;
 
   const normalizedName = normalizeIngredientName(
     normalizeText(ingredient.normalizedName) || name,
@@ -478,10 +487,15 @@ function normalizeIngredient(
     unit,
     inventoryUnitHintMap,
   );
+  // A representative emoji so the ingredient renders like a stock item / cart
+  // item. Downstream (validation, grocery cart) prefers the emoji of a matching
+  // stocked item when one exists and falls back to this model-suggested one.
+  const emoji = normalizeEmoji(ingredient.emoji);
 
   const normalized = recipeIngredientSchema.safeParse({
     name,
     normalizedName,
+    emoji,
     quantity: alignedMeasurement.quantity,
     unit: alignedMeasurement.unit,
     optional: optional || undefined,
@@ -634,6 +648,20 @@ function normalizeUnit(value: unknown) {
   }
 
   return UNIT_ALIASES[value.trim().toLowerCase()];
+}
+
+function normalizeEmoji(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const parsed = z.string().emoji().safeParse(trimmed);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function normalizeBoolean(value: unknown) {

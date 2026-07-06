@@ -31,7 +31,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   LOTTIE_ANIMATION_SOURCES,
   LottieLoadingPanel,
@@ -49,6 +48,13 @@ import { Textarea } from "@/components/ui/textarea";
 type Step = "input" | "preview";
 type PendingAction = "text" | "image" | PresetId;
 type PresetMode = "instant" | "ai";
+
+const PRESET_EMOJI: Record<PresetId, string> = {
+  scarce: "🌱",
+  "fridge-heavy": "🧊",
+  "pantry-heavy": "🗄️",
+  "well-stocked": "🍱",
+};
 
 export type SharedStockImage = {
   dataUrl: string;
@@ -620,83 +626,42 @@ function InputStep({
 
   return (
     <>
-      <DialogHeader className="px-0 pb-2 pt-0">
-        <DialogTitle>Stock up!</DialogTitle>
-        <DialogDescription>
+      <DialogHeader className="px-0 pb-1 pt-0">
+        <DialogTitle>Stock up</DialogTitle>
+        <DialogDescription className="sr-only">
           Add items to your storage inventory.
         </DialogDescription>
       </DialogHeader>
 
-      <div className="grid gap-6 pt-2">
-        {isNewUser && onSkipToPlanner ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed bg-muted/30 px-3 py-2">
-            <p className="text-xs text-muted-foreground">
-              New here? You can stock up now, or jump straight to planning and
-              add items later.
-            </p>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
+      <div className="grid gap-5 pt-2">
+        {/* Describe / photo — one focused input surface */}
+        <div className="grid gap-2">
+          <div className="relative">
+            <Textarea
+              id="stock-freetext"
+              rows={5}
               disabled={isPending}
-              onClick={onSkipToPlanner}
-              className="shrink-0"
-            >
-              Skip — start planning →
-            </Button>
-          </div>
-        ) : null}
-
-        <p className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Tip:</span> Common
-          kitchen staples — water, salt, oil, pepper, and sugar — are always
-          assumed to be in stock. Visit the{" "}
-          <span className="font-medium text-foreground">🧂 Staples</span> tab to
-          see the full list or add your own (e.g. cumin, turmeric).
-        </p>
-
-        <div className="grid gap-1.5">
-          <Label htmlFor="stock-freetext">
-            Describe what you want to stock
-          </Label>
-          <Textarea
-            id="stock-freetext"
-            rows={6}
-            disabled={isPending}
-            placeholder={
-              "I bought eggs, milk, yogurt, spinach, rice, olive oil, and a few spices for the pantry."
-            }
-            value={freeText}
-            onChange={(e) => onFreeTextChange(e.target.value)}
-            className="text-sm"
-          />
-          <p className="text-xs text-muted-foreground">
-            Natural language, loose lists, and mixed formatting are all fine. AI
-            will extract the items and suggest storage details.
-          </p>
-        </div>
-
-        <div className="grid gap-3 rounded-lg border bg-background p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold font-serif">
-                Add from an image
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Upload or share a receipt, grocery list, order screenshot, or
-                pantry photo.
-              </p>
+              placeholder="Type or paste anything — “eggs, milk, spinach, rice, olive oil, a few spices…”"
+              value={freeText}
+              onChange={(e) => onFreeTextChange(e.target.value)}
+              className="resize-none pb-11 text-sm"
+            />
+            <div className="absolute inset-x-2 bottom-2 flex items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={isPending}
+                onClick={() => imageInputRef.current?.click()}
+                className="h-7 gap-1.5 px-2 text-muted-foreground"
+              >
+                <ImagePlus className="size-4" aria-hidden />
+                <span>Add a photo</span>
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                Lists, receipts &amp; photos all work
+              </span>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isPending}
-              onClick={() => imageInputRef.current?.click()}
-            >
-              <ImagePlus className="size-4" aria-hidden />
-              <span>Choose image</span>
-            </Button>
           </div>
           <input
             ref={imageInputRef}
@@ -713,21 +678,12 @@ function InputStep({
             <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-2">
               <div
                 aria-hidden
-                className="size-14 rounded-md border object-cover"
-                style={{
-                  backgroundImage: `url(${selectedImage.dataUrl})`,
-                  backgroundPosition: "center",
-                  backgroundSize: "cover",
-                }}
+                className="size-11 shrink-0 rounded-md border bg-cover bg-center"
+                style={{ backgroundImage: `url(${selectedImage.dataUrl})` }}
               />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
-                  {selectedImage.fileName}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Ready to review from image
-                </p>
-              </div>
+              <p className="min-w-0 flex-1 truncate text-sm font-medium">
+                {selectedImage.fileName}
+              </p>
               <Button
                 type="button"
                 size="icon-sm"
@@ -741,27 +697,21 @@ function InputStep({
             </div>
           ) : null}
         </div>
-        
-        <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold font-serif">
-                Start from a kitchen preset
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {presetMode === "instant"
-                  ? "Ready-made presets for urban Indian kitchens. Select one to instantly fill fridge and pantry items, then review the result."
-                  : "Ask the AI to generate a fresh set of fridge and pantry items tailored to this preset, then review the result."}
-              </p>
-            </div>
-            <div className="flex shrink-0 gap-1 rounded-lg border bg-background p-0.5">
+
+        {/* Presets */}
+        <div className="grid gap-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              or start from a preset
+            </span>
+            <div className="flex shrink-0 gap-0.5 rounded-lg border bg-muted/40 p-0.5">
               <button
                 type="button"
                 disabled={isPending}
                 onClick={() => onPresetModeChange("instant")}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
                   presetMode === "instant"
-                    ? "bg-muted text-foreground"
+                    ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -773,15 +723,15 @@ function InputStep({
                 onClick={() => onPresetModeChange("ai")}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
                   presetMode === "ai"
-                    ? "bg-muted text-foreground"
+                    ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                ✨ AI-generated
+                ✨ AI
               </button>
             </div>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2" aria-busy={isPending}>
+          <div className="grid grid-cols-2 gap-2" aria-busy={isPending}>
             {PRESET_ORDER.map((presetId) => {
               const meta = PRESET_METADATA[presetId];
               const isActive = pendingAction === presetId;
@@ -793,35 +743,21 @@ function InputStep({
                   disabled={isPending}
                   onClick={() => onSelectPreset(presetId)}
                   aria-busy={isActive && isPending}
-                  className={`rounded-lg border bg-background px-4 py-3 text-left transition-[border-color,background-color,opacity] disabled:cursor-not-allowed disabled:opacity-100 ${
+                  title={meta.description}
+                  className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-[border-color,background-color,opacity] disabled:cursor-not-allowed disabled:opacity-100 ${
                     isActive
-                      ? "border-foreground/20 bg-muted/80 shadow-sm"
-                      : "hover:bg-muted"
+                      ? "border-foreground/20 bg-muted shadow-sm"
+                      : "bg-background hover:bg-muted"
                   } ${isPending && !isActive ? "opacity-60" : ""}`}
                 >
-                  <span className="block text-sm font-medium">
-                    {meta.label}
-                  </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {meta.description}
-                  </span>
-                  <span>
+                  <span className="text-lg leading-none" aria-hidden>
                     {isActive && isPending ? (
-                      <div className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-foreground">
-                        <LoaderCircle
-                          className="size-3 animate-spin"
-                          aria-hidden
-                        />
-                        <span>
-                          {presetMode === "instant"
-                            ? "Loading review..."
-                            : "Generating review..."}
-                        </span>
-                      </div>
+                      <LoaderCircle className="size-4 animate-spin" aria-hidden />
                     ) : (
-                      <></>
+                      PRESET_EMOJI[presetId]
                     )}
                   </span>
+                  <span className="text-sm font-medium">{meta.label}</span>
                 </button>
               );
             })}
@@ -832,6 +768,21 @@ function InputStep({
           <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {apiError}
           </p>
+        ) : null}
+
+        {isNewUser && onSkipToPlanner ? (
+          <div className="flex justify-center pt-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={isPending}
+              onClick={onSkipToPlanner}
+              className="text-muted-foreground"
+            >
+              Skip for now — start planning →
+            </Button>
+          </div>
         ) : null}
       </div>
     </>
@@ -1022,8 +973,11 @@ function PreviewRow({ item, onUpdate }: PreviewRowProps) {
       </td>
       <td className="px-2 py-1 text-center min-w-6 w-6">
         {item.flagged ? (
-          <span title="Flagged for review" className="text-amber-500 text-sm">
-            ⚠
+          <span
+            title="Flagged for review"
+            className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800"
+          >
+            Review
           </span>
         ) : null}
       </td>

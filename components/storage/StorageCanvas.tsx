@@ -1,14 +1,27 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
-  useLayoutEffect,
-  useRef,
-  useState,
-  type DragEvent,
-  type ReactNode,
-} from "react";
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { StorageLayout } from "@/lib/fridge/types";
+import type { Shelf, StorageLayout } from "@/lib/fridge/types";
 import type { InventoryItem } from "@/lib/inventory/types";
 import { cn } from "@/lib/utils";
 import { StorageShelf } from "@/components/storage/StorageShelf";
@@ -16,10 +29,9 @@ import { StorageShelf } from "@/components/storage/StorageShelf";
 type StorageCanvasProps = {
   layout: StorageLayout;
   inventory: InventoryItem[];
-  selectedShelfId?: string;
-  onSelectShelf: (shelfId: string) => void;
-  onSelectCell: (shelfId: string, cellId: string) => void;
   onReorderShelves: (activeShelfId: string, overShelfId: string) => void;
+  onMoveItem: (itemId: string, cellId: string, overItemId?: string) => void;
+  lowStockItemNames?: Set<string>;
 };
 
 type StorageCanvasFrameProps = {
@@ -31,113 +43,126 @@ const BASE_SHELF_GAP = 12;
 const SCROLL_THRESHOLD = 1;
 
 export function StorageCanvas(props: StorageCanvasProps) {
-  const [draggedShelfId, setDraggedShelfId] = useState<string>();
-  const [dropTargetShelfId, setDropTargetShelfId] = useState<string>();
+  const [activeShelfId, setActiveShelfId] = useState<string>();
+  const [overShelfId, setOverShelfId] = useState<string>();
+  const shelfIds = props.layout.shelves.map((shelf) => shelf.id);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   const clearDragState = () => {
-    setDraggedShelfId(undefined);
-    setDropTargetShelfId(undefined);
-  };
-
-  const handleShelfDragStart = (
-    event: DragEvent<HTMLButtonElement>,
-    shelfId: string,
-  ) => {
-    setDraggedShelfId(shelfId);
-    setDropTargetShelfId(undefined);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", shelfId);
-  };
-
-  const handleShelfDragOver = (
-    event: DragEvent<HTMLDivElement>,
-    shelfId: string,
-  ) => {
-    if (!draggedShelfId || draggedShelfId === shelfId) {
-      return;
-    }
-
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    if (dropTargetShelfId !== shelfId) {
-      setDropTargetShelfId(shelfId);
-    }
-  };
-
-  const handleShelfDragLeave = (
-    event: DragEvent<HTMLDivElement>,
-    shelfId: string,
-  ) => {
-    const relatedTarget = event.relatedTarget;
-    if (
-      relatedTarget instanceof Node &&
-      event.currentTarget.contains(relatedTarget)
-    ) {
-      return;
-    }
-    setDropTargetShelfId((current) =>
-      current === shelfId ? undefined : current,
-    );
-  };
-
-  const handleShelfDrop = (
-    event: DragEvent<HTMLDivElement>,
-    shelfId: string,
-  ) => {
-    event.preventDefault();
-    const activeShelfId =
-      event.dataTransfer.getData("text/plain") || draggedShelfId;
-
-    if (activeShelfId && activeShelfId !== shelfId) {
-      props.onReorderShelves(activeShelfId, shelfId);
-    }
-
-    clearDragState();
+    setActiveShelfId(undefined);
+    setOverShelfId(undefined);
   };
 
   const shelfNodes = props.layout.shelves.map((shelf) => (
-    <StorageShelf
+    <SortableStorageShelf
       key={shelf.id}
       shelf={shelf}
       inventory={props.inventory.filter((item) => item.shelfId === shelf.id)}
       storageType={props.layout.storageType}
-      isSelected={props.selectedShelfId === shelf.id}
-      isDragging={draggedShelfId === shelf.id}
-      isDropTarget={
-        dropTargetShelfId === shelf.id && draggedShelfId !== shelf.id
-      }
-      onSelect={() => props.onSelectShelf(shelf.id)}
-      onSelectCell={(cellId) => props.onSelectCell(shelf.id, cellId)}
-      onDragStart={(event) => handleShelfDragStart(event, shelf.id)}
-      onDragEnd={clearDragState}
-      onDragOver={(event) => handleShelfDragOver(event, shelf.id)}
-      onDragLeave={(event) => handleShelfDragLeave(event, shelf.id)}
-      onDrop={(event) => handleShelfDrop(event, shelf.id)}
+      isDropTarget={overShelfId === shelf.id && activeShelfId !== shelf.id}
+      lowStockItemNames={props.lowStockItemNames}
+      onMoveItem={props.onMoveItem}
     />
   ));
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveShelfId(String(event.active.id));
+    setOverShelfId(undefined);
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    setOverShelfId(event.over ? String(event.over.id) : undefined);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const activeId = String(event.active.id);
+    const overId = event.over ? String(event.over.id) : undefined;
+
+    if (overId && activeId !== overId) {
+      props.onReorderShelves(activeId, overId);
+    }
+
+    clearDragState();
+  }
 
   const hasInventory = props.inventory.length > 0;
   const contentCount = hasInventory ? Math.max(props.layout.shelves.length, 1) : 1;
   const content = hasInventory ? (
     shelfNodes
   ) : (
-    <StorageEmptyState
-      storageType={props.layout.storageType}
-    />
+    <StorageEmptyState storageType={props.layout.storageType} />
   );
-
-  if (props.layout.storageType === "pantry") {
-    return (
-      <PantryCanvas
-        shelfNodes={content}
-        contentCount={contentCount}
-      />
+  const canvas =
+    props.layout.storageType === "pantry" ? (
+      <PantryCanvas shelfNodes={content} contentCount={contentCount} />
+    ) : (
+      <FridgeCanvasInner shelfNodes={content} contentCount={contentCount} />
     );
-  }
+
   return (
-    <FridgeCanvasInner
-      shelfNodes={content}
-      contentCount={contentCount}
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+      onDragCancel={clearDragState}
+    >
+      <SortableContext items={shelfIds} strategy={verticalListSortingStrategy}>
+        {canvas}
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function SortableStorageShelf({
+  shelf,
+  inventory,
+  storageType,
+  isDropTarget,
+  lowStockItemNames,
+  onMoveItem,
+}: {
+  shelf: Shelf;
+  inventory: InventoryItem[];
+  storageType: StorageLayout["storageType"];
+  isDropTarget: boolean;
+  lowStockItemNames?: Set<string>;
+  onMoveItem: (itemId: string, cellId: string, overItemId?: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: shelf.id });
+
+  return (
+    <StorageShelf
+      shelf={shelf}
+      inventory={inventory}
+      storageType={storageType}
+      isDragging={isDragging}
+      isDropTarget={isDropTarget}
+      lowStockItemNames={lowStockItemNames}
+      onMoveItem={onMoveItem}
+      rootRef={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      dragHandleRef={setActivatorNodeRef}
+      dragHandleProps={{ ...attributes, ...listeners }}
     />
   );
 }

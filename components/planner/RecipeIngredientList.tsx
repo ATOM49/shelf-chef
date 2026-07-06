@@ -48,6 +48,7 @@ export function RecipeIngredientList({
           <ItemCard
             key={`${ingredient.normalizedName}-${ingredient.unit}`}
             name={ingredient.name}
+            emoji={match?.emoji ?? ingredient.emoji}
             quantityLabel={formatItemQuantity(ingredient.quantity, ingredient.unit)}
             optional={ingredient.optional}
             detail={match ? buildAvailabilityDetail(match) : undefined}

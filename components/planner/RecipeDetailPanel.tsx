@@ -20,10 +20,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ArrowLeft, ExternalLink, Trash2 } from "lucide-react";
-import {
-  formatMealTypeLabel,
-  formatSourceLabel,
-} from "@/components/entities/RecipeCard";
+import { formatMealTypeLabel } from "@/components/entities/RecipeCard";
 import type {
   IngredientMatch,
   MealValidation,
@@ -85,11 +82,17 @@ export function RecipeDetailPanel({
 
   const isCooked = plannedMeal?.status === "completed";
   const stapleMatches = validation.matches.filter((m) => m.status === "staple");
+  const detailTags = [
+    formatMealTypeLabel(recipe.mealType),
+    ...recipe.tags.filter(
+      (tag) => tag.trim().toLowerCase() !== recipe.mealType.trim().toLowerCase(),
+    ),
+  ];
 
   const detailStats = [
     { label: "Ingredients", value: String(recipe.ingredients.length) },
     { label: "Steps", value: String(recipe.instructions?.length ?? 0) },
-    { label: "Tags", value: String(recipe.tags.length) },
+    { label: "Tags", value: String(detailTags.length) },
   ];
 
   return (
@@ -117,14 +120,6 @@ export function RecipeDetailPanel({
                 {recipe.servings ? ` · ${recipe.servings} servings` : ""}
               </div>
             ) : null}
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">
-                {formatMealTypeLabel(recipe.mealType)}
-              </Badge>
-              <Badge variant="secondary">
-                {formatSourceLabel(recipe.source)}
-              </Badge>
-            </div>
             <div className="space-y-2">
               <h3 className="text-2xl font-semibold font-serif leading-tight text-foreground sm:text-3xl">
                 {recipe.title}
@@ -295,7 +290,7 @@ export function RecipeDetailPanel({
       </section>
 
       {/* Tags */}
-      {recipe.tags.length > 0 ? (
+      {detailTags.length > 0 ? (
         <section className="rounded-2xl border bg-background/80 p-4 sm:p-5">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
@@ -306,7 +301,7 @@ export function RecipeDetailPanel({
             </h4>
           </div>
           <div className="mt-3 flex flex-wrap gap-2.5">
-            {recipe.tags.map((tag) => (
+            {detailTags.map((tag) => (
               <Badge key={`${recipe.id}-${tag}`} variant="outline">
                 {tag}
               </Badge>

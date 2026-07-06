@@ -9,6 +9,21 @@ import {
 
 const MAX_RECIPE_BOOK_PROMPT_ITEMS = 60;
 
+/**
+ * Naming rules the model must follow for every ingredient so recipe
+ * ingredients de-duplicate and match cleanly against inventory items. Shared
+ * across the weekly and custom recipe prompts.
+ */
+const INGREDIENT_NAMING_RULES = `Ingredient naming (critical — names must match and de-duplicate against inventory):
+- Each ingredient has three fields: "name" (shown to the user), "normalizedName" (canonical base ingredient used for inventory matching), and "emoji" (a single representative food emoji).
+- Use the plain, singular, base ingredient name. Do NOT include preparation or cut states (chopped, diced, sliced, minced, grated, crushed, slit, ground, mashed, boiled, roasted), freshness or size qualifiers (fresh, ripe, large, small, medium), or garnish notes.
+- Do NOT append clauses after a comma or inside parentheses. Write "tomato" not "tomato, chopped"; "green chili" not "green chilli, slit"; "mint" not "fresh mint leaves"; "onion" not "onion, finely diced".
+- Keep meaningful variety words that change what the item is (e.g. "green chili", "red onion", "whole wheat flour").
+- normalizedName must be lowercase, singular, and free of any descriptor (e.g. "tomato", "onion", "green chili", "coriander", "paneer").
+- emoji: pick one representative food emoji for the base ingredient (e.g. tomato → 🍅, egg → 🥚, milk → 🥛, paneer → 🧀, rice → 🍚, spinach → 🥬, chicken → 🍗). Use the same emoji for the same base ingredient across every recipe; omit it only when no reasonable food emoji fits.
+- Reuse the exact same base name for the same ingredient across every recipe so quantities aggregate correctly.
+- Put any preparation detail ("finely chopped", "slit") in the instructions, never in the ingredient name.`;
+
 function summarizeRecipeBook(recipes: Recipe[]) {
   if (recipes.length === 0) {
     return "- No saved recipe book entries yet.";
@@ -114,6 +129,8 @@ Requirements:
 - Keep recipe titles concise and natural.
 - Do not include markdown or explanation text.
 
+${INGREDIENT_NAMING_RULES}
+
 User preferences:
 ${preferenceSummary}
 
@@ -184,6 +201,8 @@ Requirements:
 - Include cuisine and instructions when you can do so confidently.
 - For referenceUrl: only include it when you are highly confident the exact URL is real and accessible. Only use https:// links from well-known cooking sites. If in doubt, omit referenceUrl entirely.
 - Keep the recipe practical for a home kitchen.
+
+${INGREDIENT_NAMING_RULES}
 
 ${requestedDishLine}
 

@@ -66,6 +66,7 @@ export type AppAction =
   | { type: "RESET_APP" }
   | { type: "ADD_INVENTORY_ITEM"; item: InventoryDraft }
   | { type: "UPDATE_INVENTORY_ITEM"; itemId: string; patch: Partial<InventoryDraft> }
+  | { type: "MOVE_INVENTORY_ITEM"; itemId: string; cellId: string; overItemId?: string }
   | { type: "REMOVE_INVENTORY_ITEM"; itemId: string }
   | { type: "ADD_CUSTOM_STAPLES"; names: string[] }
   | { type: "REMOVE_CUSTOM_STAPLE"; name: string }
@@ -480,6 +481,49 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         inventory: state.inventory.map((item) =>
           item.id === action.itemId ? patchInventoryItem(item, action.patch) : item,
         ),
+      };
+    }
+
+    case "MOVE_INVENTORY_ITEM": {
+      const activeItem = state.inventory.find((item) => item.id === action.itemId);
+      if (!activeItem) return state;
+
+      const movedItem = { ...activeItem, cellId: action.cellId };
+      const withoutActiveItem = state.inventory.filter((item) => item.id !== action.itemId);
+      const overIndex = action.overItemId
+        ? withoutActiveItem.findIndex((item) => item.id === action.overItemId)
+        : -1;
+
+      if (overIndex >= 0) {
+        return {
+          ...state,
+          inventory: [
+            ...withoutActiveItem.slice(0, overIndex),
+            movedItem,
+            ...withoutActiveItem.slice(overIndex),
+          ],
+        };
+      }
+
+      const lastTargetCellItemIndex = withoutActiveItem.findLastIndex(
+        (item) =>
+          item.shelfId === activeItem.shelfId && item.cellId === action.cellId,
+      );
+
+      if (lastTargetCellItemIndex >= 0) {
+        return {
+          ...state,
+          inventory: [
+            ...withoutActiveItem.slice(0, lastTargetCellItemIndex + 1),
+            movedItem,
+            ...withoutActiveItem.slice(lastTargetCellItemIndex + 1),
+          ],
+        };
+      }
+
+      return {
+        ...state,
+        inventory: [...withoutActiveItem, movedItem],
       };
     }
 

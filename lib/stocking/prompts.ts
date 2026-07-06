@@ -36,7 +36,7 @@ Parsing rules:
 
 For each item:
 1. Choose one representative food emoji for the item (e.g. eggs -> 🥚, milk -> 🥛, spinach -> 🥬); omit emoji if uncertain.
-2. Parse the ingredient name and clean obvious typos.
+2. Parse the ingredient name, clean obvious typos, and use the plain singular base name (e.g. "tomato", "green chili", "coriander") — no preparation states ("chopped", "diced"), freshness/size qualifiers ("fresh", "large"), or comma/parenthetical notes, so it de-duplicates against recipe ingredients.
 3. If quantity is not given, infer a sensible default (e.g. 1 for count items, 500 for ml/g items).
 4. Pick the best unit from the allowed list (e.g. eggs -> count, milk -> ml, rice -> g).
 5. Assign the most fitting category.
@@ -82,7 +82,7 @@ Shelf naming guidelines:
 
 For each item:
 1. Choose one representative food emoji for the item (e.g. eggs -> 🥚, milk -> 🥛, spinach -> 🥬); omit emoji if uncertain.
-2. Parse the ingredient name and clean obvious typos.
+2. Parse the ingredient name, clean obvious typos, and use the plain singular base name (e.g. "tomato", "green chili", "coriander") — no preparation states ("chopped", "diced"), freshness/size qualifiers ("fresh", "large"), or comma/parenthetical notes, so it de-duplicates against recipe ingredients.
 3. If quantity is not given, infer a sensible default (e.g. 1 for count items, 500 for ml/g items).
 4. Pick the best unit from the allowed list.
 5. Assign the most fitting category.
@@ -130,7 +130,7 @@ Shelf naming guidelines:
 
 For each generated item:
 1. Choose one representative food emoji for the item (e.g. eggs -> 🥚, milk -> 🥛, spinach -> 🥬); omit emoji if uncertain.
-2. Provide a clear item name.
+2. Provide a clear item name using the plain singular base name (e.g. "tomato", "green chili", "coriander") — no preparation states, freshness/size qualifiers, or comma/parenthetical notes.
 3. Choose a realistic household quantity.
 4. Pick the best unit from the allowed list.
 5. Assign the best-fit category.

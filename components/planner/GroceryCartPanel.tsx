@@ -99,6 +99,7 @@ function GroceryRow({ item, onToggle }: { item: GroceryCartItem; onToggle: (id: 
   return (
     <ItemCard
       name={item.displayName}
+      emoji={item.emoji}
       quantityLabel={formatItemQuantity(item.neededQuantity, item.unit)}
       status={item.reason}
       muted={item.checked}

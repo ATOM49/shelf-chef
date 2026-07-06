@@ -3,8 +3,8 @@
 import { RecipeCard } from "@/components/entities/RecipeCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DragHandle } from "@/components/ui/drag-handle";
 import type { PlannedMeal } from "@/lib/planner/types";
-import { GripVertical } from "lucide-react";
 import type { ButtonHTMLAttributes } from "react";
 
 type MealCardProps = {
@@ -27,8 +27,8 @@ export function MealCard({
   return (
     <RecipeCard
       recipe={meal.recipe}
+      showMealType={false}
       validation={meal.validation}
-      maxValidationItems={2}
       onOpen={onSelect}
       selected={isSelected}
       dragging={isDragging}
@@ -46,14 +46,10 @@ export function MealCard({
           ) : (
             <span />
           )}
-          <button
-            type="button"
+          <DragHandle
             aria-label={`Drag ${meal.recipe.title}`}
-            className="cursor-grab rounded border bg-background px-2 py-1 leading-none text-muted-foreground transition-colors hover:bg-muted active:cursor-grabbing"
             {...dragHandleProps}
-          >
-            <GripVertical className="size-3.5" aria-hidden />
-          </button>
+          />
         </>
       }
     />

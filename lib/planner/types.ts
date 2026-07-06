@@ -21,6 +21,7 @@ export type RecipeSource = "user-requested" | "user-saved";
 export type RecipeIngredient = {
   name: string;
   normalizedName: string;
+  emoji?: string;
   quantity: number;
   unit: InventoryUnit;
   optional?: boolean;
@@ -41,6 +42,7 @@ export type Recipe = {
 
 export type IngredientMatch = {
   ingredientName: string;
+  emoji?: string;
   normalizedName: string;
   neededQuantity: number;
   neededUnit: InventoryUnit;
@@ -135,6 +137,7 @@ export type CustomRecipeGenerationApiResponse = {
 
 export type GroceryCartItem = {
   id: string;
+  emoji?: string;
   normalizedName: string;
   displayName: string;
   neededQuantity: number;

@@ -52,7 +52,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StorageCanvas } from "@/components/storage/StorageCanvas";
-import { StorageEditorPanel } from "@/components/storage/StorageEditorPanel";
 import { StaplesPanel } from "@/components/storage/StaplesPanel";
 import { GroceryCartPanel } from "@/components/planner/GroceryCartPanel";
 import { PlannerSidebar } from "@/components/planner/PlannerSidebar";
@@ -66,7 +65,7 @@ import {
   createDefaultAppState,
   createPlannerConfigSnapshot,
 } from "@/lib/appState";
-import type { StockingItemDraft } from "@/lib/appState";
+import type { AppState, StockingItemDraft } from "@/lib/appState";
 import {
   parseCustomRecipeGenerationApiResponse,
   parsePlannerGenerationApiResponse,
@@ -135,6 +134,7 @@ import { cn } from "@/lib/utils";
 
 type MobileTab = "storage" | "planner";
 type StorageTab = "fridge" | "pantry" | "staples";
+type StorageAreaTab = Exclude<StorageTab, "staples">;
 
 type RecipeBookState = {
   open: boolean;
@@ -147,6 +147,25 @@ type RecipeBookState = {
 
 function formatCartItemQuantity(quantity: number) {
   return Number.isInteger(quantity) ? quantity : quantity.toFixed(1);
+}
+
+function toPlannerInventoryPayload(item: AppState["inventory"][number]) {
+  return {
+    name: item.name,
+    normalizedName: item.normalizedName,
+    quantity: item.quantity,
+    unit: item.unit,
+    category: item.category,
+    expiresAt: item.expiresAt,
+  };
+}
+
+function saveWorkspaceStateToDb(workspace: Workspace, state: AppState | null) {
+  return fetch("/api/state", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ state, workspace }),
+  });
 }
 
 const PULL_THRESHOLD = 72;
@@ -208,16 +227,6 @@ export function FoodPlannerApp() {
   const [stockingOpen, setStockingOpen] = useState(false);
   const [sharedStockImage, setSharedStockImage] =
     useState<SharedStockImage | null>(null);
-  const [selectedShelfId, setSelectedShelfId] = useState<string | undefined>();
-  const [selectedCell, setSelectedCell] = useState<
-    { shelfId: string; cellId: string } | undefined
-  >();
-  const [selectedPantryShelfId, setSelectedPantryShelfId] = useState<
-    string | undefined
-  >();
-  const [selectedPantryCell, setSelectedPantryCell] = useState<
-    { shelfId: string; cellId: string } | undefined
-  >();
   const [cartOpen, setCartOpen] = useState(false);
   const [plannerSettingsOpen, setPlannerSettingsOpen] = useState(false);
   const [householdSettingsOpen, setHouseholdSettingsOpen] = useState(false);
@@ -260,6 +269,9 @@ export function FoodPlannerApp() {
   );
   const lowStockCartItems = state.planner.groceryCart.filter(
     (item) => item.reason === "low",
+  );
+  const lowStockItemNames = new Set(
+    lowStockCartItems.map((item) => item.normalizedName),
   );
   const canUseClipboard =
     typeof navigator !== "undefined" && !!navigator.clipboard?.writeText;
@@ -526,14 +538,7 @@ export function FoodPlannerApp() {
         clearTimeout(dbSaveTimerRef.current);
       }
       dbSaveTimerRef.current = setTimeout(() => {
-        void fetch("/api/state", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            state: latestStateRef.current,
-            workspace: activeWorkspace,
-          }),
-        });
+        void saveWorkspaceStateToDb(activeWorkspace, latestStateRef.current);
       }, 1500);
     }
   }, [activeWorkspace, session?.user?.id, state]);
@@ -556,14 +561,7 @@ export function FoodPlannerApp() {
           clearTimeout(dbSaveTimerRef.current);
           dbSaveTimerRef.current = undefined;
         }
-        void fetch("/api/state", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            state: latestStateRef.current,
-            workspace: activeWorkspace,
-          }),
-        });
+        void saveWorkspaceStateToDb(activeWorkspace, latestStateRef.current);
       }
     };
 
@@ -582,47 +580,6 @@ export function FoodPlannerApp() {
     };
   }, [activeWorkspace, session?.user?.id]);
 
-  const handleSelectShelf = useCallback((shelfId: string) => {
-    setSelectedShelfId(shelfId);
-    setSelectedCell(undefined);
-    setStorageTab("fridge");
-    setMobileTab("storage");
-  }, []);
-
-  const handleSelectCell = useCallback((shelfId: string, cellId: string) => {
-    setSelectedShelfId(shelfId);
-    setSelectedCell({ shelfId, cellId });
-    setStorageTab("fridge");
-    setMobileTab("storage");
-  }, []);
-
-  const handleClearSelection = useCallback(() => {
-    setSelectedShelfId(undefined);
-    setSelectedCell(undefined);
-  }, []);
-
-  const handleSelectPantryShelf = useCallback((shelfId: string) => {
-    setSelectedPantryShelfId(shelfId);
-    setSelectedPantryCell(undefined);
-    setStorageTab("pantry");
-    setMobileTab("storage");
-  }, []);
-
-  const handleSelectPantryCell = useCallback(
-    (shelfId: string, cellId: string) => {
-      setSelectedPantryShelfId(shelfId);
-      setSelectedPantryCell({ shelfId, cellId });
-      setStorageTab("pantry");
-      setMobileTab("storage");
-    },
-    [],
-  );
-
-  const handleClearPantrySelection = useCallback(() => {
-    setSelectedPantryShelfId(undefined);
-    setSelectedPantryCell(undefined);
-  }, []);
-
   const handleWorkspaceChange = useCallback(
     (workspace: Workspace) => {
       const normalizedWorkspace = normalizeWorkspace(workspace, households);
@@ -633,34 +590,36 @@ export function FoodPlannerApp() {
       setPlannerSettingsOpen(false);
       setHouseholdSettingsOpen(false);
       setMobileTab("storage");
-      handleClearSelection();
-      handleClearPantrySelection();
     },
-    [handleClearPantrySelection, handleClearSelection, households],
+    [households],
+  );
+
+  const handleReorderShelves = useCallback(
+    (
+      target: StorageAreaTab,
+      activeShelfId: string,
+      overShelfId: string,
+    ) => {
+      dispatch({
+        type: "REORDER_SHELVES",
+        target,
+        activeShelfId,
+        overShelfId,
+      });
+    },
+    [],
   );
 
   const handleReorderFridgeShelves = useCallback(
-    (activeShelfId: string, overShelfId: string) => {
-      dispatch({
-        type: "REORDER_SHELVES",
-        target: "fridge",
-        activeShelfId,
-        overShelfId,
-      });
-    },
-    [],
+    (activeShelfId: string, overShelfId: string) =>
+      handleReorderShelves("fridge", activeShelfId, overShelfId),
+    [handleReorderShelves],
   );
 
   const handleReorderPantryShelves = useCallback(
-    (activeShelfId: string, overShelfId: string) => {
-      dispatch({
-        type: "REORDER_SHELVES",
-        target: "pantry",
-        activeShelfId,
-        overShelfId,
-      });
-    },
-    [],
+    (activeShelfId: string, overShelfId: string) =>
+      handleReorderShelves("pantry", activeShelfId, overShelfId),
+    [handleReorderShelves],
   );
 
   const handleCommitStock = useCallback((items: StockingItemDraft[]) => {
@@ -673,14 +632,7 @@ export function FoodPlannerApp() {
     void (async () => {
       try {
         const payload: PlannerGenerationRequest = {
-          inventory: state.inventory.map((item) => ({
-            name: item.name,
-            normalizedName: item.normalizedName,
-            quantity: item.quantity,
-            unit: item.unit,
-            category: item.category,
-            expiresAt: item.expiresAt,
-          })),
+          inventory: state.inventory.map(toPlannerInventoryPayload),
           preferences: state.planner.preferences,
           preferredDishes: state.planner.preferredDishes.map((dish) => ({
             name: dish.name,
@@ -795,7 +747,7 @@ export function FoodPlannerApp() {
     );
   }, []);
 
-  const handleSwapRecipeSelection = useCallback(
+  const applyRecipeToRecipeBookTarget = useCallback(
     (recipeId: string) => {
       if (recipeBookState.mealId) {
         dispatch({
@@ -811,15 +763,23 @@ export function FoodPlannerApp() {
           recipeId,
         });
       } else {
-        return;
+        return false;
       }
       setRecipeBookState({ open: false, mode: "browse" });
+      return true;
     },
     [
       recipeBookState.mealId,
       recipeBookState.fillDay,
       recipeBookState.fillMealType,
     ],
+  );
+
+  const handleSwapRecipeSelection = useCallback(
+    (recipeId: string) => {
+      applyRecipeToRecipeBookTarget(recipeId);
+    },
+    [applyRecipeToRecipeBookTarget],
   );
 
   const handleCreateCustomRecipe = useCallback(
@@ -830,14 +790,7 @@ export function FoodPlannerApp() {
     }) => {
       const inventorySubset = state.inventory
         .filter((item) => payload.inventoryItemIds.includes(item.id))
-        .map((item) => ({
-          name: item.name,
-          normalizedName: item.normalizedName,
-          quantity: item.quantity,
-          unit: item.unit,
-          category: item.category,
-          expiresAt: item.expiresAt,
-        }));
+        .map(toPlannerInventoryPayload);
 
       const response = await fetch("/api/recipes/generate/custom", {
         method: "POST",
@@ -876,31 +829,13 @@ export function FoodPlannerApp() {
         dishName,
       });
 
-      if (recipeBookState.mealId) {
-        dispatch({
-          type: "REPLACE_PLANNED_MEAL",
-          mealId: recipeBookState.mealId,
-          recipeId,
-        });
-      } else if (recipeBookState.fillDay && recipeBookState.fillMealType) {
-        dispatch({
-          type: "ADD_MEAL_TO_SLOT",
-          day: recipeBookState.fillDay,
-          mealType: recipeBookState.fillMealType,
-          recipeId,
-        });
-      } else {
-        return;
-      }
-      setRecipeBookState({ open: false, mode: "browse" });
+      applyRecipeToRecipeBookTarget(recipeId);
     },
     [
-      recipeBookState.mealId,
-      recipeBookState.fillDay,
-      recipeBookState.fillMealType,
       state.inventory,
       state.planner.preferences,
       handleCreateCustomRecipe,
+      applyRecipeToRecipeBookTarget,
     ],
   );
 
@@ -998,21 +933,145 @@ export function FoodPlannerApp() {
     resetPendingRef.current = true;
     clearWorkspaceAppState(activeWorkspace);
     if (session?.user?.id) {
-      void fetch("/api/state", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: null, workspace: activeWorkspace }),
-      });
+      void saveWorkspaceStateToDb(activeWorkspace, null);
     }
     dispatch({ type: "RESET_APP" });
-    handleClearSelection();
-    handleClearPantrySelection();
     setCartOpen(false);
     setPlannerSettingsOpen(false);
     setMobileTab("storage");
     setPlannerApiError(null);
     setResetDialogOpen(false);
   };
+
+  function renderStorageTabsControls(className: string) {
+    return (
+      <div className={className}>
+        <TabsList className="grid min-w-0 flex-1 grid-cols-3">
+          <TabsTrigger value="fridge">🧊 Fridge</TabsTrigger>
+          <TabsTrigger value="pantry">🗄️ Pantry</TabsTrigger>
+          <TabsTrigger value="staples">🧂 Staples</TabsTrigger>
+        </TabsList>
+        <Button
+          type="button"
+          size="sm"
+          className="shrink-0"
+          onClick={() => setStockingOpen(true)}
+          aria-label="Stock up"
+        >
+          <PackagePlus className="size-4" aria-hidden />
+          Stock up
+        </Button>
+      </div>
+    );
+  }
+
+  function renderStorageAreaContent(area: StorageAreaTab) {
+    const isFridge = area === "fridge";
+
+    return (
+      <StorageCanvas
+        layout={isFridge ? state.fridge : state.pantry}
+        inventory={isFridge ? fridgeInventory : pantryInventory}
+        onReorderShelves={
+          isFridge ? handleReorderFridgeShelves : handleReorderPantryShelves
+        }
+        onMoveItem={(itemId, cellId, overItemId) =>
+          dispatch({
+            type: "MOVE_INVENTORY_ITEM",
+            itemId,
+            cellId,
+            overItemId,
+          })
+        }
+        lowStockItemNames={lowStockItemNames}
+      />
+    );
+  }
+
+  function renderStaplesPanel() {
+    return (
+      <StaplesPanel
+        customStapleNames={state.customStapleNames}
+        onAddStaples={(names) =>
+          dispatch({ type: "ADD_CUSTOM_STAPLES", names })
+        }
+        onRemoveStaple={(name) =>
+          dispatch({ type: "REMOVE_CUSTOM_STAPLE", name })
+        }
+      />
+    );
+  }
+
+  function renderStorageTabContent(tab: StorageTab) {
+    return tab === "staples"
+      ? renderStaplesPanel()
+      : renderStorageAreaContent(tab);
+  }
+
+  function renderShoppingCartButton() {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        onClick={() => setCartOpen(true)}
+        aria-label="Shopping cart"
+        className="relative"
+      >
+        <ShoppingCart className="size-4" aria-hidden />
+        {uncheckedCartCount > 0 ? (
+          <Badge className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]">
+            {uncheckedCartCount}
+          </Badge>
+        ) : null}
+      </Button>
+    );
+  }
+
+  function renderSignOutMenuItem() {
+    return (
+      <DropdownMenuLinkItem href="/signout">
+        <LogOut className="size-4" aria-hidden />
+        Sign out
+      </DropdownMenuLinkItem>
+    );
+  }
+
+  function renderRefreshMenuItem() {
+    return (
+      <DropdownMenuItem
+        onClick={() => void handleRefresh()}
+        disabled={isRefreshing}
+      >
+        <RefreshCw
+          className={cn("size-4", isRefreshing && "animate-spin")}
+          aria-hidden
+        />
+        Refresh data
+      </DropdownMenuItem>
+    );
+  }
+
+  function renderResetWorkspaceMenuItem() {
+    return (
+      <DropdownMenuItem variant="destructive" onClick={handleReset}>
+        <Trash2 className="size-4" aria-hidden />
+        Reset workspace
+      </DropdownMenuItem>
+    );
+  }
+
+  function renderDrawerCloseButton(label: string) {
+    return (
+      <DrawerClose
+        aria-label={label}
+        className="absolute top-2 right-2 inline-flex size-7 items-center justify-center rounded-[min(var(--radius-md),12px)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+      >
+        <XIcon />
+        <span className="sr-only">Close</span>
+      </DrawerClose>
+    );
+  }
 
   function renderPlannerMainContent() {
     const plannerLoadingState = (
@@ -1314,21 +1373,7 @@ export function FoodPlannerApp() {
                   <BookOpen className="size-4" aria-hidden />
                   Recipe book
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setCartOpen(true)}
-                  aria-label="Shopping cart"
-                  className="relative"
-                >
-                  <ShoppingCart className="size-4" aria-hidden />
-                  {uncheckedCartCount > 0 ? (
-                    <Badge className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]">
-                      {uncheckedCartCount}
-                    </Badge>
-                  ) : null}
-                </Button>
+                {renderShoppingCartButton()}
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     type="button"
@@ -1341,28 +1386,10 @@ export function FoodPlannerApp() {
                     <MoreHorizontal className="size-4" aria-hidden />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent side="bottom" align="end" sideOffset={6}>
-                    <DropdownMenuLinkItem href="/signout">
-                      <LogOut className="size-4" aria-hidden />
-                      Sign out
-                    </DropdownMenuLinkItem>
+                    {renderSignOutMenuItem()}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => void handleRefresh()}
-                      disabled={isRefreshing}
-                    >
-                      <RefreshCw
-                        className={cn("size-4", isRefreshing && "animate-spin")}
-                        aria-hidden
-                      />
-                      Refresh data
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onClick={handleReset}
-                    >
-                      <Trash2 className="size-4" aria-hidden />
-                      Reset workspace
-                    </DropdownMenuItem>
+                    {renderRefreshMenuItem()}
+                    {renderResetWorkspaceMenuItem()}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -1380,21 +1407,7 @@ export function FoodPlannerApp() {
               >
                 <BookOpen className="size-4" aria-hidden />
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => setCartOpen(true)}
-                aria-label="Shopping cart"
-                className="relative"
-              >
-                <ShoppingCart className="size-4" aria-hidden />
-                {uncheckedCartCount > 0 ? (
-                  <Badge className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]">
-                    {uncheckedCartCount}
-                  </Badge>
-                ) : null}
-              </Button>
+              {renderShoppingCartButton()}
               <DropdownMenu>
                 <DropdownMenuTrigger
                   type="button"
@@ -1439,25 +1452,10 @@ export function FoodPlannerApp() {
                     Household settings
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuLinkItem href="/signout">
-                    <LogOut className="size-4" aria-hidden />
-                    Sign out
-                  </DropdownMenuLinkItem>
+                  {renderSignOutMenuItem()}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => void handleRefresh()}
-                    disabled={isRefreshing}
-                  >
-                    <RefreshCw
-                      className={cn("size-4", isRefreshing && "animate-spin")}
-                      aria-hidden
-                    />
-                    Refresh data
-                  </DropdownMenuItem>
-                  <DropdownMenuItem variant="destructive" onClick={handleReset}>
-                    <Trash2 className="size-4" aria-hidden />
-                    Reset workspace
-                  </DropdownMenuItem>
+                  {renderRefreshMenuItem()}
+                  {renderResetWorkspaceMenuItem()}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -1477,62 +1475,24 @@ export function FoodPlannerApp() {
               onValueChange={(v) => setStorageTab(v as StorageTab)}
               className="flex min-h-0 flex-1 flex-col"
             >
-              <div className="mb-3 flex items-center gap-2">
-                <TabsList className="grid flex-1 grid-cols-3 shrink-0">
-                  <TabsTrigger value="fridge">🧊 Fridge</TabsTrigger>
-                  <TabsTrigger value="pantry">🗄️ Pantry</TabsTrigger>
-                  <TabsTrigger value="staples">🧂 Staples</TabsTrigger>
-                </TabsList>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() => setStockingOpen(true)}
-                  aria-label="Stock items"
-                >
-                  <PackagePlus className="size-4" aria-hidden />
-                  <span className="hidden sm:inline">Stock items</span>
-                </Button>
-              </div>
+              {renderStorageTabsControls("mb-3 flex items-center gap-2")}
               <TabsContent
                 value="fridge"
                 className="mt-2 min-h-0 flex-1 overflow-hidden"
               >
-                <StorageCanvas
-                  layout={state.fridge}
-                  inventory={fridgeInventory}
-                  selectedShelfId={selectedShelfId}
-                  onSelectShelf={handleSelectShelf}
-                  onSelectCell={handleSelectCell}
-                  onReorderShelves={handleReorderFridgeShelves}
-                />
+                {renderStorageTabContent("fridge")}
               </TabsContent>
               <TabsContent
                 value="pantry"
                 className="mt-2 min-h-0 flex-1 overflow-hidden"
               >
-                <StorageCanvas
-                  layout={state.pantry}
-                  inventory={pantryInventory}
-                  selectedShelfId={selectedPantryShelfId}
-                  onSelectShelf={handleSelectPantryShelf}
-                  onSelectCell={handleSelectPantryCell}
-                  onReorderShelves={handleReorderPantryShelves}
-                />
+                {renderStorageTabContent("pantry")}
               </TabsContent>
               <TabsContent
                 value="staples"
                 className="mt-2 min-h-0 flex-1 overflow-y-auto"
               >
-                <StaplesPanel
-                  customStapleNames={state.customStapleNames}
-                  onAddStaples={(names) =>
-                    dispatch({ type: "ADD_CUSTOM_STAPLES", names })
-                  }
-                  onRemoveStaple={(name) =>
-                    dispatch({ type: "REMOVE_CUSTOM_STAPLE", name })
-                  }
-                />
+                {renderStorageTabContent("staples")}
               </TabsContent>
             </Tabs>
           </div>
@@ -1562,59 +1522,11 @@ export function FoodPlannerApp() {
                       onValueChange={(v) => setStorageTab(v as StorageTab)}
                       className="shrink-0 gap-3"
                     >
-                      <div className="flex items-center gap-2">
-                        <TabsList className="grid flex-1 grid-cols-3">
-                          <TabsTrigger value="fridge">🧊 Fridge</TabsTrigger>
-                          <TabsTrigger value="pantry">🗄️ Pantry</TabsTrigger>
-                          <TabsTrigger value="staples">🧂 Staples</TabsTrigger>
-                        </TabsList>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="shrink-0"
-                          onClick={() => setStockingOpen(true)}
-                          aria-label="Stock items"
-                        >
-                          <PackagePlus className="size-4" aria-hidden />
-                          <span className="hidden sm:inline">Stock items</span>
-                        </Button>
-                      </div>
+                      {renderStorageTabsControls("flex items-center gap-2")}
                     </Tabs>
                     <div className="min-h-0 flex-1 overflow-y-auto">
-                      {storageTab === "fridge" ? (
-                        <StorageCanvas
-                          layout={state.fridge}
-                          inventory={fridgeInventory}
-                          selectedShelfId={selectedShelfId}
-                          onSelectShelf={handleSelectShelf}
-                          onSelectCell={handleSelectCell}
-                          onReorderShelves={handleReorderFridgeShelves}
-                        />
-                      ) : storageTab === "pantry" ? (
-                        <StorageCanvas
-                          layout={state.pantry}
-                          inventory={pantryInventory}
-                          selectedShelfId={selectedPantryShelfId}
-                          onSelectShelf={handleSelectPantryShelf}
-                          onSelectCell={handleSelectPantryCell}
-                          onReorderShelves={handleReorderPantryShelves}
-                        />
-                      ) : (
-                        <StaplesPanel
-                          customStapleNames={state.customStapleNames}
-                          onAddStaples={(names) =>
-                            dispatch({ type: "ADD_CUSTOM_STAPLES", names })
-                          }
-                          onRemoveStaple={(name) =>
-                            dispatch({ type: "REMOVE_CUSTOM_STAPLE", name })
-                          }
-                        />
-                      )}
+                      {renderStorageTabContent(storageTab)}
                     </div>
-                    <p className="shrink-0 text-xs text-muted-foreground">
-                      Add some items to your shelves and the AI will help
-                      organize everything!
-                    </p>
                   </div>
                 </TabsContent>
                 <TabsContent
@@ -1628,24 +1540,6 @@ export function FoodPlannerApp() {
           </div>
         </div>
 
-        <StorageEditorPanel
-          storage={state.fridge}
-          inventory={state.inventory}
-          selectedShelfId={selectedShelfId}
-          selectedCell={selectedCell}
-          dispatch={dispatch}
-          onClearSelection={handleClearSelection}
-          showInlinePanel={false}
-        />
-        <StorageEditorPanel
-          storage={state.pantry}
-          inventory={state.inventory}
-          selectedShelfId={selectedPantryShelfId}
-          selectedCell={selectedPantryCell}
-          dispatch={dispatch}
-          onClearSelection={handleClearPantrySelection}
-          showInlinePanel={false}
-        />
         <StockingDialog
           open={stockingOpen}
           onOpenChange={setStockingOpen}
@@ -1670,13 +1564,7 @@ export function FoodPlannerApp() {
           onOpenChange={setPlannerSettingsOpen}
         >
           <DrawerContent>
-            <DrawerClose
-              aria-label="Close planner settings"
-              className="absolute top-2 right-2 inline-flex size-7 items-center justify-center rounded-[min(var(--radius-md),12px)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-            >
-              <XIcon />
-              <span className="sr-only">Close</span>
-            </DrawerClose>
+            {renderDrawerCloseButton("Close planner settings")}
             <DrawerHeader className="pr-12">
               <DrawerTitle>Customise plan</DrawerTitle>
               <DrawerDescription>
@@ -1699,13 +1587,7 @@ export function FoodPlannerApp() {
         </Drawer>
         <Drawer direction="right" open={cartOpen} onOpenChange={setCartOpen}>
           <DrawerContent>
-            <DrawerClose
-              aria-label="Close shopping cart"
-              className="absolute top-2 right-2 inline-flex size-7 items-center justify-center rounded-[min(var(--radius-md),12px)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-            >
-              <XIcon />
-              <span className="sr-only">Close</span>
-            </DrawerClose>
+            {renderDrawerCloseButton("Close shopping cart")}
             <DrawerHeader className="pr-12">
               <DrawerTitle>Shopping cart</DrawerTitle>
               <DrawerDescription>
