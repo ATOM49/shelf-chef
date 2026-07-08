@@ -11,7 +11,7 @@
 
 import { type NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/src/lib/auth/session";
-import { getMcpProvider } from "@/src/lib/mcp/providers";
+import { getEnabledMcpProvider } from "@/src/lib/mcp/providers";
 import { deleteConnection } from "@/src/lib/mcp/token-store";
 
 export async function POST(
@@ -21,7 +21,7 @@ export async function POST(
   const user = await requireUser();
   const { provider: providerKey } = await params;
 
-  if (!getMcpProvider(providerKey)) {
+  if (!(await getEnabledMcpProvider(providerKey, user.id))) {
     return NextResponse.json(
       { error: `Unknown MCP provider: ${providerKey}` },
       { status: 404 },

@@ -14,6 +14,7 @@
 
 import { NextResponse } from "next/server";
 import { requireUser } from "@/src/lib/auth/session";
+import { getEnabledMcpProvider } from "@/src/lib/mcp/providers";
 import { getConnection } from "@/src/lib/mcp/token-store";
 import { syncToNotion } from "@/src/lib/notion-mcp/sync";
 import { prisma } from "@/lib/db";
@@ -22,6 +23,13 @@ import type { PlannedMeal, GroceryCartItem } from "@/lib/planner/types";
 
 export async function POST(): Promise<NextResponse> {
   const user = await requireUser();
+
+  if (!(await getEnabledMcpProvider("notion-mcp", user.id))) {
+    return NextResponse.json(
+      { error: "Notion MCP connection is disabled." },
+      { status: 404 },
+    );
+  }
 
   // Verify the user has a Notion MCP connection
   const connection = await getConnection(user.id, "notion-mcp");

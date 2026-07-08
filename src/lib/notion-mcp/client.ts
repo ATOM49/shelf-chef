@@ -9,23 +9,27 @@
  */
 
 import { invokeMcpTool } from "@/src/lib/mcp/invoke";
-import { getMcpProvider } from "@/src/lib/mcp/providers";
+import { getEnabledMcpProvider } from "@/src/lib/mcp/providers";
 
 const PROVIDER_KEY = "notion-mcp";
 
-function getNotionMcpServerUrl(): string {
-  const provider = getMcpProvider(PROVIDER_KEY);
+async function getNotionMcpServerUrl(userId: string): Promise<string> {
+  const provider = await getEnabledMcpProvider(PROVIDER_KEY, userId);
   if (!provider) {
-    throw new Error("notion-mcp provider is not registered.");
+    throw new Error("notion-mcp provider is not enabled.");
   }
   return provider.mcpServerUrl;
 }
 
-function invoke(userId: string, toolName: string, toolArgs?: Record<string, unknown>) {
+async function invoke(
+  userId: string,
+  toolName: string,
+  toolArgs?: Record<string, unknown>,
+) {
   return invokeMcpTool({
     userId,
     providerKey: PROVIDER_KEY,
-    mcpServerUrl: getNotionMcpServerUrl(),
+    mcpServerUrl: await getNotionMcpServerUrl(userId),
     toolName,
     toolArgs,
   });

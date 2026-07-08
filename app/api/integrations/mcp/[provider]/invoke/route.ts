@@ -18,7 +18,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/src/lib/auth/session";
-import { getMcpProvider } from "@/src/lib/mcp/providers";
+import { getEnabledMcpProvider } from "@/src/lib/mcp/providers";
 import { invokeMcpTool } from "@/src/lib/mcp/invoke";
 
 const invokeBodySchema = z.object({
@@ -33,7 +33,7 @@ export async function POST(
   const user = await requireUser();
   const { provider: providerKey } = await params;
 
-  const provider = getMcpProvider(providerKey);
+  const provider = await getEnabledMcpProvider(providerKey, user.id);
   if (!provider) {
     return NextResponse.json(
       { error: `Unknown MCP provider: ${providerKey}` },

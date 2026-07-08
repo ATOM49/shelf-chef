@@ -13,7 +13,7 @@
 
 import { type NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/src/lib/auth/session";
-import { getMcpProvider, getClientId, getClientSecret } from "@/src/lib/mcp/providers";
+import { getEnabledMcpProvider, getClientId, getClientSecret } from "@/src/lib/mcp/providers";
 import { discoverAuthorizationServerMetadata } from "@/src/lib/mcp/discovery";
 import { exchangeCodeForToken } from "@/src/lib/mcp/oauth";
 import { consumePendingState, upsertConnection } from "@/src/lib/mcp/token-store";
@@ -53,7 +53,7 @@ export async function GET(
   const user = await requireUser();
   const { provider: providerKey } = await params;
 
-  const provider = getMcpProvider(providerKey);
+  const provider = await getEnabledMcpProvider(providerKey, user.id);
   if (!provider) {
     return NextResponse.json(
       { error: `Unknown MCP provider: ${providerKey}` },

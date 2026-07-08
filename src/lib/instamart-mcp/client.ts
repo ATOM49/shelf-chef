@@ -12,14 +12,14 @@
  */
 
 import { invokeMcpTool } from "@/src/lib/mcp/invoke";
-import { getMcpProvider } from "@/src/lib/mcp/providers";
+import { getEnabledMcpProvider } from "@/src/lib/mcp/providers";
 
 const PROVIDER_KEY = "swiggy-instamart-mcp";
 
-function getInstamartMcpServerUrl(): string {
-  const provider = getMcpProvider(PROVIDER_KEY);
+async function getInstamartMcpServerUrl(userId: string): Promise<string> {
+  const provider = await getEnabledMcpProvider(PROVIDER_KEY, userId);
   if (!provider) {
-    throw new Error("swiggy-instamart-mcp provider is not registered.");
+    throw new Error("swiggy-instamart-mcp provider is not enabled.");
   }
   return provider.mcpServerUrl;
 }
@@ -32,7 +32,7 @@ async function invoke<T = unknown>(
   const result = await invokeMcpTool({
     userId,
     providerKey: PROVIDER_KEY,
-    mcpServerUrl: getInstamartMcpServerUrl(),
+    mcpServerUrl: await getInstamartMcpServerUrl(userId),
     toolName,
     toolArgs,
   });

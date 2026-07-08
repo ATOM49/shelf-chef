@@ -1,3 +1,5 @@
+import { isPostHogFeatureEnabled } from "@/src/lib/posthog/feature-flags";
+
 /**
  * Registry of supported MCP providers.
  *
@@ -21,6 +23,8 @@ export type McpProviderConfig = {
   mcpServerUrl: string;
   /** OAuth scopes to request during the connect flow. */
   scopes?: string[];
+  /** Optional PostHog feature flag key that must be enabled for this provider. */
+  featureFlagKey?: string;
 };
 
 export const MCP_PROVIDERS: Record<string, McpProviderConfig> = {
@@ -29,6 +33,7 @@ export const MCP_PROVIDERS: Record<string, McpProviderConfig> = {
     label: "Notion",
     mcpServerUrl: "https://mcp.notion.com/mcp",
     scopes: ["read_content", "update_content"],
+    featureFlagKey: "mcp-provider-notion",
   },
   "github-mcp": {
     key: "github-mcp",
@@ -42,12 +47,52 @@ export const MCP_PROVIDERS: Record<string, McpProviderConfig> = {
     // Reference: https://mcp.swiggy.com/builders/docs/start/coding-agents/
     mcpServerUrl: "https://mcp.swiggy.com/im",
     scopes: ["mcp:tools"],
+    featureFlagKey: "mcp-provider-swiggy-instamart",
   },
 };
 
 /** Look up a provider by its key. Returns `undefined` for unknown keys. */
 export function getMcpProvider(key: string): McpProviderConfig | undefined {
   return MCP_PROVIDERS[key];
+}
+
+/** Returns true when a known provider is available in the current deployment. */
+export async function isMcpProviderEnabled(
+  provider: McpProviderConfig,
+  distinctId: string,
+): Promise<boolean> {
+  if (!provider.featureFlagKey) {
+    return true;
+  }
+
+  return isPostHogFeatureEnabled(provider.featureFlagKey, distinctId);
+}
+
+/** Look up a provider by key, excluding providers disabled by feature flags. */
+export async function getEnabledMcpProvider(
+  key: string,
+  distinctId: string,
+): Promise<McpProviderConfig | undefined> {
+  const provider = getMcpProvider(key);
+  return provider && (await isMcpProviderEnabled(provider, distinctId))
+    ? provider
+    : undefined;
+}
+
+/** List providers available in the current deployment. */
+export async function getEnabledMcpProviders(
+  distinctId: string,
+): Promise<McpProviderConfig[]> {
+  const providers = await Promise.all(
+    Object.values(MCP_PROVIDERS).map(async (provider) => ({
+      provider,
+      enabled: await isMcpProviderEnabled(provider, distinctId),
+    })),
+  );
+
+  return providers
+    .filter(({ enabled }) => enabled)
+    .map(({ provider }) => provider);
 }
 
 /**

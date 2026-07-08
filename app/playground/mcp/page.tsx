@@ -5,7 +5,7 @@ import {
 import { requireUser } from "@/src/lib/auth/session";
 import {
   getMcpProvider,
-  MCP_PROVIDERS,
+  getEnabledMcpProviders,
 } from "@/src/lib/mcp/providers";
 import { listConnections } from "@/src/lib/mcp/token-store";
 
@@ -55,7 +55,9 @@ export default async function McpPlaygroundPage({
     connections.map((connection) => [connection.providerKey, connection]),
   );
 
-  const providers: McpPlaygroundProvider[] = Object.values(MCP_PROVIDERS).map(
+  const enabledProviders = await getEnabledMcpProviders(user.id);
+
+  const providers: McpPlaygroundProvider[] = enabledProviders.map(
     (provider) => {
       const connection = connectionLookup.get(provider.key);
 
