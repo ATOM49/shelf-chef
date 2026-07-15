@@ -1,6 +1,9 @@
 import type { NextRequest } from "next/server";
+import { after } from "next/server";
+import { auth } from "@/src/auth";
 import { isLlmConfigurationError } from "@/lib/ai/structured";
 import { getRecipeDedupeKey, mergeRecipes } from "@/lib/appState";
+import { HouseholdAccessError } from "@/lib/households/server";
 import {
   generateCustomRecipeResponse,
   generateRecipeResponse,
@@ -23,7 +26,15 @@ import type {
   PlannerPreferredDishInput,
   PlannerWeekDay,
   Recipe,
+  RecipeImageMetadata,
 } from "@/lib/planner/types";
+import {
+  enqueueRecipeImageJobs,
+  processRecipeImageQueue,
+  resolveRecipeImageWorkspaceScope,
+} from "@/lib/recipes/imageJobs";
+
+export const maxDuration = 300;
 
 const MAX_PLANNER_POOL_SIZE = 72;
 
@@ -160,6 +171,43 @@ function applyForcedSlotOverrides(
   return Array.from(bySlotKey.values());
 }
 
+function applyRecipeImageMetadata(
+  recipes: Recipe[],
+  imageMetadata: RecipeImageMetadata[],
+) {
+  if (imageMetadata.length === 0) {
+    return recipes;
+  }
+
+  const metadataByRecipeId = new Map(
+    imageMetadata.map((metadata) => [metadata.recipeId, metadata]),
+  );
+
+  return recipes.map((recipe) => {
+    const metadata = metadataByRecipeId.get(recipe.id);
+    if (!metadata) {
+      return recipe;
+    }
+
+    return {
+      ...recipe,
+      imageUrl: metadata.imageUrl,
+      imageStatus: metadata.imageStatus,
+      imageUpdatedAt: metadata.imageUpdatedAt,
+    };
+  });
+}
+
+function resolveGeneratedRecipesInBook(
+  generatedRecipes: Recipe[],
+  mergedRecipeBook: Recipe[],
+) {
+  const generatedKeys = new Set(generatedRecipes.map(getRecipeDedupeKey));
+  return mergedRecipeBook.filter((recipe) =>
+    generatedKeys.has(getRecipeDedupeKey(recipe)),
+  );
+}
+
 export async function POST(req: NextRequest) {
   let payload: unknown;
   try {
@@ -214,8 +262,34 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const plannerRecipePool = selectPlannerRecipePool(
+    let imageMetadata: RecipeImageMetadata[] = [];
+    const session = await auth();
+    if (session?.user?.id) {
+      const scope = await resolveRecipeImageWorkspaceScope(
+        session.user.id,
+        parsedRequest.data.workspace,
+      );
+      imageMetadata = await enqueueRecipeImageJobs({
+        scope,
+        recipes: resolveGeneratedRecipesInBook(
+          recipesResponse.recipes,
+          finalRecipeBook,
+        ),
+      });
+      after(async () => {
+        try {
+          await processRecipeImageQueue({ scope });
+        } catch (error) {
+          console.error("Recipe image queue processing failed", error);
+        }
+      });
+    }
+    const recipesWithImageMetadata = applyRecipeImageMetadata(
       finalRecipeBook,
+      imageMetadata,
+    );
+    const plannerRecipePool = selectPlannerRecipePool(
+      recipesWithImageMetadata,
       parsedRequest.data.mealTypes,
     );
     const plannerResponse = await generateWeeklyPlannerResponse(
@@ -231,15 +305,23 @@ export async function POST(req: NextRequest) {
 
     return Response.json(
       parsePlannerGenerationApiResponse({
-        recipes: finalRecipeBook,
+        recipes: recipesWithImageMetadata,
         mealSlots: applyForcedSlotOverrides(plannerResponse.mealSlots, forcedSlotOverrides),
       }),
     );
   } catch (err) {
-    const status = isLlmConfigurationError(err) ? 500 : 502;
+    const status = err instanceof HouseholdAccessError
+      ? err.status
+      : isLlmConfigurationError(err)
+        ? 500
+        : 502;
     return Response.json(
       {
-        error: isLlmConfigurationError(err) ? "LLM configuration error" : "LLM call failed",
+        error: err instanceof HouseholdAccessError
+          ? err.message
+          : isLlmConfigurationError(err)
+            ? "LLM configuration error"
+            : "LLM call failed",
         detail: err instanceof Error ? err.message : String(err),
       },
       { status },

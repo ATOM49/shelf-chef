@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const authFile = "playwright/.auth/user.json";
+const port = process.env.PLAYWRIGHT_PORT ?? "3000";
+const baseURL = `http://localhost:${port}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -9,7 +11,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: "html",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL,
     trace: "on-first-retry",
   },
   projects: [
@@ -22,8 +24,8 @@ export default defineConfig({
   ],
   webServer: {
     // Reads ENABLE_DEV_LOGIN / DEV_LOGIN_PASSWORD from .env.local, same as `next dev`.
-    command: "npm run dev",
-    url: "http://localhost:3000",
+    command: `npm run dev -- --port ${port}`,
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

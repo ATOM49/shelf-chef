@@ -1,6 +1,9 @@
 import type { NextRequest } from "next/server";
+import { after } from "next/server";
+import { auth } from "@/src/auth";
 import { isLlmConfigurationError } from "@/lib/ai/structured";
 import { getRecipeDedupeKey, mergeRecipes } from "@/lib/appState";
+import { HouseholdAccessError } from "@/lib/households/server";
 import { generateCustomRecipeResponse } from "@/lib/planner/generate";
 import {
   buildDishRecipeGenerationPrompt,
@@ -10,6 +13,13 @@ import {
   customRecipeGenerateRequestSchema,
   parseCustomRecipeGenerationApiResponse,
 } from "@/lib/planner/schema";
+import {
+  enqueueRecipeImageJobs,
+  processRecipeImageQueue,
+  resolveRecipeImageWorkspaceScope,
+} from "@/lib/recipes/imageJobs";
+
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   let payload: unknown;
@@ -42,17 +52,56 @@ export async function POST(req: NextRequest) {
       mergedRecipeBook.find(
         (recipe) => getRecipeDedupeKey(recipe) === getRecipeDedupeKey(generatedRecipe),
       ) ?? generatedRecipe;
+    const session = await auth();
+    let recipeWithImageMetadata = resolvedRecipe;
+    if (session?.user?.id) {
+      const scope = await resolveRecipeImageWorkspaceScope(
+        session.user.id,
+        parsedRequest.data.workspace,
+      );
+      const imageMetadata = await enqueueRecipeImageJobs({
+        scope,
+        recipes: [resolvedRecipe],
+      });
+      const metadata = imageMetadata.find(
+        (candidate) => candidate.recipeId === resolvedRecipe.id,
+      );
+      if (metadata) {
+        recipeWithImageMetadata = {
+          ...resolvedRecipe,
+          imageUrl: metadata.imageUrl,
+          imageStatus: metadata.imageStatus,
+          imageUpdatedAt: metadata.imageUpdatedAt,
+        };
+      }
+
+      after(async () => {
+        try {
+          await processRecipeImageQueue({ scope });
+        } catch (error) {
+          console.error("Recipe image queue processing failed", error);
+        }
+      });
+    }
 
     return Response.json(
       parseCustomRecipeGenerationApiResponse({
-        recipe: resolvedRecipe,
+        recipe: recipeWithImageMetadata,
       }),
     );
   } catch (err) {
-    const status = isLlmConfigurationError(err) ? 500 : 502;
+    const status = err instanceof HouseholdAccessError
+      ? err.status
+      : isLlmConfigurationError(err)
+        ? 500
+        : 502;
     return Response.json(
       {
-        error: isLlmConfigurationError(err) ? "LLM configuration error" : "LLM call failed",
+        error: err instanceof HouseholdAccessError
+          ? err.message
+          : isLlmConfigurationError(err)
+            ? "LLM configuration error"
+            : "LLM call failed",
         detail: err instanceof Error ? err.message : String(err),
       },
       { status },

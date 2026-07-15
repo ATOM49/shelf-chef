@@ -25,6 +25,15 @@ const INGREDIENT_NAMING_RULES = `Ingredient naming (critical — names must matc
 - Reuse the exact same base name for the same ingredient across every recipe so quantities aggregate correctly.
 - Put any preparation detail ("finely chopped", "slit") in the instructions, never in the ingredient name.`;
 
+const RECIPE_INSTRUCTION_RULES = `Recipe instructions (critical — simple, detailed, and easy to follow):
+- Every recipe must include instructions.
+- Use plain, direct language that a home cook can follow without guessing.
+- Break the method into as many sequential steps as needed, typically 6 to 12. Do not compress the whole method into a few broad steps.
+- Keep each step focused on one action or a small group of closely related actions.
+- Include useful specifics such as preparation, heat level, cooking time, temperature, texture, color, or other visual cues when relevant.
+- Avoid vague directions such as "cook until done"; explain how the cook can tell the step is complete.
+- Keep each step under about 200 characters. Split a long step into multiple shorter steps instead of writing a paragraph.`;
+
 function summarizeRecipeBook(recipes: Recipe[]) {
   if (recipes.length === 0) {
     return "- No saved recipe book entries yet.";
@@ -125,12 +134,14 @@ Requirements:
 - Do not switch an in-inventory ingredient to a different measurement group or a different household unit when an inventory unit is already provided.
 - Prefer exact inventory units for stocked ingredients even when another unit would also be common in recipes.
 - Each recipe must include: title, mealType, servings, tags, ingredients.
-- Include cuisine and instructions when you can do so confidently.
+- Include cuisine when you can do so confidently.
 - For referenceUrl: only include it when you are highly confident the exact URL is real, valid, and accessible (not a 404). Only use https:// links from well-known cooking sites such as allrecipes.com, food.com, bbcgoodfood.com, seriouseats.com, or similar reputable sources. If you have any doubt, omit referenceUrl entirely.
 - Keep recipe titles concise and natural.
 - Do not include markdown or explanation text.
 
 ${INGREDIENT_NAMING_RULES}
+
+${RECIPE_INSTRUCTION_RULES}
 
 User preferences:
 ${preferenceSummary}
@@ -173,10 +184,11 @@ Requirements:
 - Do not generate a duplicate of an existing recipe-book entry.
 - Allowed units: ${INVENTORY_UNITS.join(", ")}.
 - Include: title, mealType, servings, tags, ingredients.
-- Include cuisine and instructions when you can do so confidently.
-- Keep each instruction step under about 200 characters. Split a long step into multiple shorter steps instead of one long paragraph.
+- Include cuisine when you can do so confidently.
 - For referenceUrl: only include it when you are highly confident the exact URL is real and accessible. Only use https:// links from well-known cooking sites. If in doubt, omit referenceUrl entirely.
 - Keep the recipe practical for a home kitchen, but do not distort it just to avoid ingredients a shopper might need to buy.
+
+${RECIPE_INSTRUCTION_RULES}
 
 Requested dish name: ${dishName.trim()}
 
@@ -238,11 +250,13 @@ Requirements:
 - Allowed units: ${INVENTORY_UNITS.join(", ")}.
 - If an ingredient matches an inventory ingredient by normalized name, use the inventory unit rule for that ingredient.
 - Include: title, mealType, servings, tags, ingredients.
-- Include cuisine and instructions when you can do so confidently.
+- Include cuisine when you can do so confidently.
 - For referenceUrl: only include it when you are highly confident the exact URL is real and accessible. Only use https:// links from well-known cooking sites. If in doubt, omit referenceUrl entirely.
 - Keep the recipe practical for a home kitchen.
 
 ${INGREDIENT_NAMING_RULES}
+
+${RECIPE_INSTRUCTION_RULES}
 
 ${requestedDishLine}
 

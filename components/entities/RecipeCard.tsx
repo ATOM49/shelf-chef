@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ChefHat } from "lucide-react";
+import { ChefHat, ImageIcon } from "lucide-react";
 
 import { isInteractiveTarget } from "@/components/entities/card-interaction";
 import { MealValidationIndicator } from "@/components/planner/MealValidationSummary";
@@ -22,7 +22,12 @@ export function formatMealTypeLabel(mealType: Recipe["mealType"]) {
 }
 
 type RecipeCardData = Pick<Recipe, "title" | "mealType"> &
-  Partial<Pick<Recipe, "cuisine" | "servings" | "tags">>;
+  Partial<
+    Pick<
+      Recipe,
+      "cuisine" | "servings" | "tags" | "imageUrl" | "imageStatus"
+    >
+  >;
 
 type RecipeCardProps = {
   recipe: RecipeCardData;
@@ -77,12 +82,13 @@ export function RecipeCard({
     : (recipe.tags ?? []);
   const visibleTags = maxTags > 0 ? cardTags.slice(0, maxTags) : [];
   const hiddenTagCount = cardTags.length - visibleTags.length;
+  const showImage = recipe.imageStatus === "ready" && recipe.imageUrl;
 
   return (
     <Card
       size="sm"
       className={cn(
-        "h-full",
+        "h-full data-[size=sm]:pt-0",
         interactive &&
           "cursor-pointer transition-shadow hover:ring-foreground/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         selected && "ring-2 ring-ring",
@@ -110,6 +116,25 @@ export function RecipeCard({
           : undefined
       }
     >
+      <div
+        className={cn(
+          "relative aspect-square w-full overflow-hidden rounded-t-lg border-b bg-muted",
+          showImage
+            ? "bg-cover bg-center"
+            : "grid place-items-center bg-[radial-gradient(circle_at_50%_35%,hsl(var(--background)),hsl(var(--muted)))]",
+        )}
+        style={
+          showImage
+            ? { backgroundImage: `url("${recipe.imageUrl}")` }
+            : undefined
+        }
+        role={showImage ? "img" : undefined}
+        aria-label={showImage ? recipe.title : undefined}
+      >
+        {!showImage ? (
+          <ImageIcon className="size-5 text-muted-foreground" aria-hidden />
+        ) : null}
+      </div>
       <CardHeader>
         {hasHeaderBadges ? (
           <div className="flex flex-wrap items-center gap-1.5">

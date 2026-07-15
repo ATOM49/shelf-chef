@@ -23,13 +23,15 @@ export function MealDetailsDrawer({
   }
 
   return (
-    <RecipeDetailPanel
-      recipe={meal.recipe}
-      validation={meal.validation}
-      plannedMeal={meal}
-      onSetCooked={onSetCooked}
-      onSwap={onSwap}
-      onRemove={onRemove}
-    />
+    <div className="h-full min-h-0">
+      <RecipeDetailPanel
+        recipe={meal.recipe}
+        validation={meal.validation}
+        plannedMeal={meal}
+        onSetCooked={onSetCooked}
+        onSwap={onSwap}
+        onRemove={onRemove}
+      />
+    </div>
   );
 }

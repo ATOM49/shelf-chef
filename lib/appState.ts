@@ -11,6 +11,7 @@ import type {
   PlannedMeal,
   PlannedMealType,
   PlannerConfigSnapshot,
+  RecipeImageMetadata,
   PlannerMealSlot,
   PlannerPreferredDishInput,
   PlannerState,
@@ -28,6 +29,10 @@ export type AppState = {
   customStapleNames: string[];
   inventory: InventoryItem[];
   recipes: Recipe[];
+  recipeImageGeneration?: {
+    recipeIds: string[];
+    startedAt: string;
+  };
   planner: PlannerState;
 };
 
@@ -81,6 +86,8 @@ export type AppAction =
   | { type: "ADD_CUSTOM_RECIPE"; recipe: Recipe }
   | { type: "REMOVE_CUSTOM_RECIPE"; recipeId: string }
   | { type: "APPLY_GENERATED_PLAN"; recipes: Recipe[]; mealSlots: PlannerMealSlot[] }
+  | { type: "APPLY_RECIPE_IMAGE_METADATA"; images: RecipeImageMetadata[] }
+  | { type: "CLEAR_RECIPE_IMAGE_GENERATION" }
   | { type: "CLEAR_WEEKLY_PLAN" }
   | { type: "REPLACE_PLANNED_MEAL"; mealId: string; recipeId: string }
   | { type: "SELECT_MEAL"; mealId?: string }
@@ -121,6 +128,7 @@ export function createDefaultAppState(): AppState {
     customStapleNames: [],
     inventory: [],
     recipes: [],
+    recipeImageGeneration: undefined,
     planner: {
       preferences: "",
       preferredDishes: [],
@@ -130,6 +138,48 @@ export function createDefaultAppState(): AppState {
       selectedMealId: undefined,
       lastGeneratedConfig: undefined,
     },
+  };
+}
+
+function extendRecipeImageGeneration(
+  state: AppState,
+  incomingRecipes: Recipe[],
+): AppState["recipeImageGeneration"] {
+  const pendingIncomingIds = incomingRecipes
+    .filter(
+      (recipe) =>
+        recipe.imageStatus === "pending" ||
+        recipe.imageStatus === "generating",
+    )
+    .map((recipe) => recipe.id);
+  const currentGeneration = state.recipeImageGeneration;
+  const currentGenerationIsActive = currentGeneration?.recipeIds.some(
+    (recipeId) => {
+      const recipe = state.recipes.find((candidate) => candidate.id === recipeId);
+      return (
+        recipe?.imageStatus === "pending" ||
+        recipe?.imageStatus === "generating"
+      );
+    },
+  );
+
+  if (pendingIncomingIds.length === 0) {
+    return currentGenerationIsActive ? currentGeneration : undefined;
+  }
+
+  return {
+    recipeIds: Array.from(
+      new Set([
+        ...(currentGenerationIsActive && currentGeneration
+          ? currentGeneration.recipeIds
+          : []),
+        ...pendingIncomingIds,
+      ]),
+    ),
+    startedAt:
+      currentGenerationIsActive && currentGeneration
+        ? currentGeneration.startedAt
+        : new Date().toISOString(),
   };
 }
 
@@ -271,31 +321,79 @@ function getRecipeSourcePriority(source: Recipe["source"]) {
   return source === "user-saved" ? 2 : 1;
 }
 
+function mergeRecipeImageFields(preferred: Recipe, left: Recipe, right: Recipe): Recipe {
+  const readyImage =
+    left.imageStatus === "ready" && left.imageUrl
+      ? left
+      : right.imageStatus === "ready" && right.imageUrl
+        ? right
+        : undefined;
+  const latestStatus =
+    preferred.imageUpdatedAt && left.imageUpdatedAt && right.imageUpdatedAt
+      ? left.imageUpdatedAt > right.imageUpdatedAt
+        ? left
+        : right
+      : left.imageUpdatedAt
+        ? left
+        : right.imageUpdatedAt
+          ? right
+          : undefined;
+  const imageSource = readyImage ?? latestStatus ?? preferred;
+
+  return {
+    ...preferred,
+    imageUrl: imageSource.imageUrl,
+    imageStatus: imageSource.imageStatus,
+    imageUpdatedAt: imageSource.imageUpdatedAt,
+  };
+}
+
 function choosePreferredRecipe(current: Recipe, candidate: Recipe) {
+  let preferred: Recipe;
   if (current.id === candidate.id) {
-    return candidate;
+    preferred = candidate;
+  } else {
+    const currentPriority = getRecipeSourcePriority(current.source);
+    const candidatePriority = getRecipeSourcePriority(candidate.source);
+    if (candidatePriority !== currentPriority) {
+      preferred = candidatePriority > currentPriority ? candidate : current;
+    } else {
+      const currentRichness =
+        current.ingredients.length +
+        (current.instructions?.length ?? 0) +
+        (current.referenceUrl ? 1 : 0);
+      const candidateRichness =
+        candidate.ingredients.length +
+        (candidate.instructions?.length ?? 0) +
+        (candidate.referenceUrl ? 1 : 0);
+
+      preferred =
+        candidateRichness !== currentRichness
+          ? candidateRichness > currentRichness
+            ? candidate
+            : current
+          : candidate;
+    }
   }
 
-  const currentPriority = getRecipeSourcePriority(current.source);
-  const candidatePriority = getRecipeSourcePriority(candidate.source);
-  if (candidatePriority !== currentPriority) {
-    return candidatePriority > currentPriority ? candidate : current;
+  return mergeRecipeImageFields(preferred, current, candidate);
+}
+
+function applyRecipeImageMetadataToRecipe(
+  recipe: Recipe,
+  metadataByRecipeId: Map<string, RecipeImageMetadata>,
+) {
+  const metadata = metadataByRecipeId.get(recipe.id);
+  if (!metadata) {
+    return recipe;
   }
 
-  const currentRichness =
-    current.ingredients.length +
-    (current.instructions?.length ?? 0) +
-    (current.referenceUrl ? 1 : 0);
-  const candidateRichness =
-    candidate.ingredients.length +
-    (candidate.instructions?.length ?? 0) +
-    (candidate.referenceUrl ? 1 : 0);
-
-  if (candidateRichness !== currentRichness) {
-    return candidateRichness > currentRichness ? candidate : current;
-  }
-
-  return candidate;
+  return {
+    ...recipe,
+    imageUrl: metadata.imageUrl,
+    imageStatus: metadata.imageStatus,
+    imageUpdatedAt: metadata.imageUpdatedAt,
+  };
 }
 
 export function mergeRecipes(existingRecipes: Recipe[], incomingRecipes: Recipe[]) {
@@ -618,6 +716,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         recipes: mergeRecipes(state.recipes, [action.recipe]),
+        recipeImageGeneration: extendRecipeImageGeneration(state, [
+          action.recipe,
+        ]),
       };
     }
 
@@ -634,6 +735,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         recipes: nextRecipes,
+        recipeImageGeneration: extendRecipeImageGeneration(
+          state,
+          action.recipes,
+        ),
         planner: {
           ...state.planner,
           preferredDishes: reconcilePreferredDishes(state.planner.preferredDishes, nextRecipes),
@@ -642,6 +747,52 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           selectedMealId: undefined,
           lastGeneratedConfig,
         },
+      };
+    }
+
+    case "APPLY_RECIPE_IMAGE_METADATA": {
+      if (action.images.length === 0) {
+        return state;
+      }
+
+      const metadataByRecipeId = new Map(
+        action.images.map((image) => [image.recipeId, image]),
+      );
+      const nextRecipes = state.recipes.map((recipe) =>
+        applyRecipeImageMetadataToRecipe(recipe, metadataByRecipeId),
+      );
+      const nextPlan = state.planner.weeklyPlan.map((meal) => ({
+        ...meal,
+        recipe: applyRecipeImageMetadataToRecipe(
+          meal.recipe,
+          metadataByRecipeId,
+        ),
+      }));
+      const restartedGenerationRecipes = nextRecipes.filter(
+        (recipe) =>
+          metadataByRecipeId.has(recipe.id) &&
+          (recipe.imageStatus === "pending" ||
+            recipe.imageStatus === "generating"),
+      );
+
+      return {
+        ...state,
+        recipes: nextRecipes,
+        recipeImageGeneration: extendRecipeImageGeneration(
+          state,
+          restartedGenerationRecipes,
+        ),
+        planner: {
+          ...state.planner,
+          weeklyPlan: nextPlan,
+        },
+      };
+    }
+
+    case "CLEAR_RECIPE_IMAGE_GENERATION": {
+      return {
+        ...state,
+        recipeImageGeneration: undefined,
       };
     }
 

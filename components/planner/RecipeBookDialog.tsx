@@ -26,7 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { XIcon } from "lucide-react";
 import type { InventoryItem } from "@/lib/inventory/types";
-import type { PlannedMealType, Recipe } from "@/lib/planner/types";
+import type { Recipe } from "@/lib/planner/types";
 import { validateRecipeAgainstInventory } from "@/lib/planner/validation";
 
 export type CreateRecipePayload =
@@ -39,7 +39,6 @@ type RecipeBookDialogProps = {
   recipes: Recipe[];
   inventory: InventoryItem[];
   mode?: "browse" | "swap";
-  swapMealType?: PlannedMealType;
   onSelectRecipe?: (recipeId: string) => void;
   onGenerateAndSwap?: (payload: CreateRecipePayload) => Promise<void>;
   onCreateCustomRecipe: (payload: CreateRecipePayload) => Promise<string>;
@@ -110,7 +109,6 @@ function RecipeBookBrowse({
   recipes,
   inventory,
   mode,
-  swapMealType,
   browseState,
   onBrowseStateChange,
   onViewRecipe,
@@ -119,15 +117,12 @@ function RecipeBookBrowse({
   recipes: Recipe[];
   inventory: InventoryItem[];
   mode: "browse" | "swap";
-  swapMealType?: PlannedMealType;
   browseState: RecipeBrowseState;
   onBrowseStateChange: (nextState: RecipeBrowseState) => void;
   onViewRecipe: (recipeId: string) => void;
   onSelectRecipe?: (recipeId: string) => void;
 }) {
   const { searchTerm, selectedTags } = browseState;
-  const effectiveMealTypeFilter: PlannedMealType | "all" =
-    mode === "swap" ? swapMealType ?? "all" : "all";
 
   const normalizedSelectedTags = useMemo(
     () => selectedTags.map(normalizeTag),
@@ -182,15 +177,11 @@ function RecipeBookBrowse({
 
   const filteredRecipes = useMemo(() => {
     const visibleRecipes = recipes.filter((recipe) => {
-      const matchesMealType =
-        effectiveMealTypeFilter === "all"
-          ? true
-          : recipe.mealType === effectiveMealTypeFilter;
       const recipeTags = getRecipeTagSet(recipe);
       const matchesTags = normalizedSelectedTags.every((tag) =>
         recipeTags.has(tag),
       );
-      return matchesMealType && matchesTags && matchesSearch(recipe, searchTerm);
+      return matchesTags && matchesSearch(recipe, searchTerm);
     });
 
     return [...visibleRecipes].sort((left, right) => {
@@ -209,7 +200,6 @@ function RecipeBookBrowse({
       );
     });
   }, [
-    effectiveMealTypeFilter,
     normalizedSelectedTags,
     recipes,
     searchTerm,
@@ -263,7 +253,7 @@ function RecipeBookBrowse({
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">Swapping {formatMealTypeLabel(swapMealType ?? "dinner")}</Badge>
+              <Badge variant="outline">Choose any recipe</Badge>
             </div>
           )}
         </div>
@@ -558,16 +548,12 @@ function RecipeBookDetail({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ScrollArea className="min-h-0 flex-1 px-4 py-4 sm:px-6 sm:py-5">
-        <div className="pb-5">
-          <RecipeDetailPanel
-            recipe={recipe}
-            validation={validation}
-            onBack={onBack}
-            onDelete={onDeleteRecipe}
-          />
-        </div>
-      </ScrollArea>
+      <RecipeDetailPanel
+        recipe={recipe}
+        validation={validation}
+        onBack={onBack}
+        onDelete={onDeleteRecipe}
+      />
     </div>
   );
 }
@@ -578,7 +564,6 @@ export function RecipeBookDialog({
   recipes,
   inventory,
   mode = "browse",
-  swapMealType,
   onSelectRecipe,
   onGenerateAndSwap,
   onCreateCustomRecipe,
@@ -636,7 +621,7 @@ export function RecipeBookDialog({
         : "Recipe book";
   const headerDescription =
     mode === "swap"
-      ? `Pick a ${swapMealType ?? "saved"} recipe from your book to fill this slot.`
+      ? "Pick any recipe from your book to fill this slot."
       : view === "detail"
         ? "Check ingredients, instructions, and cookability right here."
         : "Browse your saved recipes, see what you can cook today, and create new ones — by dish or by pantry.";
@@ -644,19 +629,29 @@ export function RecipeBookDialog({
   return (
     <Drawer open={open} onOpenChange={handleDrawerOpenChange} direction="left">
       <DrawerContent className="h-svh w-[min(94vw,56rem)] max-w-[min(94vw,56rem)] overflow-hidden p-0 data-[vaul-drawer-direction=left]:w-[min(94vw,56rem)] data-[vaul-drawer-direction=left]:sm:max-w-[min(94vw,56rem)]">
-        <DrawerHeader className="border-b px-6 py-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <DrawerTitle>{headerTitle}</DrawerTitle>
-              <DrawerDescription>{headerDescription}</DrawerDescription>
+        {view === "detail" ? (
+          <DrawerHeader className="sr-only">
+            <DrawerTitle>{headerTitle}</DrawerTitle>
+            <DrawerDescription>{headerDescription}</DrawerDescription>
+          </DrawerHeader>
+        ) : (
+          <DrawerHeader className="border-b px-6 py-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <DrawerTitle>{headerTitle}</DrawerTitle>
+                <DrawerDescription>{headerDescription}</DrawerDescription>
+              </div>
+              <DrawerClose asChild>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Close recipe book"
+                >
+                  <XIcon className="size-4" aria-hidden />
+                </Button>
+              </DrawerClose>
             </div>
-            <DrawerClose asChild>
-              <Button type="button" size="icon-sm" variant="ghost" aria-label="Close recipe book">
-                <XIcon className="size-4" aria-hidden />
-              </Button>
-            </DrawerClose>
-          </div>
-          {view !== "detail" ? (
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -675,8 +670,21 @@ export function RecipeBookDialog({
                 Create recipe
               </Button>
             </div>
-          ) : null}
-        </DrawerHeader>
+          </DrawerHeader>
+        )}
+        {view === "detail" ? (
+          <DrawerClose asChild>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              aria-label="Close recipe book"
+              className="absolute right-4 top-4 z-30 rounded-full bg-black/35 text-white shadow-sm backdrop-blur hover:bg-black/55 hover:text-white"
+            >
+              <XIcon className="size-4" aria-hidden />
+            </Button>
+          </DrawerClose>
+        ) : null}
         <div className="flex min-h-0 flex-1 flex-col">
           {view === "detail" && selectedRecipe ? (
             <RecipeBookDetail
@@ -698,7 +706,6 @@ export function RecipeBookDialog({
               recipes={recipes}
               inventory={inventory}
               mode={mode}
-              swapMealType={swapMealType}
               browseState={browseState}
               onBrowseStateChange={setBrowseState}
               onViewRecipe={handleViewRecipe}

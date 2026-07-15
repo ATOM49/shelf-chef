@@ -15,17 +15,25 @@ enum HouseholdRole {
   MEMBER
 }
 
+enum RecipeImageJobStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
 model User {
-  id                     String               @id @default(cuid())
-  name                   String?
-  email                  String               @unique
-  emailVerified          DateTime?
-  image                  String?
-  accounts               Account[]
-  sessions               Session[]
-  appState               UserAppState?
-  memberships            HouseholdMembership[]
-  createdHouseholdInvites HouseholdInvite[]   @relation("HouseholdInviteCreatedBy")
+  id                      String                @id @default(cuid())
+  name                    String?
+  email                   String                @unique
+  emailVerified           DateTime?
+  image                   String?
+  accounts                Account[]
+  sessions                Session[]
+  appState                UserAppState?
+  memberships             HouseholdMembership[]
+  createdHouseholdInvites HouseholdInvite[]     @relation("HouseholdInviteCreatedBy")
+  recipeImageJobs         RecipeImageJob[]
 }
 
 model Account {
@@ -75,13 +83,14 @@ model UserAppState {
 }
 
 model Household {
-  id          String                @id @default(cuid())
-  name        String
-  memberships HouseholdMembership[]
-  appState    HouseholdAppState?
-  invites     HouseholdInvite[]
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
+  id              String                @id @default(cuid())
+  name            String
+  memberships     HouseholdMembership[]
+  appState        HouseholdAppState?
+  invites         HouseholdInvite[]
+  recipeImageJobs RecipeImageJob[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 }
 
 model HouseholdMembership {
@@ -121,4 +130,32 @@ model HouseholdInvite {
 
   @@index([householdId, email])
   @@index([email])
+}
+
+model RecipeImageJob {
+  id          String               @id @default(cuid())
+  userId      String?
+  user        User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  householdId String?
+  household   Household?           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  recipeId    String
+  recipeTitle String
+  mealType    String
+  cuisine     String?
+  prompt      String
+  status      RecipeImageJobStatus @default(PENDING)
+  attempts    Int                  @default(0)
+  imageUrl    String?
+  mimeType    String?
+  lastError   String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@unique([userId, recipeId])
+  @@unique([householdId, recipeId])
+  @@index([status, updatedAt])
+  @@index([userId, status])
+  @@index([householdId, status])
 }

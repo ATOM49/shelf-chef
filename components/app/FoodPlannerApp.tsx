@@ -47,6 +47,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -81,6 +82,7 @@ import type {
   PlannedMealType,
   PlannerWeekDay,
   PreferredDishRequest,
+  RecipeImageMetadata,
 } from "@/lib/planner/types";
 import {
   clearWorkspaceAppState,
@@ -91,6 +93,7 @@ import {
   saveWorkspacePreference,
 } from "@/lib/persistence";
 import { useSession } from "next-auth/react";
+import { toast } from "sonner";
 import {
   DEFAULT_WORKSPACE,
   isHouseholdWorkspace,
@@ -143,10 +146,76 @@ type RecipeBookState = {
   open: boolean;
   mode: "browse" | "swap";
   mealId?: string;
-  swapMealType?: PlannedMealType;
   fillDay?: PlannerWeekDay;
   fillMealType?: PlannedMealType;
 };
+
+const RECIPE_IMAGE_PROGRESS_TOAST_ID = "recipe-image-generation-progress";
+
+function RecipeImageProgressToast({
+  completed,
+  total,
+}: {
+  completed: number;
+  total: number;
+}) {
+  const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const remaining = total - completed;
+
+  return (
+    <div className="w-[min(22rem,calc(100vw-2rem))] rounded-lg border bg-popover p-4 text-popover-foreground shadow-lg">
+      <div className="flex items-start gap-3">
+        <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+        <div className="min-w-0 flex-1 space-y-2.5">
+          <div className="flex items-baseline justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">Generating recipe images</p>
+              <p className="text-xs text-muted-foreground">
+                {remaining} {remaining === 1 ? "image" : "images"} remaining
+              </p>
+            </div>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {completed}/{total}
+            </span>
+          </div>
+          <Progress
+            value={progress}
+            aria-label={`${completed} of ${total} recipe images generated`}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function parseRecipeImageMetadataList(payload: unknown): RecipeImageMetadata[] {
+  if (
+    typeof payload !== "object" ||
+    payload === null ||
+    !("images" in payload) ||
+    !Array.isArray(payload.images)
+  ) {
+    return [];
+  }
+
+  return payload.images.filter(
+    (image): image is RecipeImageMetadata =>
+      typeof image === "object" &&
+      image !== null &&
+      "recipeId" in image &&
+      typeof image.recipeId === "string" &&
+      "imageStatus" in image &&
+      (image.imageStatus === "pending" ||
+        image.imageStatus === "generating" ||
+        image.imageStatus === "ready" ||
+        image.imageStatus === "failed") &&
+      "imageUpdatedAt" in image &&
+      typeof image.imageUpdatedAt === "string" &&
+      (!("imageUrl" in image) ||
+        image.imageUrl === undefined ||
+        typeof image.imageUrl === "string"),
+  );
+}
 
 function formatCartItemQuantity(quantity: number) {
   return Number.isInteger(quantity) ? quantity : quantity.toFixed(1);
@@ -284,6 +353,32 @@ export function FoodPlannerApp() {
       )
     : undefined;
   const activeWorkspaceLabel = activeHousehold?.name ?? "Personal workspace";
+  const pendingRecipeImageKey = state.recipes
+    .filter(
+      (recipe) =>
+        recipe.imageStatus === "pending" ||
+        recipe.imageStatus === "generating",
+    )
+    .map((recipe) => recipe.id)
+    .join("|");
+  const failedRecipeImageKey = state.recipes
+    .filter((recipe) => recipe.imageStatus === "failed")
+    .map((recipe) => recipe.id)
+    .join("|");
+  const recipeImageGeneration = state.recipeImageGeneration;
+  const recipeImageGenerationRecipes = recipeImageGeneration
+    ? recipeImageGeneration.recipeIds.map((recipeId) =>
+        state.recipes.find((recipe) => recipe.id === recipeId),
+      )
+    : [];
+  const completedRecipeImageCount = recipeImageGenerationRecipes.filter(
+    (recipe) =>
+      recipe?.imageStatus === "failed" ||
+      (recipe?.imageStatus === "ready" && Boolean(recipe.imageUrl)),
+  ).length;
+  const failedRecipeImageCount = recipeImageGenerationRecipes.filter(
+    (recipe) => recipe?.imageStatus === "failed",
+  ).length;
 
   const buildStateUrl = useCallback((workspace: Workspace) => {
     if (!isHouseholdWorkspace(workspace)) {
@@ -388,6 +483,123 @@ export function FoodPlannerApp() {
   useEffect(() => {
     saveWorkspacePreference(activeWorkspace);
   }, [activeWorkspace]);
+
+  useEffect(() => {
+    if (
+      !recipeImageGeneration ||
+      recipeImageGeneration.recipeIds.length === 0
+    ) {
+      return;
+    }
+
+    const total = recipeImageGeneration.recipeIds.length;
+    if (completedRecipeImageCount < total) {
+      toast.custom(
+        () => (
+          <RecipeImageProgressToast
+            completed={completedRecipeImageCount}
+            total={total}
+          />
+        ),
+        {
+          id: RECIPE_IMAGE_PROGRESS_TOAST_ID,
+          duration: Infinity,
+          dismissible: false,
+        },
+      );
+      return;
+    }
+
+    const succeeded = total - failedRecipeImageCount;
+    if (failedRecipeImageCount > 0) {
+      toast.warning("Recipe image generation finished", {
+        id: RECIPE_IMAGE_PROGRESS_TOAST_ID,
+        description: `${succeeded} generated, ${failedRecipeImageCount} failed.`,
+        duration: 6000,
+      });
+    } else {
+      toast.success(
+        `${total} recipe ${total === 1 ? "image" : "images"} generated`,
+        {
+          id: RECIPE_IMAGE_PROGRESS_TOAST_ID,
+          duration: 4000,
+        },
+      );
+    }
+    dispatch({ type: "CLEAR_RECIPE_IMAGE_GENERATION" });
+  }, [
+    completedRecipeImageCount,
+    failedRecipeImageCount,
+    recipeImageGeneration,
+  ]);
+
+  useEffect(() => {
+    const pendingRecipeImageIds = pendingRecipeImageKey
+      ? pendingRecipeImageKey.split("|")
+      : [];
+    const failedRecipeImageIds = failedRecipeImageKey
+      ? failedRecipeImageKey.split("|")
+      : [];
+
+    if (
+      sessionStatus !== "authenticated" ||
+      (pendingRecipeImageIds.length === 0 &&
+        failedRecipeImageIds.length === 0)
+    ) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function refreshRecipeImages(recipeIds: string[]) {
+      try {
+        const response = await fetch("/api/recipes/images/status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recipeIds,
+            workspace: activeWorkspace,
+          }),
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const images = parseRecipeImageMetadataList(await response.json());
+        if (!isCancelled && images.length > 0) {
+          dispatch({ type: "APPLY_RECIPE_IMAGE_METADATA", images });
+        }
+      } catch {
+        // Polling is best-effort; the pending state will try again later.
+      }
+    }
+
+    void refreshRecipeImages(
+      Array.from(
+        new Set([...pendingRecipeImageIds, ...failedRecipeImageIds]),
+      ),
+    );
+    const interval =
+      pendingRecipeImageIds.length > 0
+        ? window.setInterval(
+            () => refreshRecipeImages(pendingRecipeImageIds),
+            5000,
+          )
+        : undefined;
+
+    return () => {
+      isCancelled = true;
+      if (interval !== undefined) {
+        window.clearInterval(interval);
+      }
+    };
+  }, [
+    activeWorkspace,
+    failedRecipeImageKey,
+    pendingRecipeImageKey,
+    sessionStatus,
+  ]);
 
   useEffect(() => {
     if (sessionStatus !== "authenticated" || !householdsReady) {
@@ -643,6 +855,7 @@ export function FoodPlannerApp() {
           })),
           mealTypes: state.planner.selectedMealTypes,
           recipeBook: state.recipes,
+          workspace: activeWorkspace,
         };
 
         const response = await fetch("/api/planner/generate", {
@@ -679,6 +892,7 @@ export function FoodPlannerApp() {
     state.planner.selectedMealTypes,
     state.planner.preferredDishes,
     state.recipes,
+    activeWorkspace,
   ]);
 
   const handleSavePlannerSettings = useCallback(
@@ -720,7 +934,6 @@ export function FoodPlannerApp() {
         open: true,
         mode: "swap",
         mealId,
-        swapMealType: meal.mealType,
       });
     },
     [state.planner.weeklyPlan],
@@ -731,7 +944,6 @@ export function FoodPlannerApp() {
       setRecipeBookState({
         open: true,
         mode: "swap",
-        swapMealType: mealType,
         fillDay: day,
         fillMealType: mealType,
       });
@@ -794,6 +1006,7 @@ export function FoodPlannerApp() {
               dishName: payload.dishName.trim(),
               preferences: payload.preferences,
               recipeBook: state.recipes,
+              workspace: activeWorkspace,
             }
           : {
               mode: "ingredients" as const,
@@ -803,6 +1016,7 @@ export function FoodPlannerApp() {
               preferences: payload.preferences,
               dishName: payload.dishName?.trim() || undefined,
               recipeBook: state.recipes,
+              workspace: activeWorkspace,
             };
 
       const response = await fetch("/api/recipes/generate/custom", {
@@ -825,7 +1039,7 @@ export function FoodPlannerApp() {
       dispatch({ type: "ADD_CUSTOM_RECIPE", recipe: data.recipe });
       return data.recipe.id;
     },
-    [state.inventory, state.recipes],
+    [state.inventory, state.recipes, activeWorkspace],
   );
 
   const handleGenerateAndSwap = useCallback(
@@ -1621,7 +1835,6 @@ export function FoodPlannerApp() {
           recipes={state.recipes}
           inventory={state.inventory}
           mode={recipeBookState.mode}
-          swapMealType={recipeBookState.swapMealType}
           onSelectRecipe={
             recipeBookState.mode === "swap"
               ? handleSwapRecipeSelection

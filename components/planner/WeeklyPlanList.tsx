@@ -6,6 +6,7 @@ import {
   Drawer,
   DrawerClose,
   DrawerContent,
+  DrawerDescription,
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
@@ -221,18 +222,21 @@ export function WeeklyPlanList({
           if (!open) onDeselectMeal();
         }}
       >
-        <DrawerContent>
+        <DrawerContent className="h-svh overflow-hidden p-0">
           <DrawerClose
             aria-label="Close recipe details"
-            className="absolute top-2 right-2 inline-flex size-7 items-center justify-center rounded-[min(var(--radius-md),12px)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="absolute right-4 top-4 z-30 inline-flex size-9 items-center justify-center rounded-full bg-black/35 text-white shadow-sm backdrop-blur transition-colors hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
           >
             <XIcon />
             <span className="sr-only">Close</span>
           </DrawerClose>
-          <DrawerHeader className="pr-12">
+          <DrawerHeader className="sr-only">
             <DrawerTitle>Recipe details</DrawerTitle>
+            <DrawerDescription>
+              View ingredients, recipe steps, and meal actions.
+            </DrawerDescription>
           </DrawerHeader>
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
+          <div className="min-h-0 flex-1">
             <MealDetailsDrawer
               meal={selectedMeal}
               onSetCooked={

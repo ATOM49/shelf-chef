@@ -110,6 +110,12 @@ const recipeIngredientSchema = z.object({
   optional: z.boolean().optional(),
 }).strict();
 
+const recipeImageStatusSchema = z.enum(["pending", "generating", "ready", "failed"]);
+const recipeImageUrlSchema = z.union([
+  z.string().url().startsWith("https://"),
+  z.string().regex(/^\/api\/recipes\/images\/[A-Za-z0-9_-]+$/),
+]);
+
 const recipeSchema = z.object({
   id: z.string().trim().min(1).max(160),
   title: z.string().trim().min(1).max(160),
@@ -123,6 +129,9 @@ const recipeSchema = z.object({
     .max(MAX_INSTRUCTIONS)
     .optional(),
   referenceUrl: z.string().url().startsWith("https://").optional(),
+  imageUrl: recipeImageUrlSchema.optional(),
+  imageStatus: recipeImageStatusSchema.optional(),
+  imageUpdatedAt: z.string().datetime().optional(),
   source: z.enum(["user-requested", "user-saved"]),
 }).strict();
 
@@ -146,6 +155,14 @@ export const plannerPreferredDishInputSchema = z.object({
   mealType: z.enum(RECIPE_MEAL_TYPES).optional(),
 }).strip();
 
+const workspaceSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("personal") }).strict(),
+  z.object({
+    type: z.literal("household"),
+    householdId: z.string().trim().min(1).max(160),
+  }).strict(),
+]);
+
 export const plannerGenerateRequestSchema = z.object({
   inventory: z.array(plannerInventoryContextItemSchema).max(200),
   preferences: z.string().trim().max(4000),
@@ -158,6 +175,7 @@ export const plannerGenerateRequestSchema = z.object({
       message: "Meal types must be unique",
     }),
   recipeBook: z.array(recipeSchema).max(MAX_RECIPE_BOOK_RECIPES),
+  workspace: workspaceSchema.optional(),
 }).strict();
 
 const dishRecipeGenerateRequestSchema = z.object({
@@ -165,6 +183,7 @@ const dishRecipeGenerateRequestSchema = z.object({
   dishName: z.string().trim().min(1).max(120),
   preferences: z.string().trim().max(4000),
   recipeBook: z.array(recipeSchema).max(MAX_RECIPE_BOOK_RECIPES),
+  workspace: workspaceSchema.optional(),
 }).strict();
 
 const ingredientRecipeGenerateRequestSchema = z.object({
@@ -173,6 +192,7 @@ const ingredientRecipeGenerateRequestSchema = z.object({
   preferences: z.string().trim().max(4000),
   dishName: z.string().trim().min(1).max(120).optional(),
   recipeBook: z.array(recipeSchema).max(MAX_RECIPE_BOOK_RECIPES),
+  workspace: workspaceSchema.optional(),
 }).strict();
 
 export const customRecipeGenerateRequestSchema = z.discriminatedUnion("mode", [

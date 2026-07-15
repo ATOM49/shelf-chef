@@ -5,6 +5,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import localFont from "next/font/local";
 import { DM_Sans } from "next/font/google";
 import { NextAuthProvider } from "@/components/app/NextAuthProvider";
+import { Toaster } from "@/components/ui/sonner";
 
 const fontSans = DM_Sans({
   subsets: ["latin"],
@@ -61,6 +62,7 @@ export default function RootLayout({
         <NextAuthProvider>
           {children}
         </NextAuthProvider>
+        <Toaster position="bottom-right" />
         <Analytics />
         <SpeedInsights />
       </body>

@@ -1,4 +1,5 @@
 import type { InventoryCategory, InventoryUnit } from "@/lib/inventory/types";
+import type { Workspace } from "@/lib/households/shared";
 
 export const RECIPE_MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
 export const PLANNED_MEAL_TYPES = ["breakfast", "lunch", "dinner"] as const;
@@ -17,6 +18,7 @@ export type PlannedMealType = (typeof PLANNED_MEAL_TYPES)[number];
 export type PlannerWeekDay = (typeof PLANNER_WEEK_DAYS)[number];
 
 export type RecipeSource = "user-requested" | "user-saved";
+export type RecipeImageStatus = "pending" | "generating" | "ready" | "failed";
 
 export type RecipeIngredient = {
   name: string;
@@ -37,7 +39,17 @@ export type Recipe = {
   ingredients: RecipeIngredient[];
   instructions?: string[];
   referenceUrl?: string;
+  imageUrl?: string;
+  imageStatus?: RecipeImageStatus;
+  imageUpdatedAt?: string;
   source: RecipeSource;
+};
+
+export type RecipeImageMetadata = {
+  recipeId: string;
+  imageUrl?: string;
+  imageStatus: RecipeImageStatus;
+  imageUpdatedAt: string;
 };
 
 export type IngredientMatch = {
@@ -107,6 +119,7 @@ export type PlannerGenerationRequest = {
   preferredDishes: PlannerPreferredDishInput[];
   mealTypes: PlannedMealType[];
   recipeBook: Recipe[];
+  workspace?: Workspace;
 };
 
 export type DishRecipeGenerationRequest = {
@@ -122,6 +135,7 @@ export type IngredientRecipeGenerationRequest = {
   preferences: string;
   dishName?: string;
   recipeBook: Recipe[];
+  workspace?: Workspace;
 };
 
 export type CustomRecipeGenerationRequest =

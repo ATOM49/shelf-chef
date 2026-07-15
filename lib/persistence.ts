@@ -97,6 +97,15 @@ function normalizeRecipeSource(source: unknown): Recipe["source"] {
   return source === "user-saved" ? "user-saved" : "user-requested";
 }
 
+function normalizeRecipeImageStatus(status: unknown): Recipe["imageStatus"] {
+  return status === "pending" ||
+    status === "generating" ||
+    status === "ready" ||
+    status === "failed"
+    ? status
+    : undefined;
+}
+
 function migrateLegacyLayout(stored: unknown): AppState | undefined {
   if (!isObject(stored) || !Array.isArray(stored.shelves)) {
     return undefined;
@@ -257,9 +266,34 @@ function reviveAppState(stored: unknown): AppState | undefined {
             ({
               ...recipe,
               source: normalizeRecipeSource(recipe.source),
+              imageUrl:
+                typeof recipe.imageUrl === "string" &&
+                (recipe.imageUrl.startsWith("https://") ||
+                  recipe.imageUrl.startsWith("/api/recipes/images/"))
+                  ? recipe.imageUrl
+                  : undefined,
+              imageStatus: normalizeRecipeImageStatus(recipe.imageStatus),
+              imageUpdatedAt:
+                typeof recipe.imageUpdatedAt === "string"
+                  ? recipe.imageUpdatedAt
+                  : undefined,
             }) as Recipe,
         )
     : [];
+  const storedRecipeImageGeneration = isObject(stored.recipeImageGeneration)
+    ? stored.recipeImageGeneration
+    : undefined;
+  const recipeImageGeneration =
+    storedRecipeImageGeneration &&
+    Array.isArray(storedRecipeImageGeneration.recipeIds) &&
+    typeof storedRecipeImageGeneration.startedAt === "string"
+      ? {
+          recipeIds: storedRecipeImageGeneration.recipeIds.filter(
+            (recipeId): recipeId is string => typeof recipeId === "string",
+          ),
+          startedAt: storedRecipeImageGeneration.startedAt,
+        }
+      : undefined;
 
   return {
     ...(stored as AppState),
@@ -270,6 +304,7 @@ function reviveAppState(stored: unknown): AppState | undefined {
       : [],
     inventory,
     recipes: storedRecipes,
+    recipeImageGeneration,
     planner,
   };
 }
